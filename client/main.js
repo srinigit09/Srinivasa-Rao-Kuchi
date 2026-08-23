@@ -34,11 +34,19 @@ let settingsWindow = null;   // tray → My Details
 let tray           = null;
 let socket         = null;   // Socket.IO connection in main process
 
-// ── Single instance lock — disabled so multiple roles can run on same machine ─
-// (doctor + staff can both be installed/tested on the same machine simultaneously)
-// app.requestSingleInstanceLock() intentionally NOT called here.
+// ── Single instance lock — prevents multiple tray icons ──────────────────────
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  // Another instance is already running — quit this one immediately
+  app.quit();
+}
 app.on('second-instance', () => {
-  if (setupWindow && !setupWindow.isDestroyed()) { setupWindow.show(); setupWindow.focus(); }
+  // Someone tried to open a second instance — bring existing window to front
+  if (setupWindow && !setupWindow.isDestroyed()) {
+    setupWindow.show(); setupWindow.focus(); setupWindow.moveTop();
+  } else if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.show(); settingsWindow.focus();
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -47,6 +55,12 @@ app.on('second-instance', () => {
 function connectSocket(config) {
   if (socket) { socket.disconnect(); socket = null; }
 
+  if (!config.serverUrl || !config.token) {
+    console.error('[Socket] Cannot connect — missing serverUrl or token in config');
+    return;
+  }
+
+  console.log('[Socket] Connecting to', config.serverUrl);
   socket = io(config.serverUrl, {
     transports      : ['websocket', 'polling'],
     reconnectionDelay: 3000,
@@ -229,13 +243,21 @@ function rebuildTrayMenu(config, connected) {
   const roleLabel = config
     ? (config.role === 'doctor' ? '👨‍⚕️ Doctor' : config.role === 'other' ? '👤 Other' : '🩺 Staff/Nurse')
     : '';
+  const serverInfo = config && config.serverUrl ? `Server: ${config.serverUrl}` : '⚠️ Server URL not set — open My Details';
   const items = config ? [
     { label: `${config.user_name}  ·  ${roleLabel}`, enabled: false },
     { label: `Room: ${config.room_number}  ·  System: ${config.system_number}`, enabled: false },
     { label: `Hospital: ${config.clientName || config.hospitalCode}`, enabled: false },
+    { label: serverInfo, enabled: false },
     { label: statusLabel, enabled: false },
     { type: 'separator' },
     { label: '✏️  My Details', click: createSettingsWindow },
+    { label: '🔄  Re-run Setup Wizard', click: () => {
+        if (app.dock) app.dock.show();
+        if (!setupWindow || setupWindow.isDestroyed()) createSetupWindow();
+        else { setupWindow.show(); setupWindow.focus(); setupWindow.moveTop(); }
+      }
+    },
     { type: 'separator' },
     { label: 'Quit Panic Alarm', click: () => app.quit() },
   ] : [

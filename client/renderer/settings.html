@@ -103,6 +103,11 @@ select option { background: #1a1d2a; color: #fff; }
   <h2>My Details</h2>
   <p class="sub">Update your information — changes sync to the server</p>
 
+  <div class="section-title">Server Connection</div>
+  <label>Server URL</label>
+  <input type="text" id="serverUrl" placeholder="http://192.168.1.5:4000" autocomplete="off" spellcheck="false">
+  <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:-8px;margin-bottom:12px">Use http:// not https:// · e.g. http://192.168.1.5:4000</div>
+
   <div class="section-title">Hospital</div>
   <label>Current Hospital</label>
   <div class="readonly-field" id="hospitalDisplay">—</div>
@@ -170,6 +175,7 @@ select option { background: #1a1d2a; color: #fff; }
     const display = cfg.clientName
       ? `${cfg.clientName} (${cfg.hospitalCode || ''})`
       : (cfg.hospitalCode || '—');
+    document.getElementById('serverUrl').value    = cfg.serverUrl     || '';
     document.getElementById('hospitalDisplay').textContent = display;
     document.getElementById('userId').value       = cfg.user_id      || '';
     document.getElementById('userName').value     = cfg.user_name    || '';
@@ -183,18 +189,24 @@ select option { background: #1a1d2a; color: #fff; }
 
   document.getElementById('btnSave').addEventListener('click', async () => {
     if (!config) return;
-    const user_id     = document.getElementById('userId').value.trim();
-    const user_name   = document.getElementById('userName').value.trim();
+    const serverUrl     = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
+    const user_id       = document.getElementById('userId').value.trim();
+    const user_name     = document.getElementById('userName').value.trim();
     const room_number   = document.getElementById('roomNumber').value.trim();
     const system_number = document.getElementById('systemNumber').value.trim();
 
+    if (!serverUrl)     { flash('Server URL is required', false); return; }
     if (!user_id)       { flash('User ID is required', false); return; }
     if (!user_name)     { flash('Your name is required', false); return; }
     if (!room_number)   { flash('Room / Location is required', false); return; }
     if (!system_number) { flash('System / PC Number is required', false); return; }
 
+    // Auto-fix https → http
+    const url = serverUrl.startsWith('https://') ? 'http://' + serverUrl.slice(8) :
+                serverUrl.startsWith('http://')  ? serverUrl : 'http://' + serverUrl;
+
     try {
-      const resp = await fetch(`${config.serverUrl}/api/client/me`, {
+      const resp = await fetch(`${url}/api/client/me`, {
         method  : 'PUT',
         headers : { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.token}` },
         body    : JSON.stringify({ user_id, user_name, room_number, system_number, role: selectedRole }),
@@ -204,6 +216,7 @@ select option { background: #1a1d2a; color: #fff; }
 
       const newConfig = {
         ...config,
+        serverUrl: url,
         user_id, user_name, room_number, system_number,
         role: selectedRole,
         token: data.token || config.token,
@@ -211,7 +224,7 @@ select option { background: #1a1d2a; color: #fff; }
       await api.settingsUpdated(newConfig);
       flash('Details updated successfully!', true);
     } catch {
-      flash('Cannot connect to server', false);
+      flash('Cannot connect to server. Check the Server URL is correct.', false);
     }
   });
 

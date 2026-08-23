@@ -10,7 +10,8 @@ html, body { width: 130px; height: 130px; background: transparent; overflow: hid
 .wrap {
   width: 130px; height: 130px;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 4px; cursor: move; -webkit-app-region: drag;
+  gap: 4px;
+  /* No -webkit-app-region here — we use JS dragging instead */
 }
 .btn-alert {
   width: 110px; height: 110px;
@@ -18,30 +19,29 @@ html, body { width: 130px; height: 130px; background: transparent; overflow: hid
   background: radial-gradient(circle at 38% 32%, #ff6b6b, #c0392b);
   border: 5px solid #fff;
   box-shadow: 0 0 0 4px rgba(231,76,60,0.7), 0 6px 24px rgba(0,0,0,0.6);
-  cursor: pointer;
-  -webkit-app-region: no-drag;
+  cursor: grab;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   transition: transform 0.1s;
 }
-.btn-alert:active { transform: scale(0.93); }
-.btn-alert.firing { animation: pulse 0.5s ease-in-out 3; }
+.btn-alert:active { cursor: grabbing; }
+.btn-alert.firing { animation: pulse 0.5s ease-in-out 3; cursor: grab; }
 @keyframes pulse {
   0%   { box-shadow: 0 0 0 4px rgba(231,76,60,0.7); }
   50%  { box-shadow: 0 0 0 20px rgba(231,76,60,0.25), 0 6px 40px rgba(231,76,60,0.5); }
   100% { box-shadow: 0 0 0 4px rgba(231,76,60,0.7); }
 }
-.alert-text { font-family: -apple-system,"Segoe UI",sans-serif; font-size: 18px; font-weight: 900; color: #fff; letter-spacing: 1px; text-transform: uppercase; -webkit-app-region: no-drag; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
-.alert-icon { font-size: 24px; -webkit-app-region: no-drag; }
-.status { font-family: -apple-system,"Segoe UI",sans-serif; font-size: 9px; color: rgba(255,255,255,0.5); -webkit-app-region: no-drag; text-align: center; max-width: 120px; }
+.alert-text { font-family: -apple-system,"Segoe UI",sans-serif; font-size: 18px; font-weight: 900; color: #fff; letter-spacing: 1px; text-transform: uppercase; text-shadow: 0 1px 3px rgba(0,0,0,0.5); pointer-events: none; }
+.alert-icon { font-size: 24px; pointer-events: none; }
+.status { font-family: -apple-system,"Segoe UI",sans-serif; font-size: 9px; color: rgba(255,255,255,0.5); text-align: center; max-width: 120px; pointer-events: none; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <button class="btn-alert" id="btnAlert" title="Click to send ALERT to all rooms!">
+<div class="wrap" id="wrap">
+  <button class="btn-alert" id="btnAlert" title="Drag to move · Click to send ALERT">
     <div class="alert-icon">🆘</div>
     <div class="alert-text">ALERT</div>
   </button>
-  <div class="status" id="status">Ready</div>
+  <div class="status" id="status">Ready · Drag to move</div>
 </div>
 
 <script>
@@ -52,7 +52,45 @@ html, body { width: 130px; height: 130px; background: transparent; overflow: hid
   api.getConfig().then(applyConfig);
   api.onClientConfig(applyConfig);
 
-  document.getElementById('btnAlert').addEventListener('click', async () => {
+  // ── Drag to move the window ──────────────────────────────────────
+  let dragging = false;
+  let dragStartX = 0, dragStartY = 0;
+  let moved = false;   // distinguish drag from click
+
+  document.getElementById('btnAlert').addEventListener('mousedown', (e) => {
+    if (isFiring) return;
+    dragging = true;
+    moved = false;
+    dragStartX = e.screenX;
+    dragStartY = e.screenY;
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const dx = e.screenX - dragStartX;
+    const dy = e.screenY - dragStartY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+    if (moved) {
+      api.moveAlarmWindow({ dx, dy });
+      dragStartX = e.screenX;
+      dragStartY = e.screenY;
+    }
+  });
+
+  document.addEventListener('mouseup', async (e) => {
+    const wasDrag = moved;
+    dragging = false;
+    moved = false;
+
+    // Only fire alarm if it was a click (not a drag)
+    if (!wasDrag) {
+      await fireAlarm();
+    }
+  });
+
+  // ── Fire alarm ───────────────────────────────────────────────────
+  async function fireAlarm() {
     if (isFiring || !config?.token) return;
     isFiring = true;
     const btn    = document.getElementById('btnAlert');
@@ -74,10 +112,10 @@ html, body { width: 130px; height: 130px; background: transparent; overflow: hid
 
     setTimeout(() => {
       btn.classList.remove('firing');
-      status.textContent = 'Ready';
+      status.textContent = 'Ready · Drag to move';
       isFiring = false;
     }, 3000);
-  });
+  }
 </script>
 </body>
 </html>
