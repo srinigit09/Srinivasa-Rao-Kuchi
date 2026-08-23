@@ -15,8 +15,8 @@
     "socket.io-client": "^4.7.4"
   },
   "devDependencies": {
-    "electron": "^30.0.2",
-    "electron-builder": "^26.15.3"
+    "electron": "30.5.1",
+    "electron-builder": "26.15.3"
   },
   "build": {
     "appId": "com.hospital.panicalarmclient",
