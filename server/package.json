@@ -1,0 +1,99 @@
+{
+  "name": "panic-alarm-server",
+  "version": "1.0.0",
+  "description": "Panic Alarm Server — Hospital Emergency Notification System",
+  "main": "server-main.js",
+  "scripts": {
+    "start": "node server.js",
+    "start-desktop": "electron .",
+    "build-win": "electron-builder --win --x64",
+    "build-mac": "electron-builder --mac --arm64",
+    "build-mac-x64": "electron-builder --mac --x64",
+    "build-linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^9.4.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "socket.io": "^4.7.4",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "electron": "^30.5.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.hospital.panicalarm.server",
+    "productName": "PanicAlarmServer",
+    "copyright": "Hospital Panic Alarm System",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "server-main.js",
+      "server-preload.js",
+      "server.js",
+      "db.js",
+      "auth.js",
+      "package.json",
+      "renderer/**/*",
+      "public/**/*",
+      "assets/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/server-icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Panic Alarm Server",
+      "installerIcon": "assets/server-icon.ico",
+      "uninstallerIcon": "assets/server-icon.ico",
+      "runAfterFinish": true
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "assets/server-icon.icns",
+      "category": "public.app-category.healthcare-fitness",
+      "identity": null,
+      "hardenedRuntime": false,
+      "extendInfo": {
+        "LSUIElement": false,
+        "LSBackgroundOnly": false
+      }
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/server-icon.png"
+    }
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

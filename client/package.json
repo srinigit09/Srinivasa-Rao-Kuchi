@@ -1,0 +1,81 @@
+{
+  "name": "panic-alarm-client",
+  "version": "1.0.0",
+  "description": "Panic Alarm Client - Zero-login desktop app for hospital rooms",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build-win": "electron-builder --win --x64",
+    "build-mac": "electron-builder --mac --x64 && bash fix-mac-dmg.sh --intel",
+    "build-mac-arm": "electron-builder --mac --arm64 && bash fix-mac-dmg.sh",
+    "build-both-mac": "electron-builder --mac --x64 --arm64 && bash fix-mac-dmg.sh --both",
+    "build-linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.7.4"
+  },
+  "devDependencies": {
+    "electron": "^30.0.2",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.hospital.panicalarmclient",
+    "productName": "PanicAlarmClient",
+    "copyright": "Hospital Panic Alarm System",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "assets/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Panic Alarm Client",
+      "runAfterFinish": true
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.healthcare-fitness",
+      "identity": null,
+      "hardenedRuntime": false,
+      "extendInfo": {
+        "LSUIElement": false,
+        "LSBackgroundOnly": false
+      }
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png"
+    }
+  },
+  "license": "UNLICENSED",
+  "private": true
+}

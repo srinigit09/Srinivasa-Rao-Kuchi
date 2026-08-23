@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src *;">
+<title>My Details</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system,"Segoe UI",sans-serif;
+  background: #0f1117; color: #e0e0e0;
+  display: flex; align-items: flex-start; justify-content: center;
+  min-height: 100vh; padding: 20px;
+}
+.card {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px; padding: 28px 28px; width: 440px;
+  margin-top: 10px;
+}
+h2 { font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+p.sub { font-size: 12px; color: rgba(255,255,255,0.4); margin-bottom: 20px; }
+
+/* Section titles */
+.section-title {
+  font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.3);
+  text-transform: uppercase; letter-spacing: .7px;
+  margin-bottom: 10px; margin-top: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-title::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.07); }
+.section-title:first-of-type { margin-top: 0; }
+
+label {
+  display: block; font-size: 11px; color: rgba(255,255,255,0.4);
+  margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px;
+}
+input, select {
+  width: 100%; padding: 10px 12px;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px; color: #fff; font-size: 13px; margin-bottom: 12px;
+  appearance: none; -webkit-appearance: none;
+}
+input:focus, select:focus { outline: none; border-color: #3498db; }
+select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+select option { background: #1a1d2a; color: #fff; }
+
+/* Read-only hospital pill */
+.readonly-field {
+  font-size: 12px; color: rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 5px; padding: 8px 12px; margin-bottom: 12px;
+}
+
+/* Role picker cards (compact 3-column) */
+.role-grid { display: flex; gap: 8px; margin-bottom: 12px; }
+.role-card {
+  flex: 1; border-radius: 10px;
+  border: 2px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  padding: 12px 8px; text-align: center;
+  cursor: pointer; transition: all .2s; user-select: none;
+}
+.role-card:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.2);
+}
+.role-card.selected.doctor {
+  background: rgba(231,76,60,0.15); border-color: #e74c3c;
+}
+.role-card.selected.staff {
+  background: rgba(52,152,219,0.15); border-color: #3498db;
+}
+.role-card.selected.other {
+  background: rgba(155,89,182,0.15); border-color: #9b59b6;
+}
+.role-card .rc-icon { font-size: 22px; margin-bottom: 5px; display: block; }
+.role-card .rc-label { font-size: 11px; font-weight: 700; color: #fff; margin-bottom: 2px; }
+.role-card.selected.doctor .rc-label { color: #ff6b6b; }
+.role-card.selected.staff  .rc-label { color: #5dade2; }
+.role-card.selected.other  .rc-label { color: #bf7aed; }
+.role-card .rc-check { display: none; font-size: 11px; margin-top: 3px; }
+.role-card.selected .rc-check { display: block; }
+
+.btn-save {
+  width: 100%; padding: 12px;
+  color: #fff; border: none; border-radius: 7px;
+  font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 4px;
+  background: #3498db;
+}
+.btn-save:hover { background: #2980b9; }
+
+.flash {
+  padding: 9px 12px; border-radius: 5px; font-size: 12px;
+  margin-top: 12px; display: none;
+}
+.flash.ok  { background: rgba(39,174,96,0.2); color: #2ecc71; border: 1px solid rgba(39,174,96,0.3); }
+.flash.err { background: rgba(231,76,60,0.2); color: #ff6b6b; border: 1px solid rgba(231,76,60,0.3); }
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>My Details</h2>
+  <p class="sub">Update your information — changes sync to the server</p>
+
+  <div class="section-title">Hospital</div>
+  <label>Current Hospital</label>
+  <div class="readonly-field" id="hospitalDisplay">—</div>
+
+  <div class="section-title">Role</div>
+  <div class="role-grid">
+    <div class="role-card doctor" id="rcDoctor" onclick="selectRole('doctor')">
+      <span class="rc-icon">👨‍⚕️</span>
+      <div class="rc-label">Doctor</div>
+      <div class="rc-check">✅</div>
+    </div>
+    <div class="role-card staff" id="rcStaff" onclick="selectRole('staff')">
+      <span class="rc-icon">🩺</span>
+      <div class="rc-label">Staff/Nurse</div>
+      <div class="rc-check">✅</div>
+    </div>
+    <div class="role-card other" id="rcOther" onclick="selectRole('other')">
+      <span class="rc-icon">👤</span>
+      <div class="rc-label">Other</div>
+      <div class="rc-check">✅</div>
+    </div>
+  </div>
+
+  <div class="section-title">Your Information</div>
+  <label>User ID (Unique Employee ID)</label>
+  <input type="text" id="userId" placeholder="Your unique employee/staff ID">
+
+  <label>Your Name</label>
+  <input type="text" id="userName" placeholder="Your full name">
+
+  <label>Room / Location</label>
+  <input type="text" id="roomNumber" placeholder="e.g. ICU-3, Ward-B, Nursing Station">
+
+  <label>System / PC Number</label>
+  <input type="text" id="systemNumber" placeholder="e.g. PC-07">
+
+  <button class="btn-save" id="btnSave">SAVE CHANGES</button>
+  <div class="flash" id="flash"></div>
+</div>
+
+<script>
+  const api = window.electronAPI;
+  let config = null;
+  let selectedRole = 'staff';
+
+  function selectRole(role) {
+    selectedRole = role;
+    document.getElementById('rcDoctor').classList.toggle('selected', role === 'doctor');
+    document.getElementById('rcStaff').classList.toggle('selected',  role === 'staff');
+    document.getElementById('rcOther').classList.toggle('selected',  role === 'other');
+  }
+
+  // Normalize legacy 'viewer' role to 'staff'
+  function normalizeRole(r) {
+    if (!r) return 'staff';
+    const s = r.toLowerCase().trim();
+    if (s === 'doctor') return 'doctor';
+    if (s === 'other')  return 'other';
+    return 'staff';
+  }
+
+  function applyConfig(cfg) {
+    config = cfg;
+    // Show hospital name + code
+    const display = cfg.clientName
+      ? `${cfg.clientName} (${cfg.hospitalCode || ''})`
+      : (cfg.hospitalCode || '—');
+    document.getElementById('hospitalDisplay').textContent = display;
+    document.getElementById('userId').value       = cfg.user_id      || '';
+    document.getElementById('userName').value     = cfg.user_name    || '';
+    document.getElementById('roomNumber').value   = cfg.room_number  || '';
+    document.getElementById('systemNumber').value = cfg.system_number || '';
+    selectRole(normalizeRole(cfg.role));
+  }
+
+  api.getConfig().then(cfg => { if (cfg) applyConfig(cfg); });
+  api.onClientConfig(applyConfig);
+
+  document.getElementById('btnSave').addEventListener('click', async () => {
+    if (!config) return;
+    const user_id     = document.getElementById('userId').value.trim();
+    const user_name   = document.getElementById('userName').value.trim();
+    const room_number   = document.getElementById('roomNumber').value.trim();
+    const system_number = document.getElementById('systemNumber').value.trim();
+
+    if (!user_id)       { flash('User ID is required', false); return; }
+    if (!user_name)     { flash('Your name is required', false); return; }
+    if (!room_number)   { flash('Room / Location is required', false); return; }
+    if (!system_number) { flash('System / PC Number is required', false); return; }
+
+    try {
+      const resp = await fetch(`${config.serverUrl}/api/client/me`, {
+        method  : 'PUT',
+        headers : { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.token}` },
+        body    : JSON.stringify({ user_id, user_name, room_number, system_number, role: selectedRole }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) { flash(data.error || 'Update failed', false); return; }
+
+      const newConfig = {
+        ...config,
+        user_id, user_name, room_number, system_number,
+        role: selectedRole,
+        token: data.token || config.token,
+      };
+      await api.settingsUpdated(newConfig);
+      flash('Details updated successfully!', true);
+    } catch {
+      flash('Cannot connect to server', false);
+    }
+  });
+
+  function flash(msg, ok) {
+    const el = document.getElementById('flash');
+    el.textContent = msg;
+    el.className = 'flash ' + (ok ? 'ok' : 'err');
+    el.style.display = 'block';
+    setTimeout(() => el.style.display = 'none', 4000);
+  }
+</script>
+</body>
+</html>

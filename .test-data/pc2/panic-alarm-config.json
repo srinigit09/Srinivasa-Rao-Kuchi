@@ -1,0 +1,11 @@
+{
+  "serverUrl": "http://192.168.1.4:4000",
+  "hospitalCode": "AIGD103",
+  "clientName": "AIG",
+  "room_number": "109",
+  "system_number": "5",
+  "user_name": "Dr.Srrr",
+  "role": "doctor",
+  "deviceId": "294287ac-0284-441f-9b7f-39da9c3c49f4",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkZXZpY2VJZCI6IjI5NDI4N2FjLTAyODQtNDQxZi05YjdmLTM5ZGE5YzNjNDlmNCIsImhvc3BpdGFsX2NvZGUiOiJBSUdEMTAzIiwicm9vbV9udW1iZXIiOiIxMDkiLCJzeXN0ZW1fbnVtYmVyIjoiNSIsInVzZXJfbmFtZSI6IkRyLlNycnIiLCJyb2xlIjoiZG9jdG9yIiwidHlwZSI6ImNsaWVudCIsImlhdCI6MTc4Mzk1MDg0NywiZXhwIjoxODE1NDg2ODQ3fQ.cH6iVASCZL47ADdmIa0NCs-ei6od0YWG4f2KljZQy0g"
+}

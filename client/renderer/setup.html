@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src *;">
+<title>Panic Alarm — Setup</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system,"Segoe UI",sans-serif;
+  background: #0f1117; color: #e0e0e0;
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+
+/* ── Card shell ── */
+.card {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px; padding: 32px 28px; width: 480px;
+}
+.logo { text-align: center; margin-bottom: 24px; }
+.logo .icon { font-size: 38px; }
+.logo h1 { font-size: 16px; color: #fff; margin-top: 8px; font-weight: 700; }
+.logo p  { font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 3px; }
+
+/* ── Step indicator ── */
+.steps {
+  display: flex; align-items: center; justify-content: center;
+  gap: 0; margin-bottom: 28px;
+}
+.step-dot {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700;
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.3);
+  border: 2px solid rgba(255,255,255,0.1);
+  transition: all .25s;
+}
+.step-dot.active  { background: #e74c3c; color: #fff; border-color: #e74c3c; }
+.step-dot.done    { background: #27ae60; color: #fff; border-color: #27ae60; }
+.step-line { width: 48px; height: 2px; background: rgba(255,255,255,0.1); }
+.step-label {
+  font-size: 10px; color: rgba(255,255,255,0.3);
+  text-align: center; margin-top: 4px;
+  transition: color .25s;
+}
+.step-label.active { color: #e74c3c; }
+.step-label.done   { color: #27ae60; }
+.step-wrap { display: flex; flex-direction: column; align-items: center; }
+
+/* ── Profile cards ── */
+.profile-title {
+  font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.4);
+  text-transform: uppercase; letter-spacing: .8px;
+  margin-bottom: 14px; text-align: center;
+}
+.profile-grid { display: flex; gap: 10px; margin-bottom: 10px; }
+.profile-card {
+  flex: 1; border-radius: 12px;
+  border: 2px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  padding: 18px 12px; text-align: center;
+  cursor: pointer; transition: all .2s;
+  user-select: none;
+}
+.profile-card:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.2);
+}
+.profile-card.selected.doctor {
+  background: rgba(231,76,60,0.15);
+  border-color: #e74c3c;
+}
+.profile-card.selected.staff {
+  background: rgba(52,152,219,0.15);
+  border-color: #3498db;
+}
+.profile-card.selected.other {
+  background: rgba(155,89,182,0.15);
+  border-color: #9b59b6;
+}
+.profile-card .pc-icon { font-size: 30px; margin-bottom: 8px; display: block; }
+.profile-card .pc-label {
+  font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 3px;
+}
+.profile-card.selected.doctor .pc-label { color: #ff6b6b; }
+.profile-card.selected.staff  .pc-label { color: #5dade2; }
+.profile-card.selected.other  .pc-label { color: #bf7aed; }
+.profile-card .pc-desc {
+  font-size: 10px; color: rgba(255,255,255,0.35); line-height: 1.5;
+}
+.profile-card .pc-badge {
+  display: inline-block; margin-top: 8px;
+  padding: 2px 8px; border-radius: 10px;
+  font-size: 9px; font-weight: 700; letter-spacing: .5px;
+  opacity: 0; transition: opacity .2s;
+}
+.profile-card.selected .pc-badge { opacity: 1; }
+.profile-card.selected.doctor .pc-badge {
+  background: rgba(231,76,60,0.25); color: #ff6b6b;
+}
+.profile-card.selected.staff .pc-badge {
+  background: rgba(52,152,219,0.25); color: #5dade2;
+}
+.profile-card.selected.other .pc-badge {
+  background: rgba(155,89,182,0.25); color: #bf7aed;
+}
+.profile-card .check {
+  display: none; font-size: 16px; margin-top: 6px;
+}
+.profile-card.selected .check { display: block; }
+
+.btn-next {
+  width: 100%; padding: 12px; border: none; border-radius: 8px;
+  font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 14px;
+  background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.3);
+  transition: all .2s;
+}
+.btn-next.ready-doctor { background: #e74c3c; color: #fff; }
+.btn-next.ready-staff  { background: #3498db; color: #fff; }
+.btn-next.ready-other  { background: #9b59b6; color: #fff; }
+
+/* ── Details form (Step 2) ── */
+.step2 { display: none; }
+.form-header {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 9px; padding: 12px 14px; margin-bottom: 18px;
+}
+.form-header .fh-icon { font-size: 24px; }
+.form-header .fh-label { font-size: 13px; font-weight: 700; }
+.form-header .fh-label span { font-size: 11px; font-weight: 400; color: rgba(255,255,255,0.4); display: block; margin-top: 1px; }
+.form-header.doctor { border-color: rgba(231,76,60,0.4); background: rgba(231,76,60,0.08); }
+.form-header.doctor .fh-label { color: #ff6b6b; }
+.form-header.staff  { border-color: rgba(52,152,219,0.4); background: rgba(52,152,219,0.08); }
+.form-header.staff  .fh-label { color: #5dade2; }
+.form-header.other  { border-color: rgba(155,89,182,0.4); background: rgba(155,89,182,0.08); }
+.form-header.other  .fh-label { color: #bf7aed; }
+
+.section-title {
+  font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.3);
+  text-transform: uppercase; letter-spacing: .7px;
+  margin-bottom: 10px; margin-top: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-title::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.07); }
+
+label {
+  display: block; font-size: 11px; color: rgba(255,255,255,0.45);
+  margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px;
+}
+input, select {
+  width: 100%; padding: 10px 12px;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px; color: #fff; font-size: 13px; margin-bottom: 12px;
+  appearance: none; -webkit-appearance: none;
+}
+input:focus, select:focus { outline: none; border-color: #e74c3c; }
+select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+select option { background: #1a1d2a; color: #fff; }
+.hint { font-size: 11px; color: rgba(255,255,255,0.28); margin-top: -8px; margin-bottom: 12px; }
+.required-star { color: #ff6b6b; margin-left: 2px; }
+
+.btn-register {
+  width: 100%; padding: 13px; color: #fff;
+  border: none; border-radius: 8px; font-size: 15px; font-weight: 700;
+  cursor: pointer; margin-top: 6px;
+}
+.btn-register.doctor { background: #e74c3c; }
+.btn-register.doctor:hover { background: #c0392b; }
+.btn-register.staff  { background: #3498db; }
+.btn-register.staff:hover  { background: #2980b9; }
+.btn-register.other  { background: #9b59b6; }
+.btn-register.other:hover  { background: #7d3c98; }
+.btn-register:disabled { background: #555 !important; cursor: not-allowed; }
+
+.btn-back-step {
+  background: none; border: none; color: rgba(255,255,255,0.4);
+  font-size: 12px; cursor: pointer; margin-bottom: 8px; display: flex;
+  align-items: center; gap: 4px; padding: 0;
+}
+.btn-back-step:hover { color: rgba(255,255,255,0.7); }
+
+.err { background: rgba(231,76,60,0.15); border: 1px solid rgba(231,76,60,0.4); border-radius: 5px; padding: 9px 12px; font-size: 12px; color: #ff6b6b; margin-top: 10px; display: none; }
+.ok  { background: rgba(39,174,96,0.15); border: 1px solid rgba(39,174,96,0.4); border-radius: 5px; padding: 9px 12px; font-size: 12px; color: #2ecc71; margin-top: 10px; display: none; }
+.spinner { text-align: center; color: rgba(255,255,255,0.4); font-size: 12px; margin-top: 10px; display: none; }
+.loading-hospitals { font-size: 11px; color: rgba(255,255,255,0.4); padding: 8px 0; display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <!-- Logo -->
+  <div class="logo">
+    <div class="icon">🚨</div>
+    <h1>PANIC ALARM SYSTEM</h1>
+    <p>First-time setup — select your profile to begin</p>
+  </div>
+
+  <!-- Step indicators -->
+  <div class="steps">
+    <div class="step-wrap">
+      <div class="step-dot active" id="dot1">1</div>
+      <div class="step-label active" id="lbl1">Role</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step-wrap">
+      <div class="step-dot" id="dot2">2</div>
+      <div class="step-label" id="lbl2">Details</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step-wrap">
+      <div class="step-dot" id="dot3">3</div>
+      <div class="step-label" id="lbl3">Done</div>
+    </div>
+  </div>
+
+  <!-- ══ STEP 1 — Profile Selection ══ -->
+  <div id="step1">
+    <div class="profile-title">Select Your Role</div>
+    <div class="profile-grid">
+
+      <div class="profile-card doctor" id="cardDoctor" onclick="selectProfile('doctor')">
+        <span class="pc-icon">👨‍⚕️</span>
+        <div class="pc-label">Doctor</div>
+        <div class="pc-desc">I send panic alarms from a desktop button</div>
+        <div class="pc-badge">ALERT BUTTON</div>
+        <div class="check">✅</div>
+      </div>
+
+      <div class="profile-card staff" id="cardStaff" onclick="selectProfile('staff')">
+        <span class="pc-icon">🩺</span>
+        <div class="pc-label">Staff / Nurse</div>
+        <div class="pc-desc">I respond to doctor panic alarms</div>
+        <div class="pc-badge">ALERT RECEIVER</div>
+        <div class="check">✅</div>
+      </div>
+
+      <div class="profile-card other" id="cardOther" onclick="selectProfile('other')">
+        <span class="pc-icon">👤</span>
+        <div class="pc-label">Other</div>
+        <div class="pc-desc">Other hospital personnel — receives alerts</div>
+        <div class="pc-badge">ALERT RECEIVER</div>
+        <div class="check">✅</div>
+      </div>
+
+    </div>
+    <button class="btn-next" id="btnNext" disabled onclick="goToStep2()">Select a role to continue</button>
+  </div>
+
+  <!-- ══ STEP 2 — Details Form ══ -->
+  <div id="step2" class="step2">
+    <button class="btn-back-step" onclick="goBackToStep1()">← Change role</button>
+
+    <!-- Role banner -->
+    <div class="form-header" id="formHeader">
+      <div class="fh-icon" id="fhIcon"></div>
+      <div class="fh-label" id="fhLabel"></div>
+    </div>
+
+    <div class="section-title">Server Connection</div>
+    <label>Server IP &amp; Port <span class="required-star">*</span></label>
+    <input type="text" id="serverUrl" placeholder="http://192.168.1.5:4000" autocomplete="off" autocorrect="off" spellcheck="false">
+    <div class="hint">⚠️ Use <strong style="color:#ffc107">http://</strong> (not https://) · Ask your admin for the server IP</div>
+
+    <div class="section-title">Your Hospital</div>
+    <label>Hospital Code <span class="required-star">*</span></label>
+    <input type="text" id="hospitalCode" placeholder="e.g. APL001" autocomplete="off" autocorrect="off" spellcheck="false" style="text-transform:uppercase">
+    <div class="hint">Enter the code given by your administrator, then press Tab or click away</div>
+
+    <label>Hospital / Clinic Name</label>
+    <div id="hospitalNameDisplay" style="
+      padding:9px 12px; border-radius:6px; font-size:13px; margin-bottom:12px;
+      background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+      color:rgba(255,255,255,0.4); min-height:36px; display:flex; align-items:center;
+    ">Enter hospital code above to auto-fill</div>
+
+    <div class="section-title">Your Details</div>
+    <label>User ID <span class="required-star">*</span></label>
+    <input type="text" id="userId" placeholder="e.g. EMP-001 or DOC-042 (must be unique)">
+    <div class="hint">Your unique employee / staff ID — provided by your administrator</div>
+
+    <label>Your Name <span class="required-star">*</span></label>
+    <input type="text" id="userName" placeholder="e.g. Dr. John Smith">
+
+    <label>Room / Location <span class="required-star">*</span></label>
+    <input type="text" id="roomNumber" placeholder="e.g. ICU-3, Ward-B, Nursing Station">
+
+    <label>System / PC Number <span class="required-star">*</span></label>
+    <input type="text" id="systemNumber" placeholder="e.g. PC-07 (label on this computer)">
+
+    <button class="btn-register" id="btnRegister">REGISTER &amp; START</button>
+    <div class="err"     id="errMsg"></div>
+    <div class="ok"      id="okMsg"></div>
+    <div class="spinner" id="spinner">Connecting to server…</div>
+  </div>
+
+</div>
+
+<script>
+  const api = window.electronAPI;
+  let selectedRole = null;
+  let verifiedHospitalCode = null;   // set after successful lookup
+  let verifiedHospitalName = null;
+
+  // ── Init: pre-fill if config exists ───────────────────────────
+  async function init() {
+    const cfg = await api.getConfig();
+    if (cfg && cfg.serverUrl) {
+      document.getElementById('serverUrl').value = cfg.serverUrl;
+    }
+  }
+
+  // ── Profile selection ──────────────────────────────────────────
+  function selectProfile(role) {
+    selectedRole = role;
+    document.getElementById('cardDoctor').classList.toggle('selected', role === 'doctor');
+    document.getElementById('cardStaff').classList.toggle('selected',  role === 'staff');
+    document.getElementById('cardOther').classList.toggle('selected',  role === 'other');
+
+    const btn = document.getElementById('btnNext');
+    btn.disabled = false;
+    const labels = { doctor: '👨‍⚕️ Continue as Doctor →', staff: '🩺 Continue as Staff / Nurse →', other: '👤 Continue as Other →' };
+    btn.textContent = labels[role] || 'Continue →';
+    btn.className = `btn-next ready-${role}`;
+  }
+
+  // ── Step navigation ────────────────────────────────────────────
+  function goToStep2() {
+    if (!selectedRole) return;
+    document.getElementById('step1').style.display = 'none';
+    document.getElementById('step2').style.display = 'block';
+
+    document.getElementById('dot1').className = 'step-dot done';
+    document.getElementById('lbl1').className = 'step-label done';
+    document.getElementById('dot2').className = 'step-dot active';
+    document.getElementById('lbl2').className = 'step-label active';
+
+    const header = document.getElementById('formHeader');
+    const icon   = document.getElementById('fhIcon');
+    const label  = document.getElementById('fhLabel');
+    const btn    = document.getElementById('btnRegister');
+
+    const cfg = {
+      doctor: { cls: 'doctor', icon: '👨‍⚕️', label: 'Doctor Profile',      desc: 'You will get a floating red ALERT button on your desktop',         btnTxt: 'REGISTER AS DOCTOR & START',       btnCls: 'doctor' },
+      staff:  { cls: 'staff',  icon: '🩺',   label: 'Staff / Nurse Profile', desc: 'You will receive alert popups when a doctor triggers an alarm',     btnTxt: 'REGISTER AS STAFF & START',        btnCls: 'staff'  },
+      other:  { cls: 'other',  icon: '👤',   label: 'Other Personnel',        desc: 'You will receive alert popups when a doctor triggers an alarm',    btnTxt: 'REGISTER AS OTHER & START',        btnCls: 'other'  },
+    }[selectedRole];
+
+    header.className = `form-header ${cfg.cls}`;
+    icon.textContent  = cfg.icon;
+    label.innerHTML   = `${cfg.label} <span>${cfg.desc}</span>`;
+    btn.className     = `btn-register ${cfg.btnCls}`;
+    btn.textContent   = cfg.btnTxt;
+
+    document.getElementById('userId').focus();
+  }
+
+  function goBackToStep1() {
+    document.getElementById('step2').style.display = 'none';
+    document.getElementById('step1').style.display = 'block';
+    document.getElementById('dot1').className = 'step-dot active';
+    document.getElementById('lbl1').className = 'step-label active';
+    document.getElementById('dot2').className = 'step-dot';
+    document.getElementById('lbl2').className = 'step-label';
+    clearMessages();
+  }
+
+  // ── Normalise server URL (auto-fix common mistakes) ───────────
+  function normaliseUrl(raw) {
+    let url = raw.trim().replace(/\/$/, '');
+    if (!url) return '';
+    if (url.startsWith('https://')) url = 'http://' + url.slice(8);
+    if (!url.startsWith('http://'))  url = 'http://' + url;
+    return url;
+  }
+
+  // ── Hospital code lookup — fires on blur or Enter ──────────────
+  async function lookupHospital() {
+    const code = document.getElementById('hospitalCode').value.trim().toUpperCase();
+    const display = document.getElementById('hospitalNameDisplay');
+    verifiedHospitalCode = null;
+    verifiedHospitalName = null;
+
+    if (!code) {
+      display.textContent = 'Enter hospital code above to auto-fill';
+      display.style.color = 'rgba(255,255,255,0.4)';
+      return;
+    }
+
+    const serverUrl = normaliseUrl(document.getElementById('serverUrl').value);
+    if (!serverUrl) {
+      display.textContent = '⚠️ Enter the server URL first';
+      display.style.color = '#ffc107';
+      return;
+    }
+    document.getElementById('serverUrl').value = serverUrl;
+
+    display.textContent = '⏳ Looking up…';
+    display.style.color = 'rgba(255,255,255,0.4)';
+    clearMessages();
+
+    try {
+      const resp = await fetch(`${serverUrl}/api/public/hospitals`, { signal: AbortSignal.timeout(8000) });
+      if (!resp.ok) throw new Error('Server returned HTTP ' + resp.status);
+      const hospitals = await resp.json();
+      const match = hospitals.find(h => h.hospital_code === code);
+      if (match) {
+        verifiedHospitalCode = match.hospital_code;
+        verifiedHospitalName = match.client_name;
+        display.textContent = '✅ ' + match.client_name;
+        display.style.color = '#2ecc71';
+      } else {
+        display.textContent = '❌ Hospital code not found — check with your administrator';
+        display.style.color = '#ff6b6b';
+      }
+    } catch (e) {
+      display.textContent = '❌ Cannot reach server — check Server IP';
+      display.style.color = '#ff6b6b';
+      showErr('Cannot connect to server. Check: (1) Server app is running, (2) IP is correct, (3) use http:// not https://');
+    }
+  }
+
+  document.getElementById('hospitalCode').addEventListener('blur', lookupHospital);
+  document.getElementById('hospitalCode').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); lookupHospital(); }
+  });
+  // Re-lookup if server URL changes after code was typed
+  document.getElementById('serverUrl').addEventListener('change', () => {
+    if (document.getElementById('hospitalCode').value.trim()) lookupHospital();
+  });
+
+  // ── Registration ───────────────────────────────────────────────
+  document.getElementById('btnRegister').addEventListener('click', async () => {
+    const serverUrl    = normaliseUrl(document.getElementById('serverUrl').value);
+    const hospitalCode = document.getElementById('hospitalCode').value.trim().toUpperCase();
+    const userId       = document.getElementById('userId').value.trim();
+    const userName     = document.getElementById('userName').value.trim();
+    const roomNumber   = document.getElementById('roomNumber').value.trim();
+    const systemNumber = document.getElementById('systemNumber').value.trim();
+
+    if (!serverUrl)    { showErr('Server URL is required. Example: http://192.168.1.5:4000'); return; }
+    if (!hospitalCode) { showErr('Hospital Code is required.'); return; }
+    if (!verifiedHospitalCode) { showErr('Hospital code not verified. Please enter a valid hospital code and wait for it to be confirmed.'); return; }
+    if (!userId)       { showErr('User ID is required (unique employee ID).'); return; }
+    if (!userName)     { showErr('Your name is required.'); return; }
+    if (!roomNumber)   { showErr('Room / Location is required.'); return; }
+    if (!systemNumber) { showErr('System / PC Number is required.'); return; }
+
+    document.getElementById('serverUrl').value = serverUrl;
+    setBusy(true);
+
+    const deviceId = await api.getDeviceId();
+
+    try {
+      const resp = await fetch(`${serverUrl}/api/client/register`, {
+        method : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body   : JSON.stringify({
+          hospital_code : verifiedHospitalCode,
+          user_id       : userId,
+          room_number   : roomNumber,
+          system_number : systemNumber,
+          user_name     : userName,
+          role          : selectedRole,
+          device_id     : deviceId,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) { showErr(data.error || 'Registration failed'); return; }
+
+      // Mark steps complete
+      document.getElementById('dot2').className = 'step-dot done';
+      document.getElementById('lbl2').className = 'step-label done';
+      document.getElementById('dot3').className = 'step-dot active';
+      document.getElementById('lbl3').className = 'step-label active';
+
+      const labels = {
+        doctor: '👨‍⚕️ Doctor registered! Your ALERT button is starting…',
+        staff:  '🩺 Staff profile registered! Alert monitor is starting…',
+        other:  '👤 Registered! Alert monitor is starting…',
+      };
+      showOk(labels[selectedRole] || '✅ Registered!');
+
+      const config = {
+        serverUrl,
+        hospitalCode  : data.hospitalCode  || verifiedHospitalCode,
+        clientName    : data.clientName    || verifiedHospitalName || verifiedHospitalCode,
+        user_id       : userId,
+        room_number   : roomNumber,
+        system_number : systemNumber,
+        user_name     : userName,
+        role          : selectedRole,
+        deviceId,
+        token         : data.token,
+      };
+
+      setTimeout(() => api.setupComplete(config), 1400);
+
+    } catch (e) {
+      showErr('Cannot connect to server. Check the server URL and ensure the server is running.');
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  function showErr(msg) {
+    const e = document.getElementById('errMsg');
+    e.textContent = msg; e.style.display = 'block';
+    document.getElementById('okMsg').style.display = 'none';
+  }
+  function showOk(msg) {
+    const e = document.getElementById('okMsg');
+    e.textContent = msg; e.style.display = 'block';
+    document.getElementById('errMsg').style.display = 'none';
+  }
+  function clearMessages() {
+    document.getElementById('errMsg').style.display = 'none';
+    document.getElementById('okMsg').style.display = 'none';
+  }
+  function setBusy(b) {
+    document.getElementById('btnRegister').disabled = b;
+    document.getElementById('spinner').style.display = b ? 'block' : 'none';
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      if (document.getElementById('step1').style.display !== 'none' && selectedRole) {
+        goToStep2();
+      } else if (document.getElementById('step2').style.display !== 'none') {
+        document.getElementById('btnRegister').click();
+      }
+    }
+  });
+
+  init();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "serverUrl": "http://192.168.1.4:4000",
+  "hospitalCode": "AIG102",
+  "clientName": "AIG",
+  "room_number": "A01",
+  "system_number": "123",
+  "user_name": "Asdf",
+  "role": "viewer",
+  "deviceId": "b43c95ed-09ba-476c-80b7-5f9c819b4190",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkZXZpY2VJZCI6ImI0M2M5NWVkLTA5YmEtNDc2Yy04MGI3LTVmOWM4MTliNDE5MCIsImhvc3BpdGFsX2NvZGUiOiJBSUcxMDIiLCJyb29tX251bWJlciI6IkEwMSIsInN5c3RlbV9udW1iZXIiOiIxMjMiLCJ1c2VyX25hbWUiOiJBc2RmIiwicm9sZSI6InZpZXdlciIsInR5cGUiOiJjbGllbnQiLCJpYXQiOjE3ODM5NTA2MjEsImV4cCI6MTgxNTQ4NjYyMX0.i6eZ_fPwVrNPjBQ8pSMHo1yawlsHFirX7EYdlA4nL-g"
+}

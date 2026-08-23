@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src *;">
+<title>Panic Alarm Server — Login</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 400px; height: 520px; overflow: hidden;
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  background: #0f1117; color: #e0e0e0;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.card {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px; padding: 40px 36px; width: 340px;
+}
+.logo { text-align: center; margin-bottom: 28px; }
+.logo .icon { font-size: 48px; }
+.logo h1 { font-size: 17px; color: #fff; margin-top: 10px; font-weight: 700; letter-spacing: 0.5px; }
+.logo p  { font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 5px; }
+
+.server-badge {
+  background: rgba(39,174,96,0.12); border: 1px solid rgba(39,174,96,0.3);
+  border-radius: 6px; padding: 8px 12px; font-size: 11px; color: #2ecc71;
+  text-align: center; margin-bottom: 22px;
+}
+
+label {
+  display: block; font-size: 11px; color: rgba(255,255,255,0.45);
+  margin-bottom: 5px; text-transform: uppercase; letter-spacing: .5px;
+}
+input {
+  width: 100%; padding: 11px 13px;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 7px; color: #fff; font-size: 14px; margin-bottom: 14px;
+}
+input:focus { outline: none; border-color: #e74c3c; }
+
+.btn-login {
+  width: 100%; padding: 13px; background: #e74c3c; color: #fff;
+  border: none; border-radius: 8px; font-size: 15px; font-weight: 700;
+  cursor: pointer; transition: background .2s;
+}
+.btn-login:hover { background: #c0392b; }
+.btn-login:disabled { background: #555; cursor: not-allowed; }
+
+.err-msg {
+  background: rgba(231,76,60,0.15); border: 1px solid rgba(231,76,60,0.4);
+  border-radius: 5px; padding: 9px 12px; font-size: 12px; color: #ff6b6b;
+  margin-top: 12px; display: none; text-align: center;
+}
+.spinner {
+  text-align: center; font-size: 12px; color: rgba(255,255,255,0.4);
+  margin-top: 12px; display: none;
+}
+.info {
+  font-size: 11px; color: rgba(255,255,255,0.28); text-align: center;
+  margin-top: 16px; line-height: 1.6;
+}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div class="icon">🖥️</div>
+    <h1>PANIC ALARM SERVER</h1>
+    <p>Secure Admin Access</p>
+  </div>
+
+  <div class="server-badge" id="serverBadge">🟢 Server starting on port 4000…</div>
+
+  <label>Username</label>
+  <input type="text" id="username" placeholder="admin" autocomplete="username" value="admin">
+
+  <label>Password</label>
+  <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+
+  <button class="btn-login" id="btnLogin">SIGN IN TO ADMIN PANEL</button>
+
+  <div class="err-msg" id="errMsg"></div>
+  <div class="spinner" id="spinner">Authenticating…</div>
+
+  <div class="info" id="serverInfo">
+    Fetching server address…
+  </div>
+</div>
+
+<script>
+  const sapi = window.serverAPI;
+
+  // Load server info (IP + port)
+  async function loadServerInfo() {
+    try {
+      const info = await sapi.getServerInfo();
+      const ip = info.ips && info.ips[0] ? info.ips[0] : 'localhost';
+      document.getElementById('serverBadge').textContent =
+        `🟢 Server running  ·  Port ${info.port}`;
+      document.getElementById('serverInfo').innerHTML =
+        `Clients connect to: <strong style="color:#fff">http://${ip}:${info.port}</strong><br>` +
+        `Admin panel: <strong style="color:#fff">http://${ip}:${info.port}/admin/</strong>`;
+    } catch {
+      document.getElementById('serverBadge').textContent = '⏳ Server starting…';
+    }
+  }
+
+  loadServerInfo();
+  // Refresh info after a second (server may still be initialising)
+  setTimeout(loadServerInfo, 1500);
+
+  document.getElementById('btnLogin').addEventListener('click', doLogin);
+  document.getElementById('password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+
+  async function doLogin() {
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    const errEl    = document.getElementById('errMsg');
+    const spinner  = document.getElementById('spinner');
+    const btn      = document.getElementById('btnLogin');
+
+    errEl.style.display = 'none';
+    if (!username || !password) {
+      errEl.textContent = 'Please enter username and password';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    btn.disabled = true;
+    spinner.style.display = 'block';
+
+    try {
+      const result = await sapi.login({ username, password });
+      if (result.ok) {
+        await sapi.loginSuccess({ token: result.token });
+      } else {
+        errEl.textContent = result.error || 'Invalid credentials';
+        errEl.style.display = 'block';
+      }
+    } catch (e) {
+      errEl.textContent = 'Cannot connect to server: ' + e.message;
+      errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      spinner.style.display = 'none';
+    }
+  }
+</script>
+</body>
+</html>

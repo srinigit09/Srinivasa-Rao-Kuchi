@@ -1,0 +1,31 @@
+# ── Build outputs — never commit these ────────────────────────────
+client/dist/
+server/dist/
+
+# ── Node modules — always regenerate with npm install ─────────────
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# ── SQLite databases ───────────────────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+server/data/
+
+# ── Environment / secrets ─────────────────────────────────────────
+.env
+*.env
+.env.local
+
+# ── macOS junk ────────────────────────────────────────────────────
+.DS_Store
+**/.DS_Store
+
+# ── Editor / OS ───────────────────────────────────────────────────
+.vscode/
+*.swp
+Thumbs.db
+
+# Test data / Electron cache
+.test-data/
