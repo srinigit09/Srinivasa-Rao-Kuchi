@@ -73,6 +73,7 @@ function connectSocket(config) {
     socket.emit('join', {
       hospitalCode: (config.hospitalCode || '').toUpperCase(),
       userName    : config.user_name,
+      deviceId    : config.deviceId,
     });
     rebuildTrayMenu(config, true);
   });
@@ -123,19 +124,23 @@ function createSetupWindow() {
   setupWindow.show();
   setupWindow.focus();
   setupWindow.moveTop();
-  setupWindow.on('closed', () => { setupWindow = null; });
+  setupWindow.on('closed', () => { setupWindow = null; hideDock(); });
 }
 
 // ── Doctor: floating round red ALERT button ────────────────────────────────────
 function createAlarmButton(config) {
-  if (alarmButton && !alarmButton.isDestroyed()) return;
+  // Close existing button first — ensures only one ever exists
+  if (alarmButton && !alarmButton.isDestroyed()) {
+    alarmButton.close();
+    alarmButton = null;
+  }
   const { width: sw, height: sh } = screen.getPrimaryDisplay().workAreaSize;
   alarmButton = new BrowserWindow({
-    width: 130, height: 130,
-    x: sw - 150, y: sh - 160,
+    width: 90, height: 90,
+    x: sw - 106, y: sh - 106,
     frame: false, transparent: true,
-    alwaysOnTop: true, resizable: false, skipTaskbar: false,
-    title: 'ALERT',
+    alwaysOnTop: true, resizable: false, skipTaskbar: true,
+    title: 'PANIC ALARM',
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -164,12 +169,12 @@ function showAlertPopup(alarmData) {
   const primary  = screen.getPrimaryDisplay();
 
   alertPopup = new BrowserWindow({
-    width: 580, height: 340,
+    width: 580, height: 300,
     x: Math.round((primary.workAreaSize.width - 580) / 2),
     y: 20,
     frame: false, alwaysOnTop: true, resizable: false,
-    skipTaskbar: false,
-    title: 'ALERT',
+    skipTaskbar: true,
+    title: 'PANIC ALARM',
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -184,14 +189,14 @@ function showAlertPopup(alarmData) {
   alertPopup.on('closed', () => { alertPopup = null; });
 }
 
-// ── Settings window (My Details — editable) ───────────────────────────────────
+// ── Settings window (Edit My Profile) ────────────────────────────────────────
 function createSettingsWindow() {
   if (settingsWindow && !settingsWindow.isDestroyed()) { settingsWindow.focus(); return; }
   const config = loadConfig();
   settingsWindow = new BrowserWindow({
-    width: 480, height: 520,
+    width: 500, height: 560,
     resizable: false, center: true,
-    title: 'Panic Alarm — My Details',
+    title: 'Panic Alarm — Edit My Profile',
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -233,7 +238,7 @@ function createTray(config) {
     img = nativeImage.createEmpty();
   }
   tray = new Tray(img);
-  tray.setTitle('🚨'); // macOS: show emoji text next to icon as fallback
+  tray.setTitle('');  // no text beside tray icon on macOS
   rebuildTrayMenu(config, false);
 }
 
@@ -251,9 +256,11 @@ function rebuildTrayMenu(config, connected) {
     { label: serverInfo, enabled: false },
     { label: statusLabel, enabled: false },
     { type: 'separator' },
-    { label: '✏️  My Details', click: createSettingsWindow },
+    { label: '✏️  Edit My Profile', click: createSettingsWindow },
     { label: '🔄  Re-run Setup Wizard', click: () => {
-        if (app.dock) app.dock.show();
+        if (app.dock) app.dock.show();   // temporarily show dock for the wizard window
+        // Close settings window if open to avoid two windows
+        if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.close();
         if (!setupWindow || setupWindow.isDestroyed()) createSetupWindow();
         else { setupWindow.show(); setupWindow.focus(); setupWindow.moveTop(); }
       }
@@ -292,7 +299,7 @@ ipcMain.handle('get-device-id', () => getOrCreateDeviceId());
 ipcMain.handle('setup-complete', (_, config) => {
   saveConfig(config);
   if (setupWindow && !setupWindow.isDestroyed()) setupWindow.close();
-  launchAfterSetup(config);
+  launchAfterSetup(config);  // hides dock inside
 });
 
 // Called by settings.html after saving changes
@@ -325,10 +332,50 @@ ipcMain.on('move-alarm-window', (_, { dx, dy }) => {
   alarmButton.setPosition(x + dx, y + dy);
 });
 
+// ── Alert button colour ────────────────────────────────────────────────────────
+const COLOUR_LABELS = [
+  '🔴 Red (default)', '🟠 Orange', '🟡 Yellow',
+  '🟢 Green', '🔵 Blue', '🟣 Purple', '⚫ Dark',
+];
+
+// Right-click on alarm button → show native colour-picker context menu
+ipcMain.on('show-colour-menu', () => {
+  if (!alarmButton || alarmButton.isDestroyed()) return;
+  const config  = loadConfig();
+  const current = config?.alertButtonColour ?? 0;
+  const menu = Menu.buildFromTemplate(
+    COLOUR_LABELS.map((label, idx) => ({
+      label,
+      type : 'radio',
+      checked: idx === current,
+      click: () => {
+        if (alarmButton && !alarmButton.isDestroyed()) {
+          alarmButton.webContents.send('alert-colour-change', idx);
+        }
+      },
+    }))
+  );
+  menu.popup({ window: alarmButton });
+});
+
+// Persist colour selection from renderer
+ipcMain.handle('set-alert-colour', (_, idx) => {
+  const config = loadConfig();
+  if (!config) return;
+  config.alertButtonColour = idx;
+  saveConfig(config);
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  LAUNCH
 // ═══════════════════════════════════════════════════════════════════════════════
+function hideDock() {
+  // On macOS hide the dock icon — app lives entirely in the system tray
+  if (app.dock) app.dock.hide();
+}
+
 function launchAfterSetup(config) {
+  hideDock();
   createTray(config);
   // Doctor gets the floating ALERT button
   if (config.role === 'doctor') createAlarmButton(config);
@@ -337,36 +384,26 @@ function launchAfterSetup(config) {
 }
 
 app.whenReady().then(() => {
+  hideDock();   // hide immediately — before any window opens
   const config = loadConfig();
   if (config && config.token) {
     launchAfterSetup(config);
   } else {
-    if (app.dock) app.dock.show();
     createTray(null);
-    // Open setup immediately, and again after 1s as safety net
     createSetupWindow();
-    setTimeout(() => {
-      if (!setupWindow || setupWindow.isDestroyed()) {
-        createSetupWindow();
-      } else {
-        setupWindow.show();
-        setupWindow.focus();
-        setupWindow.moveTop();
-      }
-    }, 1000);
   }
 });
 
-// Clicking dock icon when no window open → show setup or settings
+// On macOS activate — do NOT show dock icon; open settings via tray instead
 app.on('activate', () => {
+  if (!app.isReady()) return;
   if (setupWindow && !setupWindow.isDestroyed()) {
     setupWindow.show(); setupWindow.focus(); setupWindow.moveTop();
-  } else if (settingsWindow && !settingsWindow.isDestroyed()) {
+    return;
+  }
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.show(); settingsWindow.focus();
-  } else {
-    const config = loadConfig();
-    if (!config || !config.token) createSetupWindow();
-    else createSettingsWindow();
+    return;
   }
 });
 

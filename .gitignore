@@ -29,3 +29,11 @@ Thumbs.db
 
 # Test data / Electron cache
 .test-data/
+
+# ── Temporary / generated files ───────────────────────────────
+*.blockmap
+server_icns_*.png
+*_preview.png
+*_orig_*.png
+server/data/security.log
+client-configs/

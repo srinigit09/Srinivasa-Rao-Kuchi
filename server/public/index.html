@@ -6,190 +6,360 @@
 <title>Panic Alarm — Admin</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, "Segoe UI", sans-serif; background: #0f1117; color: #e0e0e0; min-height: 100vh; }
+body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; background: #f0f4f8; color: #1e293b; min-height: 100vh; font-size: 14px; line-height: 1.6; }
 
-/* ── LOGIN PAGE ── */
-.login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-.login-card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 44px 40px; width: 360px; }
-.login-card .logo { text-align: center; margin-bottom: 28px; }
-.login-card .logo h1 { font-size: 19px; color: #fff; margin-top: 8px; letter-spacing: 0.5px; }
-.login-card .logo p  { font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 4px; }
-.login-card label { display: block; font-size: 11px; color: rgba(255,255,255,0.5); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
-.login-card input { width: 100%; padding: 10px 12px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #fff; font-size: 14px; margin-bottom: 14px; }
-.login-card input:focus { outline: none; border-color: #e74c3c; }
-.btn-login { width: 100%; padding: 12px; background: #e74c3c; color: #fff; border: none; border-radius: 7px; font-size: 14px; font-weight: 700; cursor: pointer; }
-.btn-login:hover { background: #c0392b; }
-.err-msg { background: rgba(231,76,60,0.2); border: 1px solid rgba(231,76,60,0.5); border-radius: 5px; padding: 8px 12px; font-size: 12px; color: #ff6b6b; margin-top: 10px; display: none; }
-
-/* ── MAIN APP ── */
+/* ═══════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════ */
 .app { display: none; }
-.sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 224px; background: #12141c; border-right: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; }
-.sidebar .brand { padding: 20px 18px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-.sidebar .brand h2 { font-size: 14px; color: #ff4444; font-weight: 700; letter-spacing: 1px; }
-.sidebar .brand p  { font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 2px; }
-.nav-link { display: flex; align-items: center; gap: 10px; padding: 12px 18px; color: rgba(255,255,255,0.55); font-size: 13px; cursor: pointer; border-left: 3px solid transparent; transition: all .15s; text-decoration: none; }
-.nav-link:hover { background: rgba(255,255,255,0.05); color: #fff; }
-.nav-link.active { background: rgba(231,76,60,0.12); color: #fff; border-left-color: #e74c3c; }
-.nav-link .icon { font-size: 16px; width: 20px; text-align: center; }
+
+/* Sidebar — light theme */
+.sidebar {
+  position: fixed; left: 0; top: 0; bottom: 0; width: 230px;
+  background: #ffffff;
+  display: flex; flex-direction: column; z-index: 50;
+  border-right: 1px solid #e2e8f0;
+  box-shadow: 2px 0 8px rgba(0,0,0,.06);
+}
+.sidebar .brand {
+  padding: 20px 18px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.brand-logo { display: flex; align-items: center; gap: 10px; }
+.brand-icon { width: 36px; height: 36px; border-radius: 10px;
+  background: linear-gradient(135deg,#ef4444,#b91c1c);
+  display: flex; align-items: center; justify-content: center; font-size: 18px;
+  box-shadow: 0 3px 10px rgba(239,68,68,.3); flex-shrink: 0; }
+.brand-text h2 { font-size: 13px; color: #1e293b; font-weight: 700; letter-spacing: .8px; }
+.brand-text p  { font-size: 10px; color: #94a3b8; margin-top: 1px; letter-spacing: .3px; }
+
+/* Nav sections */
+.nav-section { padding: 8px 0 2px; }
+.nav-section-label {
+  font-size: 10px; color: #94a3b8; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .8px; padding: 6px 18px 4px;
+}
+.nav-link {
+  display: flex; align-items: center; gap: 10px; padding: 9px 18px;
+  color: #475569; font-size: 13px; cursor: pointer;
+  border-left: 3px solid transparent; transition: all .15s; text-decoration: none;
+}
+.nav-link:hover { background: #f8fafc; color: #1e293b; }
+.nav-link.active { background: #eff6ff; color: #1d4ed8; border-left-color: #3b82f6; font-weight: 600; }
+.nav-link .icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+
+/* Download button in sidebar */
+.nav-download {
+  display: flex; align-items: center; gap: 10px; padding: 9px 18px;
+  color: #059669; font-size: 13px; cursor: pointer; border-left: 3px solid transparent;
+  transition: all .15s; font-weight: 600; background: #f0fdf4;
+  border-radius: 0;
+}
+.nav-download:hover { background: #dcfce7; color: #047857; }
+.nav-download .icon { font-size: 15px; width: 20px; text-align: center; }
+
+/* Sidebar bottom — user + logout */
 .nav-spacer { flex: 1; }
-.nav-bottom { padding: 14px 18px; border-top: 1px solid rgba(255,255,255,0.06); }
-.btn-logout { width: 100%; padding: 8px; background: none; border: 1px solid rgba(231,76,60,0.4); color: #e74c3c; border-radius: 5px; font-size: 12px; cursor: pointer; margin-top: 6px; }
-.btn-logout:hover { background: rgba(231,76,60,0.15); }
-.main-area { margin-left: 224px; padding: 28px 32px; min-height: 100vh; }
-.page-title { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 6px; }
-.page-sub   { font-size: 13px; color: rgba(255,255,255,0.4); margin-bottom: 24px; }
+.nav-bottom {
+  padding: 12px 14px 14px;
+  border-top: 1px solid #f1f5f9;
+  background: #fafbfd;
+}
+.user-pill {
+  display: flex; align-items: center; gap: 9px; padding: 8px 10px;
+  background: #f1f5f9; border-radius: 9px; margin-bottom: 10px;
+}
+.user-avatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: linear-gradient(135deg,#3b82f6,#1d4ed8);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.user-info { overflow: hidden; }
+.user-info .uname { font-size: 12px; color: #1e293b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-info .urole { font-size: 10px; color: #94a3b8; }
+.btn-logout {
+  width: 100%; padding: 9px 14px;
+  background: #fef2f2; border: 1.5px solid #fecaca;
+  color: #dc2626; border-radius: 8px; font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all .2s; letter-spacing: .3px;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.btn-logout:hover { background: #dc2626; border-color: #dc2626; color: #fff; }
 
-/* ── CARDS & STATS ── */
-.stats-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; margin-bottom: 28px; }
-.stat-card { background: #1a1d2a; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 18px 20px; }
-.stat-card .num { font-size: 28px; font-weight: 700; color: #fff; }
-.stat-card .lbl { font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 4px; }
+/* Main content */
+.main-area { margin-left: 230px; padding: 28px 32px; min-height: 100vh; }
+.page-title { font-size: 22px; font-weight: 800; color: #1e293b; margin-bottom: 4px; }
+.page-sub   { font-size: 13px; color: #64748b; margin-bottom: 24px; }
 
-/* ── SECTION ── */
-.section { background: #1a1d2a; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; margin-bottom: 20px; overflow: hidden; }
-.section-hdr { padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: space-between; }
-.section-hdr h3 { font-size: 14px; font-weight: 600; color: #fff; }
-.section-body { padding: 16px 20px; }
+/* ═══════════════════════════════════════
+   STAT CARDS
+═══════════════════════════════════════ */
+.stats-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; margin-bottom: 26px; }
+.stat-card { background: #fff; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 20px 22px;
+  position: relative; overflow: hidden; cursor: pointer; transition: box-shadow .15s, border-color .15s; }
+.stat-card:hover { border-color: #93c5fd; box-shadow: 0 2px 12px rgba(59,130,246,.1); }
+.stat-card.active-card { border-color: #3b82f6; box-shadow: 0 2px 14px rgba(59,130,246,.18); background: #eff6ff; }
+.stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+.stat-card:nth-child(1)::before { background: linear-gradient(90deg,#3b82f6,#60a5fa); }
+.stat-card:nth-child(2)::before { background: linear-gradient(90deg,#10b981,#34d399); }
+.stat-card:nth-child(3)::before { background: linear-gradient(90deg,#f59e0b,#fbbf24); }
+.stat-card:nth-child(4)::before { background: linear-gradient(90deg,#ef4444,#f87171); }
+.stat-card .num { font-size: 32px; font-weight: 800; color: #1e293b; line-height: 1; }
+.stat-card .lbl { font-size: 12px; color: #64748b; margin-top: 6px; font-weight: 500; }
 
-/* ── FORM ── */
-.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; align-items: end; }
-.fg label { display: block; font-size: 11px; color: rgba(255,255,255,0.4); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px; }
-.fg input, .fg select { width: 100%; padding: 8px 10px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); color: #fff; border-radius: 5px; font-size: 13px; }
-.fg input:focus, .fg select:focus { outline: none; border-color: #e74c3c; }
-.fg select option { background: #1a1d2a; }
-.btn { padding: 8px 20px; border: none; border-radius: 5px; font-size: 13px; cursor: pointer; font-weight: 600; }
-.btn-primary { background: #e74c3c; color: #fff; }
-.btn-primary:hover { background: #c0392b; }
-.btn-secondary { background: #3498db; color: #fff; }
-.btn-secondary:hover { background: #2980b9; }
-.btn-sm { padding: 4px 11px; font-size: 11px; border-radius: 4px; border: none; cursor: pointer; font-weight: 600; }
-.btn-edit   { background: rgba(52,152,219,0.15); color: #3498db; border: 1px solid rgba(52,152,219,0.3); }
-.btn-edit:hover { background: #3498db; color: #fff; }
-.btn-del    { background: rgba(231,76,60,0.15); color: #e74c3c; border: 1px solid rgba(231,76,60,0.3); }
-.btn-del:hover  { background: #e74c3c; color: #fff; }
-.btn-back   { background: none; border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.6); }
-.btn-back:hover { background: rgba(255,255,255,0.07); }
-.flash { padding: 8px 12px; border-radius: 5px; font-size: 12px; margin-bottom: 14px; display: none; }
-.flash.ok  { background: rgba(39,174,96,0.2); color: #2ecc71; border: 1px solid rgba(39,174,96,0.3); }
-.flash.err { background: rgba(231,76,60,0.2); color: #ff6b6b; border: 1px solid rgba(231,76,60,0.3); }
+/* ═══════════════════════════════════════
+   SECTION CARDS
+═══════════════════════════════════════ */
+.section { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 22px; overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,.04); }
+.section-hdr { padding: 15px 22px; border-bottom: 1px solid #f1f5f9;
+  display: flex; align-items: center; justify-content: space-between;
+  background: #fafbfd; }
+.section-hdr h3 { font-size: 14px; font-weight: 700; color: #1e293b; }
+.section-body { padding: 18px 22px; }
 
-/* ── TABLE ── */
+/* ═══════════════════════════════════════
+   FORM ELEMENTS
+═══════════════════════════════════════ */
+.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; align-items: end; }
+.fg label { display: block; font-size: 11px; color: #64748b; margin-bottom: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+.fg input, .fg select { width: 100%; padding: 9px 11px; background: #f8fafc; border: 1.5px solid #e2e8f0;
+  color: #1e293b; border-radius: 7px; font-size: 13px; transition: border .15s; }
+.fg input:focus, .fg select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+.fg select option { background: #fff; }
+.fg input[type="checkbox"] { width: auto; margin-right: 6px; accent-color: #3b82f6; }
+.fg .checkbox-row { display: flex; align-items: center; gap: 6px; padding: 7px 0; font-size: 13px; color: #374151; }
+
+/* Buttons */
+.btn { padding: 9px 20px; border: none; border-radius: 7px; font-size: 13px; cursor: pointer; font-weight: 600; transition: all .15s; }
+.btn-primary   { background: #1565c0; color: #fff; }
+.btn-primary:hover   { background: #0d47a1; }
+.btn-secondary { background: #f1f5f9; color: #475569; border: 1.5px solid #e2e8f0; }
+.btn-secondary:hover { background: #e2e8f0; }
+.btn-success   { background: #059669; color: #fff; }
+.btn-success:hover   { background: #047857; }
+.btn-sm { padding: 4px 11px; font-size: 11px; border-radius: 5px; border: none; cursor: pointer; font-weight: 600; }
+.btn-edit { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.btn-edit:hover { background: #1d4ed8; color: #fff; }
+.btn-del  { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.btn-del:hover  { background: #dc2626; color: #fff; }
+.btn-back { background: none; border: 1px solid #e2e8f0; color: #64748b; }
+.btn-back:hover { background: #f1f5f9; }
+
+/* Flash messages */
+.flash { padding: 10px 14px; border-radius: 7px; font-size: 13px; margin-bottom: 16px; display: none; font-weight: 500; }
+.flash.ok  { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.flash.err { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+/* ═══════════════════════════════════════
+   TABLE
+═══════════════════════════════════════ */
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { text-align: left; padding: 9px 12px; color: rgba(255,255,255,0.35); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; border-bottom: 1px solid rgba(255,255,255,0.07); }
-td { padding: 11px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+th { text-align: left; padding: 10px 14px; color: #64748b; font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .5px; border-bottom: 1.5px solid #e2e8f0; background: #f8fafc; }
+td { padding: 11px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; color: #334155; }
 tr:last-child td { border-bottom: none; }
-tr:hover td { background: rgba(255,255,255,0.02); }
-.badge { display: inline-block; padding: 2px 8px; border-radius: 9px; font-size: 11px; font-weight: 700; }
-.badge-doctor { background: rgba(231,76,60,0.2); color: #ff6b6b; }
-.badge-staff  { background: rgba(52,152,219,0.2); color: #5dade2; }
-.badge-other  { background: rgba(155,89,182,0.2); color: #bf7aed; }
-.badge-viewer { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.5); }
-.badge-active { background: rgba(39,174,96,0.2); color: #2ecc71; }
-.badge-alarm  { background: rgba(231,76,60,0.2); color: #ff6b6b; }
-.badge-self   { background: rgba(255,193,7,0.15); color: #ffc107; border: 1px solid rgba(255,193,7,0.3); }
-.badge-admin  { background: rgba(155,89,182,0.15); color: #bf7aed; border: 1px solid rgba(155,89,182,0.3); }
+tr:hover td { background: #f8fafc; }
+
+/* Badges */
+.badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+.badge-doctor { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
+.badge-staff  { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.badge-other  { background: #faf5ff; color: #7c3aed; border: 1px solid #ddd6fe; }
+.badge-active { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.badge-alarm  { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
+.badge-no-resp{ background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.badge-self   { background: #fefce8; color: #92400e; border: 1px solid #fde68a; }
+.badge-admin  { background: #f5f3ff; color: #6d28d9; border: 1px solid #ddd6fe; }
+
 .actions { display: flex; gap: 6px; justify-content: flex-end; }
-.client-link { color: #3498db; cursor: pointer; text-decoration: underline; font-weight: 600; }
-.client-link:hover { color: #5dade2; }
-.empty-row td { text-align: center; padding: 28px; color: rgba(255,255,255,0.2); font-size: 13px; }
+.client-link { color: #1d4ed8; cursor: pointer; text-decoration: underline; font-weight: 600; }
+.client-link:hover { color: #1e40af; }
+.empty-row td { text-align: center; padding: 32px; color: #94a3b8; font-size: 13px; }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
-/* modal */
-.modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; }
+/* ═══════════════════════════════════════
+   MODAL
+═══════════════════════════════════════ */
+.modal-bg { display: none; position: fixed; inset: 0; background: rgba(15,23,42,.55); z-index: 100;
+  align-items: center; justify-content: center; backdrop-filter: blur(2px); }
 .modal-bg.open { display: flex; }
-.modal { background: #1a1d2a; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 28px 32px; width: 480px; max-width: 95vw; }
-.modal h3 { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 18px; }
-.modal-btns { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
-.required-star { color: #ff6b6b; }
+.modal { background: #fff; border-radius: 14px; padding: 30px 34px; width: 540px; max-width: 95vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+.modal-title { font-size: 16px; font-weight: 800; color: #1e293b; margin-bottom: 20px;
+  padding-bottom: 14px; border-bottom: 1px solid #f1f5f9; }
+.modal-btns { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px;
+  padding-top: 16px; border-top: 1px solid #f1f5f9; }
+.required-star { color: #dc2626; }
 
-/* change-password form */
+/* Change password form */
 .pw-form { max-width: 400px; }
-.pw-form label { display: block; font-size: 11px; color: rgba(255,255,255,0.4); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px; margin-top: 14px; }
-.pw-form input { width: 100%; padding: 10px 12px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); border-radius: 6px; color: #fff; font-size: 13px; }
-.pw-form input:focus { outline: none; border-color: #3498db; }
-.pw-hint { font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 6px; }
+.pw-form label { display: block; font-size: 11px; color: #64748b; margin-bottom: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; margin-top: 16px; }
+.pw-form input { width: 100%; padding: 10px 12px; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 7px; color: #1e293b; font-size: 13px; }
+.pw-form input:focus { outline: none; border-color: #3b82f6; }
+.pw-hint { font-size: 11px; color: #94a3b8; margin-top: 7px; }
+
+/* Add Client hero banner */
+.client-hero {
+  background: linear-gradient(135deg,#1565c0 0%,#1e40af 100%);
+  border-radius: 12px; padding: 28px 32px; margin-bottom: 22px;
+  color: #fff; position: relative; overflow: hidden;
+}
+.client-hero::after {
+  content: '🏥'; position: absolute; right: 24px; top: 50%;
+  transform: translateY(-50%); font-size: 64px; opacity: .15;
+}
+.client-hero .hero-sub { font-size: 13px; color: rgba(255,255,255,.7); margin-top: 2px; }
+.client-hero h1 { font-size: 26px; font-weight: 800; letter-spacing: .3px; }
+.client-hero h2 { font-size: 14px; font-weight: 600; color: rgba(255,255,255,.85);
+  letter-spacing: .5px; text-transform: uppercase; margin-bottom: 6px; }
 </style>
 </head>
 <body>
 
-<!-- ═══ LOGIN PAGE ═══ -->
-<div class="login-page" id="loginPage">
-  <div class="login-card">
-    <div class="logo">
-      <div style="font-size:44px">🚨</div>
-      <h1>PANIC ALARM</h1>
-      <p>Server Admin Panel</p>
-    </div>
-    <label>Username</label>
-    <input type="text" id="loginUser" placeholder="admin" autocomplete="username">
-    <label>Password</label>
-    <input type="password" id="loginPass" placeholder="Password" autocomplete="current-password">
-    <button class="btn-login" id="btnLogin">SIGN IN</button>
-    <div class="err-msg" id="loginErr"></div>
-  </div>
-</div>
-
 <!-- ═══ MAIN APP ═══ -->
 <div class="app" id="app">
-  <!-- Sidebar -->
+
+  <!-- ── Sidebar ── -->
   <div class="sidebar">
     <div class="brand">
-      <h2>🚨 PANIC ALARM</h2>
-      <p>Admin Panel</p>
-    </div>
-    <a class="nav-link active" onclick="showPage('dashboard')" id="nav-dashboard">
-      <span class="icon">📊</span> Dashboard
-    </a>
-    <a class="nav-link" onclick="showPage('clients')" id="nav-clients">
-      <span class="icon">🏥</span> Add a Client
-    </a>
-    <a class="nav-link" onclick="showPage('clientList')" id="nav-clientList">
-      <span class="icon">📋</span> List of Clients
-    </a>
-    <a class="nav-link" onclick="showPage('reports')" id="nav-reports">
-      <span class="icon">📈</span> Reports
-    </a>
-    <a class="nav-link" onclick="showPage('logs')" id="nav-logs">
-      <span class="icon">🗂</span> Alarm Logs
-    </a>
-    <a class="nav-link" onclick="showPage('changePassword')" id="nav-changePassword">
-      <span class="icon">🔑</span> Change Password
-    </a>
-    <div class="nav-spacer"></div>
-    <div class="nav-bottom">
-      <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-bottom:4px" id="adminName"></div>
-      <button class="btn-logout" id="btnLogout">Logout</button>
-    </div>
-  </div>
-
-  <!-- Main Area -->
-  <div class="main-area">
-    <div class="flash" id="flash"></div>
-
-    <!-- ── DASHBOARD ── -->
-    <div class="tab-content active" id="page-dashboard">
-      <div class="page-title">Dashboard</div>
-      <div class="page-sub">Panic Alarm System — Overview</div>
-      <div class="stats-row">
-        <div class="stat-card"><div class="num" id="stat-clients">0</div><div class="lbl">Registered Clients</div></div>
-        <div class="stat-card"><div class="num" id="stat-users">0</div><div class="lbl">Total Users</div></div>
-        <div class="stat-card"><div class="num" id="stat-alarms">0</div><div class="lbl">Total Alarms</div></div>
-        <div class="stat-card"><div class="num" id="stat-today">0</div><div class="lbl">Alarms Today</div></div>
-      </div>
-      <div class="section">
-        <div class="section-hdr"><h3>Recent Alarms (Last 10)</h3></div>
-        <div class="section-body" style="padding:0">
-          <table><thead><tr><th>Time</th><th>Hospital</th><th>User</th><th>User ID</th><th>Room</th><th>Status</th></tr></thead>
-          <tbody id="recentAlarms"><tr class="empty-row"><td colspan="6">No alarms yet</td></tr></tbody></table>
+      <div class="brand-logo">
+        <div class="brand-icon">🚨</div>
+        <div class="brand-text">
+          <h2>PANIC ALARM</h2>
+          <p>ADMIN PANEL</p>
         </div>
       </div>
     </div>
 
-    <!-- ── ADD CLIENT ── -->
+    <div class="nav-section">
+      <div class="nav-section-label">Overview</div>
+      <a class="nav-link active" onclick="showPage('dashboard')" id="nav-dashboard">
+        <span class="icon">📊</span> Dashboard
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Management</div>
+      <a class="nav-link" onclick="showPage('clients')" id="nav-clients">
+        <span class="icon">🏥</span> Add Client
+      </a>
+      <a class="nav-link" onclick="showPage('clientList')" id="nav-clientList">
+        <span class="icon">📋</span> Client List
+      </a>
+      <a class="nav-link" onclick="showPage('departments')" id="nav-departments">
+        <span class="icon">🏢</span> Locations
+      </a>
+      <a class="nav-link" onclick="showPage('deptBlocks')" id="nav-deptBlocks">
+        <span class="icon">🗂</span> Departments
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Reports</div>
+      <a class="nav-link" onclick="showPage('reports')" id="nav-reports">
+        <span class="icon">📈</span> Reports
+      </a>
+      <a class="nav-link" onclick="showPage('logs')" id="nav-logs">
+        <span class="icon">🗂</span> Alarm Logs
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Settings</div>
+      <a class="nav-link" onclick="showPage('changePassword')" id="nav-changePassword">
+        <span class="icon">🔑</span> Change Password
+      </a>
+      <a class="nav-download" id="btnDownloadClient" style="cursor:pointer" title="Save the client installer to your desktop">
+        <span class="icon">⬇️</span> Download Client Installer
+      </a>
+    </div>
+
+    <div class="nav-spacer"></div>
+
+    <div class="nav-bottom">
+      <div class="user-pill">
+        <div class="user-avatar" id="userAvatar">A</div>
+        <div class="user-info">
+          <div class="uname" id="adminName">Admin</div>
+          <div class="urole">Administrator</div>
+        </div>
+      </div>
+      <button class="btn-logout" id="btnLogout">
+        <span>⏻</span> Sign Out
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Main content ── -->
+  <div class="main-area">
+    <div class="flash" id="flash"></div>
+
+    <!-- DASHBOARD -->
+    <div class="tab-content active" id="page-dashboard">
+      <div class="page-title">Dashboard</div>
+      <div class="page-sub">Click a card to view details</div>
+      <div class="stats-row">
+        <div class="stat-card active-card" id="dash-card-alarms" onclick="dashCard('alarms')"><div class="num" id="stat-alarms">0</div><div class="lbl">Total Alarms</div></div>
+        <div class="stat-card" id="dash-card-today"   onclick="dashCard('today')"><div class="num" id="stat-today">0</div><div class="lbl">Alarms Today</div></div>
+        <div class="stat-card" id="dash-card-clients" onclick="dashCard('clients')"><div class="num" id="stat-clients">0</div><div class="lbl">Registered Clients</div></div>
+        <div class="stat-card" id="dash-card-users"   onclick="dashCard('users')"><div class="num" id="stat-users">0</div><div class="lbl">Total Users</div></div>
+      </div>
+
+      <!-- detail panel: alarms -->
+      <div id="dash-panel-alarms" class="section">
+        <div class="section-hdr">
+          <h3 id="dash-alarms-title">Total Alarms</h3>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-secondary btn-sm" id="btnDashClearSelected" style="padding:5px 12px;font-size:11px" disabled>🗑 Clear Selected</button>
+            <button class="btn btn-del btn-sm" id="btnDashClearAll" style="padding:5px 12px;font-size:11px">🗑 Clear All</button>
+          </div>
+        </div>
+        <div class="section-body" style="padding:0">
+          <table>
+            <thead><tr>
+              <th style="width:36px"><input type="checkbox" id="selectAllDash" title="Select all"></th>
+              <th>Time</th><th>Hospital</th><th>User</th><th>User ID</th><th>Room</th><th>Status</th>
+            </tr></thead>
+            <tbody id="recentAlarms"><tr class="empty-row"><td colspan="7">No alarms yet</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- detail panel: clients -->
+      <div id="dash-panel-clients" class="section" style="display:none">
+        <div class="section-hdr"><h3>Registered Clients</h3></div>
+        <div class="section-body" style="padding:0">
+          <table>
+            <thead><tr><th>Hospital Name</th><th>Code</th><th>Location</th><th>Users</th><th>Limit</th><th>Added</th></tr></thead>
+            <tbody id="dash-clients-body"><tr class="empty-row"><td colspan="6">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- detail panel: users -->
+      <div id="dash-panel-users" class="section" style="display:none">
+        <div class="section-hdr"><h3>All Users</h3></div>
+        <div class="section-body" style="padding:0">
+          <table>
+            <thead><tr><th>User ID</th><th>Full Name</th><th>Hospital</th><th>Room</th><th>Role</th><th>Dept/Block</th></tr></thead>
+            <tbody id="dash-users-body"><tr class="empty-row"><td colspan="6">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADD CLIENT -->
     <div class="tab-content" id="page-clients">
-      <div class="page-title">Add a Client</div>
-      <div class="page-sub">Register a new hospital / clinic in the system</div>
+      <!-- Hero banner: Client Name + Alarm Management System -->
+      <div class="client-hero">
+        <div class="hero-sub">Alarm Management System</div>
+        <h1>Client Name</h1>
+        <p style="margin-top:6px;font-size:13px;color:rgba(255,255,255,.7)">Register a new hospital or clinic in the system</p>
+      </div>
+
       <div class="section">
         <div class="section-hdr"><h3>New Client Details</h3></div>
         <div class="section-body">
@@ -197,67 +367,72 @@ tr:hover td { background: rgba(255,255,255,0.02); }
             <div class="fg"><label>Client / Hospital Name <span class="required-star">*</span></label><input type="text" id="cName" placeholder="e.g. Apollo Hospital"></div>
             <div class="fg"><label>Hospital Code <span class="required-star">*</span></label><input type="text" id="cCode" placeholder="e.g. APL001" style="text-transform:uppercase"></div>
             <div class="fg"><label>System Limit</label><input type="number" id="cLimit" value="100" min="1" max="10000"></div>
-            <div class="fg" style="display:flex;align-items:flex-end">
-              <button class="btn btn-primary" id="btnAddClient">Add Client</button>
+            <div class="fg">
+              <label>Location</label>
+              <select id="cLocation">
+                <option value="">None</option>
+              </select>
             </div>
           </div>
-          <p style="margin-top:14px;font-size:12px;color:rgba(255,255,255,0.35)">
-            The <strong>Hospital Code</strong> appears in the client app hospital dropdown. System Limit is the max number of PCs allowed to register.
+          <div class="form-grid" style="margin-top:14px">
+            <div class="fg"><label>Contact Email</label><input type="email" id="cEmail" placeholder="admin@hospital.com"></div>
+            <div class="fg">
+              <label>Email Notifications</label>
+              <div class="checkbox-row"><input type="checkbox" id="cEmailLogs"> Send Alarm Logs</div>
+              <div class="checkbox-row"><input type="checkbox" id="cEmailReports"> Send Reports</div>
+            </div>
+            <div class="fg" style="display:flex;align-items:flex-end">
+              <button class="btn btn-primary" id="btnAddClient" style="width:100%">➕ Add Client</button>
+            </div>
+          </div>
+          <p style="margin-top:14px;font-size:12px;color:#94a3b8">
+            The <strong>Hospital Code</strong> is used by client apps to register. System Limit is the max number of PCs allowed.
           </p>
         </div>
       </div>
     </div>
 
-    <!-- ── LIST OF CLIENTS ── -->
+    <!-- CLIENT LIST -->
     <div class="tab-content" id="page-clientList">
-      <div class="page-title">List of Clients</div>
-      <div class="page-sub">All registered hospitals / organisations — click a name to manage its users</div>
+      <div class="page-title">Client List</div>
+      <div class="page-sub">All registered hospitals — click a name to manage its users</div>
       <div class="section">
         <div class="section-body" style="padding:0">
           <table>
-            <thead><tr><th>Client / Hospital Name (Code)</th><th>System Limit</th><th>Users</th><th>Added</th><th style="text-align:right">Actions</th></tr></thead>
-            <tbody id="clientsTableBody"><tr class="empty-row"><td colspan="5">No clients yet</td></tr></tbody>
+            <thead><tr><th>Hospital Name (Code)</th><th>Location</th><th>Users</th><th>Email</th><th>Notifications</th><th>Limit</th><th>Added</th><th style="text-align:right">Actions</th></tr></thead>
+            <tbody id="clientsTableBody"><tr class="empty-row"><td colspan="8">No clients yet</td></tr></tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- ── CLIENT USERS (drilled in) ── -->
+    <!-- CLIENT USERS (drill-in) -->
     <div class="tab-content" id="page-clientUsers">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
-        <button class="btn btn-sm btn-back" onclick="showPage('clientList')">← Back to Clients</button>
+        <button class="btn btn-sm btn-back" onclick="showPage('clientList')">← Back</button>
         <div class="page-title" id="clientUsersTitle" style="margin-bottom:0">Users</div>
       </div>
       <div class="page-sub" id="clientUsersSub"></div>
 
-      <!-- Add User — identical fields to client setup wizard -->
-      <div class="section" style="margin-bottom:14px">
-        <div class="section-hdr"><h3>Add New User</h3><span style="font-size:11px;color:rgba(255,255,255,0.3)">Same fields as client setup wizard</span></div>
+      <div class="section" style="margin-bottom:16px">
+        <div class="section-hdr"><h3>Add New User</h3></div>
         <div class="section-body">
           <div class="form-grid">
-            <div class="fg">
-              <label>User ID <span class="required-star">*</span></label>
-              <input type="text" id="uUserId" placeholder="e.g. EMP-001 (unique)">
-            </div>
-            <div class="fg">
-              <label>Full Name <span class="required-star">*</span></label>
-              <input type="text" id="uName" placeholder="e.g. Dr. John Smith">
-            </div>
-            <div class="fg">
-              <label>Room / Location <span class="required-star">*</span></label>
-              <input type="text" id="uRoom" placeholder="e.g. ICU-3, Ward B">
-            </div>
-            <div class="fg">
-              <label>System / PC Number <span class="required-star">*</span></label>
-              <input type="text" id="uSysNum" placeholder="e.g. PC-07">
-            </div>
+            <div class="fg"><label>User ID <span class="required-star">*</span></label><input type="text" id="uUserId" placeholder="e.g. EMP-001"></div>
+            <div class="fg"><label>Full Name <span class="required-star">*</span></label><input type="text" id="uName" placeholder="e.g. Dr. John Smith"></div>
+            <div class="fg"><label>Room Number</label><input type="text" id="uRoom" placeholder="Room number"></div>
+            <div class="fg"><label>System / PC No.</label><input type="text" id="uSysNum" placeholder="PC number"></div>
             <div class="fg">
               <label>Role <span class="required-star">*</span></label>
               <select id="uRole">
-                <option value="staff">🩺 Staff / Nurse (Alert Receiver)</option>
-                <option value="doctor">👨‍⚕️ Doctor (Alert Button)</option>
-                <option value="other">👤 Other Personnel (Alert Receiver)</option>
+                <option value="staff">🩺 Staff / Nurse</option>
+                <option value="doctor">👨‍⚕️ Doctor</option>
+                <option value="other">👤 Other</option>
               </select>
+            </div>
+            <div class="fg">
+              <label>Department / Block</label>
+              <select id="uDept"><option value="">None</option></select>
             </div>
             <div class="fg" style="display:flex;align-items:flex-end">
               <button class="btn btn-primary" id="btnAddUser" style="width:100%">Add User</button>
@@ -266,36 +441,97 @@ tr:hover td { background: rgba(255,255,255,0.02); }
         </div>
       </div>
 
-      <!-- Users Table — shows ALL users (self-registered + admin-added) -->
       <div class="section">
         <div class="section-hdr">
           <h3>All Users in this Hospital</h3>
-          <span style="font-size:11px;color:rgba(255,255,255,0.35)">
-            <span class="badge badge-self">Self-registered</span> = registered via client app &nbsp;
-            <span class="badge badge-admin">Admin-added</span> = added from this panel
+          <span style="font-size:11px;color:#64748b">
+            <span class="badge badge-self">Self-reg</span> via client app &nbsp;
+            <span class="badge badge-admin">Admin</span> added here
           </span>
         </div>
         <div class="section-body" style="padding:0">
           <table>
             <thead>
-              <tr>
-                <th>User ID</th>
-                <th>Full Name</th>
-                <th>Room / Location</th>
-                <th>System / PC No.</th>
-                <th>Role</th>
-                <th>Source</th>
-                <th>Registered</th>
-                <th style="text-align:right">Actions</th>
-              </tr>
+              <tr><th>User ID</th><th>Full Name</th><th>Room No.</th><th>System</th><th>Role</th><th>Dept/Block</th><th>Source</th><th>Registered</th><th style="text-align:right">Actions</th></tr>
             </thead>
-            <tbody id="usersTableBody"><tr class="empty-row"><td colspan="8">No users yet</td></tr></tbody>
+            <tbody id="usersTableBody"><tr class="empty-row"><td colspan="9">No users yet</td></tr></tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- ── REPORTS ── -->
+    <!-- LOCATIONS -->
+    <div class="tab-content" id="page-departments">
+      <div class="page-title">Locations</div>
+      <div class="page-sub">Add and manage hospital locations — these appear in the client setup dropdown</div>
+
+      <div class="section" style="margin-bottom:16px">
+        <div class="section-hdr"><h3>Add Location</h3></div>
+        <div class="section-body">
+          <div class="form-grid">
+            <div class="fg">
+              <label>Hospital <span class="required-star">*</span></label>
+              <select id="dHospital"><option value="">— Select Hospital —</option></select>
+            </div>
+            <div class="fg">
+              <label>Location Name <span class="required-star">*</span></label>
+              <input type="text" id="dName" placeholder="Location name">
+            </div>
+            <div class="fg" style="display:flex;align-items:flex-end">
+              <button class="btn btn-primary" id="btnAddDept">➕ Add Location</button>
+            </div>
+          </div>
+          <p style="margin-top:10px;font-size:12px;color:#94a3b8">A <strong>None</strong> option is always available in the client dropdown.</p>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-hdr"><h3>All Locations</h3></div>
+        <div class="section-body" style="padding:0">
+          <table>
+            <thead><tr><th>Hospital</th><th>Location Name</th><th>Created</th><th style="text-align:right">Actions</th></tr></thead>
+            <tbody id="deptsTableBody"><tr class="empty-row"><td colspan="4">No locations yet</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- DEPARTMENTS / BLOCKS -->
+    <div class="tab-content" id="page-deptBlocks">
+      <div class="page-title">Departments</div>
+      <div class="page-sub">Add and manage departments / blocks — these appear in the user Department/Block dropdown</div>
+
+      <div class="section" style="margin-bottom:16px">
+        <div class="section-hdr"><h3>Add Department</h3></div>
+        <div class="section-body">
+          <div class="form-grid">
+            <div class="fg">
+              <label>Hospital <span class="required-star">*</span></label>
+              <select id="dbHospital"><option value="">— Select Hospital —</option></select>
+            </div>
+            <div class="fg">
+              <label>Department / Block Name <span class="required-star">*</span></label>
+              <input type="text" id="dbName" placeholder="Department name">
+            </div>
+            <div class="fg" style="display:flex;align-items:flex-end">
+              <button class="btn btn-primary" id="btnAddDeptBlock">➕ Add Department</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-hdr"><h3>All Departments</h3></div>
+        <div class="section-body" style="padding:0">
+          <table>
+            <thead><tr><th>Hospital</th><th>Department / Block</th><th>Created</th><th style="text-align:right">Actions</th></tr></thead>
+            <tbody id="deptBlocksTableBody"><tr class="empty-row"><td colspan="4">No departments yet</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- REPORTS -->
     <div class="tab-content" id="page-reports">
       <div class="page-title">Reports</div>
       <div class="page-sub">Panic alarm statistics and history</div>
@@ -306,9 +542,7 @@ tr:hover td { background: rgba(255,255,255,0.02); }
             <div class="fg"><label>Hospital Code</label><input type="text" id="rHospital" placeholder="Leave blank for all"></div>
             <div class="fg"><label>From</label><input type="datetime-local" id="rFrom"></div>
             <div class="fg"><label>To</label><input type="datetime-local" id="rTo"></div>
-            <div class="fg" style="display:flex;align-items:flex-end">
-              <button class="btn btn-primary" id="btnReport">Generate</button>
-            </div>
+            <div class="fg" style="display:flex;align-items:flex-end"><button class="btn btn-primary" id="btnReport">Generate</button></div>
           </div>
         </div>
       </div>
@@ -322,21 +556,32 @@ tr:hover td { background: rgba(255,255,255,0.02); }
       </div>
     </div>
 
-    <!-- ── LOGS ── -->
+    <!-- LOGS -->
     <div class="tab-content" id="page-logs">
-      <div class="page-title">Alarm Logs</div>
-      <div class="page-sub">Complete panic alarm history — all events</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div class="page-title" style="margin-bottom:0">Alarm Logs</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" id="btnClearSelected" style="padding:6px 14px;font-size:12px" disabled>🗑 Clear Selected</button>
+          <button class="btn btn-del btn-sm" id="btnClearAll" style="padding:6px 14px;font-size:12px">🗑 Clear All Logs</button>
+        </div>
+      </div>
+      <div class="page-sub">Complete panic alarm history — select rows to clear individual entries</div>
       <div class="section">
         <div class="section-body" style="padding:0">
           <table>
-            <thead><tr><th>Time</th><th>Alarm ID</th><th>Hospital</th><th>User</th><th>User ID</th><th>Room</th><th>Message</th><th>Acked By</th><th>Status</th></tr></thead>
-            <tbody id="logsBody"><tr class="empty-row"><td colspan="9">Loading…</td></tr></tbody>
+            <thead>
+              <tr>
+                <th style="width:36px"><input type="checkbox" id="selectAllLogs" title="Select all"></th>
+                <th>Time</th><th>Alarm ID</th><th>Hospital</th><th>User</th><th>User ID</th><th>Room</th><th>Message</th><th>Acked By</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="logsBody"><tr class="empty-row"><td colspan="10">Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- ── CHANGE PASSWORD ── -->
+    <!-- CHANGE PASSWORD -->
     <div class="tab-content" id="page-changePassword">
       <div class="page-title">Change Password</div>
       <div class="page-sub">Update the admin login password for this panel</div>
@@ -346,12 +591,12 @@ tr:hover td { background: rgba(255,255,255,0.02); }
           <div class="pw-form">
             <label>Current Password <span class="required-star">*</span></label>
             <input type="password" id="cpCurrent" placeholder="Enter your current password" autocomplete="current-password">
-            <label style="margin-top:16px">New Password <span class="required-star">*</span></label>
+            <label>New Password <span class="required-star">*</span></label>
             <input type="password" id="cpNew" placeholder="At least 8 characters">
-            <label style="margin-top:16px">Confirm New Password <span class="required-star">*</span></label>
+            <label>Confirm New Password <span class="required-star">*</span></label>
             <input type="password" id="cpConfirm" placeholder="Re-enter new password">
             <p class="pw-hint" style="margin-top:10px">Use a strong password with letters, numbers and symbols.</p>
-            <button class="btn btn-secondary" id="btnChangePassword" style="margin-top:18px;padding:10px 28px">Update Password</button>
+            <button class="btn btn-primary" id="btnChangePassword" style="margin-top:20px;padding:11px 30px">Update Password</button>
             <div class="flash" id="cpFlash" style="margin-top:14px"></div>
           </div>
         </div>
@@ -361,53 +606,87 @@ tr:hover td { background: rgba(255,255,255,0.02); }
   </div><!-- /main-area -->
 </div><!-- /app -->
 
-<!-- Edit Client Modal -->
+<!-- ── Edit Client Modal ── -->
 <div class="modal-bg" id="editClientModal">
   <div class="modal">
-    <h3>Edit Client</h3>
+    <div class="modal-title">Edit Client</div>
     <input type="hidden" id="ecId">
-    <div class="fg" style="margin-bottom:12px"><label>Client / Hospital Name</label><input type="text" id="ecName"></div>
-    <div class="fg" style="margin-bottom:12px"><label>Hospital Code</label><input type="text" id="ecCode" style="text-transform:uppercase"></div>
-    <div class="fg" style="margin-bottom:12px"><label>System Limit</label><input type="number" id="ecLimit" min="1"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="fg" style="grid-column:1/-1"><label>Client / Hospital Name</label><input type="text" id="ecName"></div>
+      <div class="fg"><label>Hospital Code</label><input type="text" id="ecCode" style="text-transform:uppercase"></div>
+      <div class="fg"><label>System Limit</label><input type="number" id="ecLimit" min="1"></div>
+      <div class="fg" style="grid-column:1/-1">
+        <label>Location</label>
+        <select id="ecLocation"><option value="">None</option></select>
+      </div>
+      <div class="fg" style="grid-column:1/-1"><label>Contact Email</label><input type="email" id="ecEmail" placeholder="admin@hospital.com"></div>
+      <div class="fg" style="grid-column:1/-1">
+        <label>Email Notifications</label>
+        <div style="display:flex;gap:24px;margin-top:4px">
+          <div class="checkbox-row"><input type="checkbox" id="ecEmailLogs"> Send Alarm Logs</div>
+          <div class="checkbox-row"><input type="checkbox" id="ecEmailReports"> Send Reports</div>
+        </div>
+      </div>
+    </div>
     <div class="modal-btns">
-      <button class="btn btn-sm btn-back" onclick="closeModal('editClientModal')">Cancel</button>
-      <button class="btn btn-primary" id="btnSaveClient">Save</button>
+      <button class="btn btn-secondary" onclick="closeModal('editClientModal')">Cancel</button>
+      <button class="btn btn-primary" id="btnSaveClient">Save Changes</button>
     </div>
   </div>
 </div>
 
-<!-- Edit User Modal — same fields as client setup wizard -->
+<!-- ── Edit User Modal ── -->
 <div class="modal-bg" id="editUserModal">
   <div class="modal">
-    <h3>Edit User</h3>
+    <div class="modal-title">Edit User</div>
     <input type="hidden" id="euId">
-    <div class="fg" style="margin-bottom:12px">
-      <label>User ID</label>
-      <input type="text" id="euUserId" placeholder="e.g. EMP-001">
-    </div>
-    <div class="fg" style="margin-bottom:12px">
-      <label>Full Name</label>
-      <input type="text" id="euName" placeholder="e.g. Dr. John Smith">
-    </div>
-    <div class="fg" style="margin-bottom:12px">
-      <label>Room / Location</label>
-      <input type="text" id="euRoom" placeholder="e.g. ICU-3, Ward B">
-    </div>
-    <div class="fg" style="margin-bottom:12px">
-      <label>System / PC Number</label>
-      <input type="text" id="euSys" placeholder="e.g. PC-07">
-    </div>
-    <div class="fg" style="margin-bottom:12px">
-      <label>Role</label>
-      <select id="euRole">
-        <option value="staff">🩺 Staff / Nurse (Alert Receiver)</option>
-        <option value="doctor">👨‍⚕️ Doctor (Alert Button)</option>
-        <option value="other">👤 Other Personnel (Alert Receiver)</option>
-      </select>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="fg"><label>User ID</label><input type="text" id="euUserId" placeholder="e.g. EMP-001"></div>
+      <div class="fg"><label>Full Name</label><input type="text" id="euName" placeholder="e.g. Dr. John Smith"></div>
+      <div class="fg"><label>Room Number</label><input type="text" id="euRoom" placeholder="Room number"></div>
+      <div class="fg"><label>System / PC No.</label><input type="text" id="euSys" placeholder="PC number"></div>
+      <div class="fg">
+        <label>Role</label>
+        <select id="euRole">
+          <option value="staff">🩺 Staff / Nurse</option>
+          <option value="doctor">👨‍⚕️ Doctor</option>
+          <option value="other">👤 Other</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Department / Block</label>
+        <select id="euDept"><option value="">None</option></select>
+      </div>
     </div>
     <div class="modal-btns">
-      <button class="btn btn-sm btn-back" onclick="closeModal('editUserModal')">Cancel</button>
+      <button class="btn btn-secondary" onclick="closeModal('editUserModal')">Cancel</button>
       <button class="btn btn-primary" id="btnSaveUser">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Edit Location Modal ── -->
+<div class="modal-bg" id="editDeptModal">
+  <div class="modal">
+    <div class="modal-title">Edit Location</div>
+    <input type="hidden" id="edId">
+    <div class="fg" style="margin-bottom:16px"><label>Location Name</label><input type="text" id="edName"></div>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="closeModal('editDeptModal')">Cancel</button>
+      <button class="btn btn-primary" id="btnSaveDept">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Edit Department/Block Modal ── -->
+<div class="modal-bg" id="editDeptBlockModal">
+  <div class="modal">
+    <div class="modal-title">Edit Department / Block</div>
+    <input type="hidden" id="edbId">
+    <div class="fg" style="margin-bottom:16px"><label>Department / Block Name</label><input type="text" id="edbName"></div>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="closeModal('editDeptBlockModal')">Cancel</button>
+      <button class="btn btn-primary" id="btnSaveDeptBlock">Save</button>
     </div>
   </div>
 </div>
@@ -416,14 +695,13 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 // ── State ──────────────────────────────────────────────────────
 let token = localStorage.getItem('adminToken') || '';
 let currentClientId = null;
+let currentHospitalCode = null;
+const clientCache = new Map(); // id → client object, avoids JSON-in-attribute issues
 
 // ── Boot ───────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   if (token) bootApp();
-  else showLoginPage();
 
-  document.getElementById('btnLogin').addEventListener('click', doLogin);
-  document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('btnLogout').addEventListener('click', logout);
   initChangePassword();
   initAddClient();
@@ -431,44 +709,63 @@ window.addEventListener('DOMContentLoaded', () => {
   initSaveClient();
   initSaveUser();
   initReport();
+  initDepartments();
+  initDeptBlocks();
+  initDownloadClient();
+  initLogsClear();
+  initDashClear();
 });
-
-async function doLogin() {
-  const username = document.getElementById('loginUser').value.trim();
-  const password = document.getElementById('loginPass').value;
-  const errEl    = document.getElementById('loginErr');
-  errEl.style.display = 'none';
-  try {
-    const r = await api('POST', '/api/admin/login', { username, password }, false);
-    if (r.error) { errEl.textContent = r.error; errEl.style.display = 'block'; return; }
-    token = r.token;
-    localStorage.setItem('adminToken', token);
-    bootApp();
-  } catch {
-    errEl.textContent = 'Cannot reach server'; errEl.style.display = 'block';
-  }
-}
 
 function bootApp() {
   const payload = parseJwt(token);
   if (!payload) { logout(); return; }
-  document.getElementById('adminName').textContent = '👤 ' + (payload.username || 'admin');
-  document.getElementById('loginPage').style.display = 'none';
+  const uname = payload.username || 'admin';
+  document.getElementById('adminName').textContent = uname;
+  document.getElementById('userAvatar').textContent = uname.charAt(0).toUpperCase();
   document.getElementById('app').style.display = 'block';
   showPage('dashboard');
+  connectAdminSocket();
 }
 
-function showLoginPage() {
-  document.getElementById('loginPage').style.display = 'flex';
-  document.getElementById('app').style.display = 'none';
+// ── Admin Socket.IO — live refresh when clients self-register ──────────────────
+let adminSocket = null;
+function connectAdminSocket() {
+  if (adminSocket) return;
+  try {
+    adminSocket = io({ transports: ['websocket', 'polling'] });
+    adminSocket.on('connect', () => {
+      adminSocket.emit('join', { isAdmin: true });
+    });
+    adminSocket.on('user_registered', ({ hospitalCode, clientId }) => {
+      // Refresh whichever view is currently active
+      const dash   = document.getElementById('page-dashboard');
+      const cList  = document.getElementById('page-clientList');
+      const cUsers = document.getElementById('page-clientUsers');
+      if (dash   && dash.classList.contains('active'))   loadDashboard();
+      if (cList  && cList.classList.contains('active'))  loadClients();
+      if (cUsers && cUsers.classList.contains('active') && String(currentClientId) === String(clientId)) {
+        loadClientUsers();
+      }
+      // Always refresh dashboard stats in background so counts stay accurate
+      // even if not currently on dashboard — next visit will be fresh
+      _refreshDashboardStats();
+    });
+  } catch { /* socket.io not available (plain browser without server) */ }
+}
+
+async function _refreshDashboardStats() {
+  // Silently re-fetch clients to update _dashClients (for accurate stat counts)
+  const clients = await api('GET', '/api/admin/clients').catch(() => null);
+  if (!Array.isArray(clients)) return;
+  _dashClients = clients;
+  document.getElementById('stat-clients').textContent = _dashClients.length;
+  document.getElementById('stat-users').textContent   = _dashClients.reduce((s, c) => s + (c.user_count || 0), 0);
 }
 
 function logout() {
   token = '';
   localStorage.removeItem('adminToken');
-  showLoginPage();
-  document.getElementById('loginUser').value = '';
-  document.getElementById('loginPass').value = '';
+  window.serverAPI.logout();
 }
 
 // ── Navigation ─────────────────────────────────────────────────
@@ -480,104 +777,280 @@ async function showPage(page) {
   const nav = document.getElementById('nav-' + page);
   if (nav) nav.classList.add('active');
 
-  if (page === 'dashboard')      loadDashboard();
-  if (page === 'clientList')     loadClients();
-  if (page === 'clientUsers')    loadClientUsers();
-  if (page === 'logs')           loadLogs();
+  if (page === 'dashboard')   loadDashboard();
+  if (page === 'clients')     loadLocationDropdown('cLocation', null);
+  if (page === 'clientList')  loadClients();
+  if (page === 'clientUsers') { loadClientUsers(); loadDeptDropdown('uDept', currentHospitalCode); }
+  if (page === 'departments') loadLocationsPage();
+  if (page === 'deptBlocks')  loadDeptBlocksPage();
+  if (page === 'logs')        loadLogs();
   if (page === 'changePassword') {
-    // clear fields when navigating in
     ['cpCurrent','cpNew','cpConfirm'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('cpFlash').style.display = 'none';
   }
 }
 
 // ── Dashboard ──────────────────────────────────────────────────
+// Module-level cache so dashCard() can re-render without re-fetching
+let _dashClients = [];
+let _dashLogs    = [];
+
 async function loadDashboard() {
-  const [clients, logs] = await Promise.all([
-    api('GET', '/api/admin/clients'),
-    api('GET', '/api/admin/logs'),
-  ]);
-  const clientArr  = Array.isArray(clients) ? clients : [];
-  const logArr     = Array.isArray(logs) ? logs : [];
-  const today      = new Date().toDateString();
-  const todayCount = logArr.filter(l => new Date(l.triggered_at).toDateString() === today).length;
-  const totalUsers = clientArr.reduce((sum, c) => sum + (c.user_count || 0), 0);
+  const [clients, logs] = await Promise.all([api('GET','/api/admin/clients'), api('GET','/api/admin/logs')]);
+  _dashClients = Array.isArray(clients) ? clients : [];
+  _dashLogs    = Array.isArray(logs)    ? logs    : [];
+  const today = new Date().toDateString();
+  document.getElementById('stat-clients').textContent = _dashClients.length;
+  document.getElementById('stat-users').textContent   = _dashClients.reduce((s,c)=>s+(c.user_count||0),0);
+  document.getElementById('stat-alarms').textContent  = _dashLogs.length;
+  document.getElementById('stat-today').textContent   = _dashLogs.filter(l=>new Date(l.triggered_at).toDateString()===today).length;
+  dashCard('alarms');
+}
 
-  document.getElementById('stat-clients').textContent = clientArr.length;
-  document.getElementById('stat-users').textContent   = totalUsers;
-  document.getElementById('stat-alarms').textContent  = logArr.length;
-  document.getElementById('stat-today').textContent   = todayCount;
+// ── Dashboard stat-card tab switcher ──────────────────────────────
+function dashCard(view) {
+  // Update active-card highlight
+  ['alarms','today','clients','users'].forEach(v => {
+    document.getElementById('dash-card-'+v).classList.toggle('active-card', v === view);
+  });
+  // Show/hide panels
+  document.getElementById('dash-panel-alarms').style.display  = (view === 'alarms' || view === 'today') ? '' : 'none';
+  document.getElementById('dash-panel-clients').style.display = (view === 'clients') ? '' : 'none';
+  document.getElementById('dash-panel-users').style.display   = (view === 'users')   ? '' : 'none';
 
-  const tbody  = document.getElementById('recentAlarms');
-  const recent = logArr.slice(0, 10);
-  if (!recent.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No alarms yet</td></tr>'; return; }
-  tbody.innerHTML = recent.map(l => `
-    <tr>
+  if (view === 'alarms') {
+    document.getElementById('dash-alarms-title').textContent = 'Total Alarms';
+    _renderDashAlarms(_dashLogs);
+  } else if (view === 'today') {
+    document.getElementById('dash-alarms-title').textContent = 'Alarms Today';
+    const today = new Date().toDateString();
+    _renderDashAlarms(_dashLogs.filter(l => new Date(l.triggered_at).toDateString() === today));
+  } else if (view === 'clients') {
+    _renderDashClients(_dashClients);
+  } else if (view === 'users') {
+    _renderDashUsers(_dashClients);
+  }
+}
+
+function _renderDashAlarms(logs) {
+  const tbody = document.getElementById('recentAlarms');
+  document.getElementById('selectAllDash').checked = false;
+  if (!logs.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No alarms yet</td></tr>';
+    updateDashClearBtn();
+    return;
+  }
+  tbody.innerHTML = logs.map(l=>`
+    <tr data-alarm-id="${esc(l.alarm_id)}">
+      <td><input type="checkbox" class="dash-chk" value="${esc(l.alarm_id)}" onchange="updateDashClearBtn()"></td>
       <td>${new Date(l.triggered_at).toLocaleString()}</td>
       <td>${esc(l.hospital_code)}</td>
       <td>${esc(l.triggered_by)}</td>
-      <td>${esc(l.user_id || '—')}</td>
+      <td>${esc(l.user_id||'—')}</td>
       <td>${esc(l.room_number)}</td>
-      <td><span class="badge ${l.acknowledged ? 'badge-active' : 'badge-alarm'}">${l.acknowledged ? '✔ Acked' : '🔴 Active'}</span></td>
+      <td>${alarmStatusBadge(l)}</td>
     </tr>`).join('');
+  updateDashClearBtn();
+}
+
+function _renderDashClients(ca) {
+  const tbody = document.getElementById('dash-clients-body');
+  if (!ca.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No clients registered</td></tr>';
+    return;
+  }
+  tbody.innerHTML = ca.map(c=>`
+    <tr>
+      <td>${esc(c.client_name||'—')}</td>
+      <td>${esc(c.hospital_code)}</td>
+      <td>${esc(c.location||'—')}</td>
+      <td>${c.user_count||0}</td>
+      <td>${c.user_limit||'—'}</td>
+      <td>${c.created_at ? new Date(c.created_at).toLocaleDateString() : '—'}</td>
+    </tr>`).join('');
+}
+
+async function _renderDashUsers(ca) {
+  const tbody = document.getElementById('dash-users-body');
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Loading…</td></tr>';
+  // Fetch users for all clients in parallel
+  const results = await Promise.all(
+    ca.map(c => api('GET', `/api/admin/clients/${c.hospital_code}/users`).then(u => ({ code: c.hospital_code, users: Array.isArray(u) ? u : [] })))
+  );
+  const all = results.flatMap(r => r.users.map(u => ({ ...u, hospital_code: r.code })));
+  if (!all.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No users registered</td></tr>';
+    return;
+  }
+  tbody.innerHTML = all.map(u=>`
+    <tr>
+      <td>${esc(u.user_id||u.device_id||'—')}</td>
+      <td>${esc(u.user_name||'—')}</td>
+      <td>${esc(u.hospital_code)}</td>
+      <td>${esc(u.room_number||'—')}</td>
+      <td>${esc(u.role||'—')}</td>
+      <td>${esc(u.department||'—')}</td>
+    </tr>`).join('');
+}
+
+function updateDashClearBtn() {
+  const n = document.querySelectorAll('.dash-chk:checked').length;
+  const btn = document.getElementById('btnDashClearSelected');
+  if (btn) { btn.disabled = n === 0; btn.textContent = n > 0 ? `🗑 Clear Selected (${n})` : '🗑 Clear Selected'; }
+}
+
+function initDashClear() {
+  document.getElementById('selectAllDash').addEventListener('change', function() {
+    document.querySelectorAll('.dash-chk').forEach(c => c.checked = this.checked);
+    updateDashClearBtn();
+  });
+
+  document.getElementById('btnDashClearSelected').addEventListener('click', async () => {
+    const ids = [...document.querySelectorAll('.dash-chk:checked')].map(c => c.value);
+    if (!ids.length) return;
+    if (!confirm(`Clear ${ids.length} selected log entr${ids.length===1?'y':'ies'}?`)) return;
+    const r = await api('DELETE', '/api/admin/logs', { ids });
+    if (r.error) { flash(r.error, false); return; }
+    flash(`✅ ${r.deleted} log entr${r.deleted===1?'y':'ies'} cleared`, true);
+    loadDashboard();
+  });
+
+  document.getElementById('btnDashClearAll').addEventListener('click', async () => {
+    if (!confirm('Clear ALL alarm logs?')) return;
+    const r = await api('DELETE', '/api/admin/logs', { all: true });
+    if (r.error) { flash(r.error, false); return; }
+    flash(`✅ All logs cleared (${r.deleted} entries)`, true);
+    loadDashboard();
+  });
+}
+
+// ── Download client installer ──────────────────────────────────
+function initDownloadClient() {
+  document.getElementById('btnDownloadClient').addEventListener('click', async () => {
+    if (window.serverAPI && window.serverAPI.downloadClientInstaller) {
+      const r = await window.serverAPI.downloadClientInstaller();
+      if (r && r.ok) flash('✅ Client installer saved to: ' + r.path, true);
+      else flash((r && r.error) || 'Client installer not found in dist/. Rebuild the client first.', false);
+    } else {
+      // Running in browser — offer direct download via API
+      try {
+        const res = await fetch('/api/admin/client-installer-path', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const j = await res.json();
+        if (j.url) {
+          const a = document.createElement('a');
+          a.href = j.url; a.download = j.filename || 'PanicAlarmClient-Setup.exe';
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        } else {
+          flash(j.error || 'Installer not available. Open the desktop Panic Alarm Server app to use this button.', false);
+        }
+      } catch {
+        flash('Cannot reach server.', false);
+      }
+    }
+  });
 }
 
 // ── Add Client ─────────────────────────────────────────────────
 function initAddClient() {
   document.getElementById('btnAddClient').addEventListener('click', async () => {
-    const name  = document.getElementById('cName').value.trim();
-    const code  = document.getElementById('cCode').value.trim().toUpperCase();
-    const limit = document.getElementById('cLimit').value;
+    const name     = document.getElementById('cName').value.trim();
+    const code     = document.getElementById('cCode').value.trim().toUpperCase();
+    const limit    = document.getElementById('cLimit').value;
+    const email    = document.getElementById('cEmail').value.trim() || null;
+    const eLogs    = document.getElementById('cEmailLogs').checked ? 1 : 0;
+    const eReps    = document.getElementById('cEmailReports').checked ? 1 : 0;
+    const location = document.getElementById('cLocation').value || null;
     if (!name || !code) { flash('Client name and hospital code are required', false); return; }
-    const r = await api('POST', '/api/admin/clients', { client_name: name, hospital_code: code, system_limit: parseInt(limit) });
+    const r = await api('POST', '/api/admin/clients', { client_name: name, hospital_code: code, system_limit: parseInt(limit), email, email_logs: eLogs, email_reports: eReps, location });
     if (r.error) { flash(r.error, false); return; }
     flash('✅ Client added: ' + name, true);
-    document.getElementById('cName').value = '';
-    document.getElementById('cCode').value = '';
+    ['cName','cCode','cEmail'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('cEmailLogs').checked = false;
+    document.getElementById('cEmailReports').checked = false;
+    document.getElementById('cLocation').value = '';
   });
+}
+
+// Load locations (type=location) into a select
+async function loadLocationDropdown(selectId, hospitalCode) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">None</option>';
+  const url = hospitalCode
+    ? `/api/admin/locations?hospital_code=${hospitalCode}`
+    : '/api/admin/locations';
+  const locs = await api('GET', url);
+  if (Array.isArray(locs)) {
+    locs.forEach(d => {
+      const o = document.createElement('option');
+      o.value = d.name; o.textContent = d.name;
+      if (d.name === cur) o.selected = true;
+      sel.appendChild(o);
+    });
+  }
 }
 
 // ── List Clients ───────────────────────────────────────────────
 async function loadClients() {
-  const data  = await api('GET', '/api/admin/clients');
+  const data = await api('GET', '/api/admin/clients');
   const tbody = document.getElementById('clientsTableBody');
   if (!Array.isArray(data) || !data.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">No clients registered yet — use "Add a Client".</td></tr>';
-    return;
+    clientCache.clear();
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="8">No clients registered yet — use "Add Client".</td></tr>'; return;
   }
-  tbody.innerHTML = data.map(c => `
-    <tr>
+  clientCache.clear();
+  data.forEach(c => clientCache.set(c.id, c));
+  tbody.innerHTML = data.map(c => {
+    const emailIcons = [c.email_logs ? '📧 Logs' : '', c.email_reports ? '📊 Reports' : ''].filter(Boolean).join(', ') || '—';
+    return `<tr>
       <td>
-        <span class="client-link" onclick="drillClient(${c.id},'${esc(c.client_name)}','${esc(c.hospital_code)}')">
-          ${esc(c.client_name)}
-        </span>
-        <span style="color:rgba(255,255,255,0.3);font-size:11px;margin-left:6px">(${esc(c.hospital_code)})</span>
+        <span class="client-link" onclick="drillClient(${c.id},'${esc(c.client_name)}','${esc(c.hospital_code)}')">${esc(c.client_name)}</span>
+        <span style="color:#94a3b8;font-size:11px;margin-left:6px">(${esc(c.hospital_code)})</span>
       </td>
-      <td>${c.system_limit}</td>
+      <td style="font-size:12px;color:#475569">${esc(c.location||'—')}</td>
       <td>${c.user_count}</td>
+      <td style="font-size:12px;color:#475569">${esc(c.email||'—')}</td>
+      <td style="font-size:12px">${emailIcons}</td>
+      <td>${c.system_limit}</td>
       <td>${new Date(c.created_at).toLocaleDateString()}</td>
       <td class="actions">
-        <button class="btn-sm btn-edit" onclick="openEditClient(${c.id},'${esc(c.client_name)}','${esc(c.hospital_code)}',${c.system_limit})">Edit</button>
+        <button class="btn-sm btn-edit" onclick="openEditClient(${c.id})">Edit</button>
         <button class="btn-sm btn-del"  onclick="deleteClient(${c.id},'${esc(c.client_name)}')">Delete</button>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 }
 
-function openEditClient(id, name, code, limit) {
-  document.getElementById('ecId').value    = id;
-  document.getElementById('ecName').value  = name;
-  document.getElementById('ecCode').value  = code;
-  document.getElementById('ecLimit').value = limit;
+async function openEditClient(id) {
+  const c = clientCache.get(id);
+  if (!c) return;
+  document.getElementById('ecId').value    = c.id;
+  document.getElementById('ecName').value  = c.client_name;
+  document.getElementById('ecCode').value  = c.hospital_code;
+  document.getElementById('ecLimit').value = c.system_limit;
+  document.getElementById('ecEmail').value = c.email || '';
+  document.getElementById('ecEmailLogs').checked    = !!c.email_logs;
+  document.getElementById('ecEmailReports').checked = !!c.email_reports;
+  // Load location dropdown scoped to this hospital, then set current value
+  await loadLocationDropdown('ecLocation', c.hospital_code);
+  document.getElementById('ecLocation').value = c.location || '';
   document.getElementById('editClientModal').classList.add('open');
 }
 
 function initSaveClient() {
   document.getElementById('btnSaveClient').addEventListener('click', async () => {
-    const id    = document.getElementById('ecId').value;
-    const name  = document.getElementById('ecName').value.trim();
-    const code  = document.getElementById('ecCode').value.trim().toUpperCase();
-    const limit = document.getElementById('ecLimit').value;
-    const r = await api('PUT', `/api/admin/clients/${id}`, { client_name: name, hospital_code: code, system_limit: parseInt(limit) });
+    const id       = document.getElementById('ecId').value;
+    const name     = document.getElementById('ecName').value.trim();
+    const code     = document.getElementById('ecCode').value.trim().toUpperCase();
+    const limit    = document.getElementById('ecLimit').value;
+    const email    = document.getElementById('ecEmail').value.trim() || null;
+    const eLogs    = document.getElementById('ecEmailLogs').checked ? 1 : 0;
+    const eReps    = document.getElementById('ecEmailReports').checked ? 1 : 0;
+    const location = document.getElementById('ecLocation').value || null;
+    const r = await api('PUT', `/api/admin/clients/${id}`, { client_name: name, hospital_code: code, system_limit: parseInt(limit), email, email_logs: eLogs, email_reports: eReps, location });
     if (r.error) { flash(r.error, false); return; }
     flash('✅ Client updated', true);
     closeModal('editClientModal');
@@ -595,93 +1068,102 @@ async function deleteClient(id, name) {
 // ── Client Users (drill-in) ────────────────────────────────────
 function drillClient(id, name, code) {
   currentClientId = id;
+  currentHospitalCode = code;
   document.getElementById('clientUsersTitle').textContent = name + ' (' + code + ')';
-  document.getElementById('clientUsersSub').textContent   =
-    'Hospital Code: ' + code + ' — All users registered at this hospital';
+  document.getElementById('clientUsersSub').textContent = 'Hospital Code: ' + code + ' — All users registered at this hospital';
   showPage('clientUsers');
 }
 
 async function loadClientUsers() {
   if (!currentClientId) return;
-  const data  = await api('GET', `/api/admin/clients/${currentClientId}/users`);
+  const data = await api('GET', `/api/admin/clients/${currentClientId}/users`);
   const tbody = document.getElementById('usersTableBody');
   if (!Array.isArray(data) || !data.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="8">No users yet — add one above or they self-register via the client app.</td></tr>';
-    return;
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="9">No users yet — add one above or they self-register via the client app.</td></tr>'; return;
   }
   tbody.innerHTML = data.map(u => {
-    // Use the 'source' column set at registration time:
-    //   'admin'  = added from admin panel (no real device)
-    //   'client' = self-registered via client setup wizard
-    const isAdminAdded = (u.source === 'admin') || (u.device_id && u.device_id.startsWith('admin-'));
-    const sourceBadge = isAdminAdded
-      ? '<span class="badge badge-admin">Admin-added</span>'
-      : '<span class="badge badge-self">Self-registered</span>';
-    return `
-    <tr>
-      <td>${esc(u.user_id || '—')}</td>
+    const isAdmin = (u.source === 'admin') || (u.device_id && u.device_id.startsWith('admin-'));
+    const src = isAdmin ? '<span class="badge badge-admin">Admin</span>' : '<span class="badge badge-self">Self-reg</span>';
+    return `<tr>
+      <td>${esc(u.user_id||'—')}</td>
       <td>${esc(u.user_name)}</td>
       <td>${esc(u.room_number)}</td>
       <td>${esc(u.system_number)}</td>
       <td>${roleBadge(u.role)}</td>
-      <td>${sourceBadge}</td>
+      <td>${esc(u.department||'—')}</td>
+      <td>${src}</td>
       <td>${new Date(u.registered_at).toLocaleDateString()}</td>
       <td class="actions">
-        <button class="btn-sm btn-edit" onclick="openEditUser(${u.id},'${esc(u.user_id||'')}','${esc(u.user_name)}','${esc(u.room_number)}','${esc(u.system_number)}','${u.role}')">Edit</button>
+        <button class="btn-sm btn-edit" onclick="openEditUser(${JSON.stringify(u)})">Edit</button>
         <button class="btn-sm btn-del"  onclick="deleteUser(${u.id},'${esc(u.user_name)}')">Delete</button>
       </td>
     </tr>`;
   }).join('');
 }
 
+// Load dept/blocks (type=department) into a select
+async function loadDeptDropdown(selectId, hospitalCode) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">None</option>';
+  if (!hospitalCode) return;
+  const depts = await api('GET', `/api/admin/dept-blocks?hospital_code=${hospitalCode}`);
+  if (Array.isArray(depts)) {
+    depts.forEach(d => {
+      const o = document.createElement('option');
+      o.value = d.name; o.textContent = d.name;
+      if (d.name === cur) o.selected = true;
+      sel.appendChild(o);
+    });
+  }
+}
+
 function initAddUser() {
   document.getElementById('btnAddUser').addEventListener('click', async () => {
-    const uid   = document.getElementById('uUserId').value.trim();
-    const name  = document.getElementById('uName').value.trim();
-    const room  = document.getElementById('uRoom').value.trim();
-    const sys   = document.getElementById('uSysNum').value.trim();
-    const role  = document.getElementById('uRole').value;
+    const uid  = document.getElementById('uUserId').value.trim();
+    const name = document.getElementById('uName').value.trim();
+    const room = document.getElementById('uRoom').value.trim() || '';
+    const sys  = document.getElementById('uSysNum').value.trim() || '';
+    const role = document.getElementById('uRole').value;
+    const dept = document.getElementById('uDept').value || null;
     if (!uid)  { flash('User ID is required', false); return; }
     if (!name) { flash('Full name is required', false); return; }
-    if (!room) { flash('Room / Location is required', false); return; }
-    if (!sys)  { flash('System / PC Number is required', false); return; }
-    const r = await api('POST', `/api/admin/clients/${currentClientId}/users`, {
-      user_id: uid, user_name: name, room_number: room, system_number: sys, role,
-    });
+    const r = await api('POST', `/api/admin/clients/${currentClientId}/users`, { user_id: uid, user_name: name, room_number: room, system_number: sys, role, department: dept });
     if (r.error) { flash(r.error, false); return; }
     flash('✅ User added: ' + name, true);
-    document.getElementById('uUserId').value  = '';
-    document.getElementById('uName').value    = '';
-    document.getElementById('uRoom').value    = '';
-    document.getElementById('uSysNum').value  = '';
-    document.getElementById('uRole').value    = 'staff';
+    ['uUserId','uName','uRoom','uSysNum'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('uRole').value = 'staff';
+    document.getElementById('uDept').value = '';
     loadClientUsers();
   });
 }
 
-function openEditUser(id, userId, name, room, sys, role) {
-  document.getElementById('euId').value     = id;
-  document.getElementById('euUserId').value = userId;
-  document.getElementById('euName').value   = name;
-  document.getElementById('euRoom').value   = room;
-  document.getElementById('euSys').value    = sys;
-  const r = (role === 'viewer') ? 'staff' : (role || 'staff');
-  document.getElementById('euRole').value   = r;
+function openEditUser(u) {
+  if (typeof u === 'string') u = JSON.parse(u);
+  document.getElementById('euId').value    = u.id;
+  document.getElementById('euUserId').value = u.user_id || '';
+  document.getElementById('euName').value  = u.user_name;
+  document.getElementById('euRoom').value  = u.room_number;
+  document.getElementById('euSys').value   = u.system_number;
+  document.getElementById('euRole').value  = (u.role === 'viewer') ? 'staff' : (u.role || 'staff');
+  loadDeptDropdown('euDept', currentHospitalCode).then(() => {
+    document.getElementById('euDept').value = u.department || '';
+  });
   document.getElementById('editUserModal').classList.add('open');
 }
 
 function initSaveUser() {
   document.getElementById('btnSaveUser').addEventListener('click', async () => {
-    const id     = document.getElementById('euId').value;
-    const userId = document.getElementById('euUserId').value.trim();
-    const name   = document.getElementById('euName').value.trim();
-    const room   = document.getElementById('euRoom').value.trim();
-    const sys    = document.getElementById('euSys').value.trim();
-    const role   = document.getElementById('euRole').value;
-    if (!name || !room || !sys) { flash('Name, room and system number are required', false); return; }
-    const r = await api('PUT', `/api/admin/client-users/${id}`, {
-      user_id: userId || undefined, user_name: name, room_number: room, system_number: sys, role,
-    });
+    const id   = document.getElementById('euId').value;
+    const uid  = document.getElementById('euUserId').value.trim();
+    const name = document.getElementById('euName').value.trim();
+    const room = document.getElementById('euRoom').value.trim() || '';
+    const sys  = document.getElementById('euSys').value.trim() || '';
+    const role = document.getElementById('euRole').value;
+    const dept = document.getElementById('euDept').value || null;
+    if (!name) { flash('Full name is required', false); return; }
+    const r = await api('PUT', `/api/admin/client-users/${id}`, { user_id: uid||undefined, user_name: name, room_number: room, system_number: sys, role, department: dept });
     if (r.error) { flash(r.error, false); return; }
     flash('✅ User updated', true);
     closeModal('editUserModal');
@@ -696,20 +1178,163 @@ async function deleteUser(id, name) {
   loadClientUsers();
 }
 
+// ── Locations ─────────────────────────────────────────────────
+async function loadLocationsPage() {
+  const clients = await api('GET', '/api/admin/clients');
+  const sel = document.getElementById('dHospital');
+  sel.innerHTML = '<option value="">— Select Hospital —</option>';
+  if (Array.isArray(clients)) {
+    clients.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.hospital_code; o.textContent = `${c.client_name} (${c.hospital_code})`;
+      sel.appendChild(o);
+    });
+  }
+  loadDepts();
+}
+
+async function loadDepts() {
+  const data = await api('GET', '/api/admin/locations');
+  const tbody = document.getElementById('deptsTableBody');
+  if (!Array.isArray(data) || !data.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">No locations yet</td></tr>'; return;
+  }
+  tbody.innerHTML = data.map(d => `
+    <tr>
+      <td>${esc(d.hospital_code)}</td>
+      <td>${esc(d.name)}</td>
+      <td>${new Date(d.created_at).toLocaleDateString()}</td>
+      <td class="actions">
+        <button class="btn-sm btn-edit" onclick="openEditDept(${d.id},'${esc(d.name)}')">Edit</button>
+        <button class="btn-sm btn-del"  onclick="deleteDept(${d.id},'${esc(d.name)}')">Delete</button>
+      </td>
+    </tr>`).join('');
+}
+
+function initDepartments() {
+  document.getElementById('btnAddDept').addEventListener('click', async () => {
+    const code = document.getElementById('dHospital').value;
+    const name = document.getElementById('dName').value.trim();
+    if (!code) { flash('Please select a hospital', false); return; }
+    if (!name) { flash('Location name is required', false); return; }
+    const r = await api('POST', '/api/admin/locations', { hospital_code: code, name });
+    if (r.error) { flash(r.error, false); return; }
+    flash('✅ Location added: ' + name + ' (auto-set on client if none was set)', true);
+    document.getElementById('dName').value = '';
+    loadDepts();
+    loadLocationDropdown('cLocation', null);
+    if (document.getElementById('page-clientList').classList.contains('active')) loadClients();
+  });
+
+  document.getElementById('btnSaveDept').addEventListener('click', async () => {
+    const id   = document.getElementById('edId').value;
+    const name = document.getElementById('edName').value.trim();
+    if (!name) { flash('Location name is required', false); return; }
+    const r = await api('PUT', `/api/admin/locations/${id}`, { name });
+    if (r.error) { flash(r.error, false); return; }
+    flash('✅ Location updated', true);
+    closeModal('editDeptModal');
+    loadDepts();
+  });
+}
+
+function openEditDept(id, name) {
+  document.getElementById('edId').value   = id;
+  document.getElementById('edName').value = name;
+  document.getElementById('editDeptModal').classList.add('open');
+}
+
+async function deleteDept(id, name) {
+  if (!confirm(`Delete location "${name}"?`)) return;
+  const r = await api('DELETE', `/api/admin/locations/${id}`);
+  flash(r.error ? r.error : '✅ ' + r.message, !r.error);
+  loadDepts();
+}
+
+// ── Departments / Blocks ───────────────────────────────────────
+async function loadDeptBlocksPage() {
+  const clients = await api('GET', '/api/admin/clients');
+  const sel = document.getElementById('dbHospital');
+  sel.innerHTML = '<option value="">— Select Hospital —</option>';
+  if (Array.isArray(clients)) {
+    clients.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.hospital_code; o.textContent = `${c.client_name} (${c.hospital_code})`;
+      sel.appendChild(o);
+    });
+  }
+  loadDeptBlocksList();
+}
+
+async function loadDeptBlocksList() {
+  const data = await api('GET', '/api/admin/dept-blocks');
+  const tbody = document.getElementById('deptBlocksTableBody');
+  if (!Array.isArray(data) || !data.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">No departments yet</td></tr>'; return;
+  }
+  tbody.innerHTML = data.map(d => `
+    <tr>
+      <td>${esc(d.hospital_code)}</td>
+      <td>${esc(d.name)}</td>
+      <td>${new Date(d.created_at).toLocaleDateString()}</td>
+      <td class="actions">
+        <button class="btn-sm btn-edit" onclick="openEditDeptBlock(${d.id},'${esc(d.name)}')">Edit</button>
+        <button class="btn-sm btn-del"  onclick="deleteDeptBlock(${d.id},'${esc(d.name)}')">Delete</button>
+      </td>
+    </tr>`).join('');
+}
+
+function initDeptBlocks() {
+  document.getElementById('btnAddDeptBlock').addEventListener('click', async () => {
+    const code = document.getElementById('dbHospital').value;
+    const name = document.getElementById('dbName').value.trim();
+    if (!code) { flash('Please select a hospital', false); return; }
+    if (!name) { flash('Department name is required', false); return; }
+    const r = await api('POST', '/api/admin/dept-blocks', { hospital_code: code, name });
+    if (r.error) { flash(r.error, false); return; }
+    flash('✅ Department added: ' + name, true);
+    document.getElementById('dbName').value = '';
+    loadDeptBlocksList();
+  });
+
+  document.getElementById('btnSaveDeptBlock').addEventListener('click', async () => {
+    const id   = document.getElementById('edbId').value;
+    const name = document.getElementById('edbName').value.trim();
+    if (!name) { flash('Department name is required', false); return; }
+    const r = await api('PUT', `/api/admin/dept-blocks/${id}`, { name });
+    if (r.error) { flash(r.error, false); return; }
+    flash('✅ Department updated', true);
+    closeModal('editDeptBlockModal');
+    loadDeptBlocksList();
+  });
+}
+
+function openEditDeptBlock(id, name) {
+  document.getElementById('edbId').value   = id;
+  document.getElementById('edbName').value = name;
+  document.getElementById('editDeptBlockModal').classList.add('open');
+}
+
+async function deleteDeptBlock(id, name) {
+  if (!confirm(`Delete department "${name}"?`)) return;
+  const r = await api('DELETE', `/api/admin/dept-blocks/${id}`);
+  flash(r.error ? r.error : '✅ ' + r.message, !r.error);
+  loadDeptBlocksList();
+}
+
 // ── Reports ────────────────────────────────────────────────────
 function initReport() {
   document.getElementById('btnReport').addEventListener('click', async () => {
-    const hosp   = document.getElementById('rHospital').value.trim();
-    const from   = document.getElementById('rFrom').value;
-    const to     = document.getElementById('rTo').value;
-    let url      = '/api/admin/logs';
-    const params = new URLSearchParams();
-    if (hosp) params.set('hospital_code', hosp);
-    if (from) params.set('from', from);
-    if (to)   params.set('to', to);
-    if ([...params].length) url += '?' + params.toString();
-    const data = await api('GET', url);
-    renderLogsTable('reportBody', data, 'report');
+    const hosp = document.getElementById('rHospital').value.trim();
+    const from = document.getElementById('rFrom').value;
+    const to   = document.getElementById('rTo').value;
+    let url = '/api/admin/logs';
+    const p = new URLSearchParams();
+    if (hosp) p.set('hospital_code', hosp);
+    if (from) p.set('from', from);
+    if (to)   p.set('to', to);
+    if ([...p].length) url += '?' + p.toString();
+    renderLogsTable('reportBody', await api('GET', url), 'report');
   });
 }
 
@@ -717,107 +1342,123 @@ function initReport() {
 async function loadLogs() {
   const data = await api('GET', '/api/admin/logs');
   renderLogsTable('logsBody', data, 'full');
+  updateClearSelectedBtn();
 }
 
 function renderLogsTable(tbodyId, data, mode) {
   const tbody = document.getElementById(tbodyId);
-  const cols  = mode === 'full' ? 9 : 7;
+  const cols = mode === 'full' ? 10 : 7;
   if (!Array.isArray(data) || !data.length) {
     tbody.innerHTML = `<tr class="empty-row"><td colspan="${cols}">No records found</td></tr>`;
+    if (mode === 'full') document.getElementById('selectAllLogs').checked = false;
     return;
   }
   tbody.innerHTML = data.map(l => `
-    <tr>
+    <tr data-alarm-id="${esc(l.alarm_id)}">
+      ${mode === 'full' ? `<td><input type="checkbox" class="log-chk" value="${esc(l.alarm_id)}" onchange="updateClearSelectedBtn()"></td>` : ''}
       <td>${new Date(l.triggered_at).toLocaleString()}</td>
       ${mode === 'full' ? `<td style="font-family:monospace;font-size:11px">${l.alarm_id.slice(0,8)}</td>` : ''}
       <td>${esc(l.hospital_code)}</td>
       <td>${esc(l.triggered_by)}</td>
-      <td>${esc(l.user_id || '—')}</td>
+      <td>${esc(l.user_id||'—')}</td>
       <td>${esc(l.room_number)}</td>
-      ${mode === 'report' ? `<td>${esc(l.system_number || '—')}</td>` : ''}
+      ${mode === 'report' ? `<td>${esc(l.system_number||'—')}</td>` : ''}
       ${mode === 'full' ? `<td style="max-width:200px;overflow:hidden;white-space:nowrap" title="${esc(l.message)}">${esc(l.message)}</td>` : ''}
-      ${mode === 'full' ? `<td>${esc(l.ack_by || '—')}</td>` : ''}
-      <td><span class="badge ${l.acknowledged ? 'badge-active' : 'badge-alarm'}">${l.acknowledged ? '✔ Acked' : '🔴 Active'}</span></td>
+      ${mode === 'full' ? `<td>${esc(l.ack_by||'—')}</td>` : ''}
+      <td>${alarmStatusBadge(l)}</td>
     </tr>`).join('');
+}
+
+function updateClearSelectedBtn() {
+  const n = document.querySelectorAll('.log-chk:checked').length;
+  const btn = document.getElementById('btnClearSelected');
+  if (btn) { btn.disabled = n === 0; btn.textContent = n > 0 ? `🗑 Clear Selected (${n})` : '🗑 Clear Selected'; }
+}
+
+function initLogsClear() {
+  document.getElementById('selectAllLogs').addEventListener('change', function() {
+    document.querySelectorAll('.log-chk').forEach(c => c.checked = this.checked);
+    updateClearSelectedBtn();
+  });
+
+  document.getElementById('btnClearSelected').addEventListener('click', async () => {
+    const ids = [...document.querySelectorAll('.log-chk:checked')].map(c => c.value);
+    if (!ids.length) return;
+    if (!confirm(`Clear ${ids.length} selected log entr${ids.length===1?'y':'ies'}?\n\nThe data stays in the database — only removed from this view. Reports are unaffected.`)) return;
+    const r = await api('DELETE', '/api/admin/logs', { ids });
+    if (r.error) { flash(r.error, false); return; }
+    flash(`✅ ${r.deleted} log entr${r.deleted===1?'y':'ies'} cleared`, true);
+    loadLogs();
+  });
+
+  document.getElementById('btnClearAll').addEventListener('click', async () => {
+    if (!confirm('Clear ALL alarm logs from the view?\n\nThe data stays in the database — Reports are unaffected.')) return;
+    const r = await api('DELETE', '/api/admin/logs', { all: true });
+    if (r.error) { flash(r.error, false); return; }
+    flash(`✅ All logs cleared (${r.deleted} entries)`, true);
+    loadLogs();
+  });
 }
 
 // ── Change Password ────────────────────────────────────────────
 function initChangePassword() {
   document.getElementById('btnChangePassword').addEventListener('click', async () => {
-    const current = document.getElementById('cpCurrent').value;
-    const newPw   = document.getElementById('cpNew').value;
-    const confirm = document.getElementById('cpConfirm').value;
-    const flashEl = document.getElementById('cpFlash');
-
-    flashEl.style.display = 'none';
-
-    if (!current || !newPw || !confirm) {
-      cpFlash('All fields are required', false); return;
-    }
-    if (newPw.length < 8) {
-      cpFlash('New password must be at least 8 characters', false); return;
-    }
-    if (newPw !== confirm) {
-      cpFlash('New passwords do not match', false); return;
-    }
-
-    const r = await api('POST', '/api/admin/change-password', { currentPassword: current, newPassword: newPw });
+    const cur = document.getElementById('cpCurrent').value;
+    const np  = document.getElementById('cpNew').value;
+    const cf  = document.getElementById('cpConfirm').value;
+    document.getElementById('cpFlash').style.display = 'none';
+    if (!cur || !np || !cf) { cpFlash('All fields are required', false); return; }
+    if (np.length < 8)      { cpFlash('New password must be at least 8 characters', false); return; }
+    if (np !== cf)           { cpFlash('New passwords do not match', false); return; }
+    const r = await api('POST', '/api/admin/change-password', { currentPassword: cur, newPassword: np });
     if (r.error) { cpFlash(r.error, false); return; }
-
-    cpFlash('✅ Password changed successfully! Please log in again.', true);
-    document.getElementById('cpCurrent').value = '';
-    document.getElementById('cpNew').value     = '';
-    document.getElementById('cpConfirm').value = '';
-    // Log out after password change
+    cpFlash('✅ Password changed! Logging out…', true);
+    ['cpCurrent','cpNew','cpConfirm'].forEach(id => document.getElementById(id).value = '');
     setTimeout(() => logout(), 2500);
   });
 }
 
 function cpFlash(msg, ok) {
   const el = document.getElementById('cpFlash');
-  el.textContent = msg;
-  el.className = 'flash ' + (ok ? 'ok' : 'err');
-  el.style.display = 'block';
+  el.textContent = msg; el.className = 'flash ' + (ok ? 'ok' : 'err'); el.style.display = 'block';
 }
 
-// ── Role badge helper ──────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────
 function roleBadge(role) {
-  const r = (role || '').toLowerCase();
+  const r = (role||'').toLowerCase();
   if (r === 'doctor') return '<span class="badge badge-doctor">👨‍⚕️ Doctor</span>';
   if (r === 'other')  return '<span class="badge badge-other">👤 Other</span>';
-  return '<span class="badge badge-staff">🩺 Staff / Nurse</span>';
+  return '<span class="badge badge-staff">🩺 Staff</span>';
 }
 
-// ── API helper ─────────────────────────────────────────────────
+function alarmStatusBadge(l) {
+  if (l.acknowledged) return '<span class="badge badge-active">✔ Acked</span>';
+  if (l.no_response)  return '<span class="badge badge-no-resp">⏱ No Response</span>';
+  return '<span class="badge badge-alarm">🔴 Active</span>';
+}
+
 async function api(method, path, body, withAuth = true) {
-  const opts = {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(withAuth ? { 'Authorization': `Bearer ${token}` } : {}),
-    },
-  };
+  const opts = { method, headers: { 'Content-Type':'application/json', ...(withAuth ? { 'Authorization': `Bearer ${token}` } : {}) } };
   if (body) opts.body = JSON.stringify(body);
   try {
-    const r    = await fetch(path, opts);
-    const json = await r.json();
+    const r = await fetch(path, opts);
+    const j = await r.json();
     if (r.status === 401) { logout(); return {}; }
-    return json;
+    return j;
   } catch { return { error: 'Network error' }; }
 }
 
 function flash(msg, ok) {
   const el = document.getElementById('flash');
-  el.textContent = msg;
-  el.className = 'flash ' + (ok ? 'ok' : 'err');
-  el.style.display = 'block';
+  el.textContent = msg; el.className = 'flash '+(ok?'ok':'err'); el.style.display = 'block';
   clearTimeout(el._t);
-  el._t = setTimeout(() => { el.style.display = 'none'; }, 4000);
+  el._t = setTimeout(() => { el.style.display = 'none'; }, 5000);
 }
 
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-function esc(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function esc(s) { return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function parseJwt(t) { try { return JSON.parse(atob(t.split('.')[1])); } catch { return null; } }
 </script>
+<script src="/socket.io/socket.io.js"></script>
 </body>
 </html>

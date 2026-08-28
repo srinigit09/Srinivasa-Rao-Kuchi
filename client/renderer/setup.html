@@ -7,127 +7,91 @@
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: -apple-system,"Segoe UI",sans-serif;
-  background: #0f1117; color: #e0e0e0;
-  min-height: 100vh; display: flex; align-items: center; justify-content: center;
-  padding: 20px;
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  background: linear-gradient(145deg, #0d0f1c 0%, #141726 100%);
+  color: #fff; min-height: 100vh;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 16px 0 24px;
 }
-
-/* ── Card shell ── */
 .card {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 14px; padding: 32px 28px; width: 480px;
+  width: 460px; padding: 24px 28px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
 }
-.logo { text-align: center; margin-bottom: 24px; }
+.logo { text-align: center; margin-bottom: 20px; }
 .logo .icon { font-size: 38px; }
 .logo h1 { font-size: 16px; color: #fff; margin-top: 8px; font-weight: 700; }
 .logo p  { font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 3px; }
 
-/* ── Step indicator ── */
-.steps {
-  display: flex; align-items: center; justify-content: center;
-  gap: 0; margin-bottom: 28px;
-}
+/* Step indicators */
+.steps { display: flex; align-items: flex-start; justify-content: center; gap: 0; margin-bottom: 22px; }
+.step-wrap { display: flex; flex-direction: column; align-items: center; }
 .step-dot {
-  width: 28px; height: 28px; border-radius: 50%;
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.3); font-size: 11px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 700;
-  background: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.3);
-  border: 2px solid rgba(255,255,255,0.1);
-  transition: all .25s;
 }
 .step-dot.active  { background: #e74c3c; color: #fff; border-color: #e74c3c; }
 .step-dot.done    { background: #27ae60; color: #fff; border-color: #27ae60; }
-.step-line { width: 48px; height: 2px; background: rgba(255,255,255,0.1); }
+.step-line { width: 48px; height: 2px; background: rgba(255,255,255,0.1); margin-top: 13px; }
 .step-label {
-  font-size: 10px; color: rgba(255,255,255,0.3);
-  text-align: center; margin-top: 4px;
-  transition: color .25s;
+  font-size: 10px; color: rgba(255,255,255,0.25); margin-top: 4px; font-weight: 600;
 }
 .step-label.active { color: #e74c3c; }
 .step-label.done   { color: #27ae60; }
-.step-wrap { display: flex; flex-direction: column; align-items: center; }
 
-/* ── Profile cards ── */
-.profile-title {
-  font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.4);
-  text-transform: uppercase; letter-spacing: .8px;
-  margin-bottom: 14px; text-align: center;
-}
-.profile-grid { display: flex; gap: 10px; margin-bottom: 10px; }
+/* Role cards */
+.profile-title { font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 12px; text-align: center; }
+.profile-grid { display: flex; gap: 10px; margin-bottom: 14px; }
 .profile-card {
-  flex: 1; border-radius: 12px;
-  border: 2px solid rgba(255,255,255,0.1);
-  background: rgba(255,255,255,0.04);
-  padding: 18px 12px; text-align: center;
-  cursor: pointer; transition: all .2s;
-  user-select: none;
+  flex: 1; padding: 14px 10px; border-radius: 10px; cursor: pointer;
+  border: 1.5px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03);
+  text-align: center; transition: all .15s; position: relative;
 }
-.profile-card:hover {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(255,255,255,0.2);
-}
-.profile-card.selected.doctor {
-  background: rgba(231,76,60,0.15);
-  border-color: #e74c3c;
-}
-.profile-card.selected.staff {
-  background: rgba(52,152,219,0.15);
-  border-color: #3498db;
-}
-.profile-card.selected.other {
-  background: rgba(155,89,182,0.15);
-  border-color: #9b59b6;
-}
+.profile-card:hover { background: rgba(255,255,255,0.07); }
+.profile-card.selected.doctor { border-color: #e74c3c; background: rgba(231,76,60,0.1); }
+.profile-card.selected.staff  { border-color: #3498db; background: rgba(52,152,219,0.1); }
+.profile-card.selected.other  { border-color: #9b59b6; background: rgba(155,89,182,0.1); }
 .profile-card .pc-icon { font-size: 30px; margin-bottom: 8px; display: block; }
 .profile-card .pc-label {
-  font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 3px;
+  font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.7);
 }
 .profile-card.selected.doctor .pc-label { color: #ff6b6b; }
 .profile-card.selected.staff  .pc-label { color: #5dade2; }
 .profile-card.selected.other  .pc-label { color: #bf7aed; }
-.profile-card .pc-desc {
-  font-size: 10px; color: rgba(255,255,255,0.35); line-height: 1.5;
-}
+.profile-card .pc-desc { font-size: 10px; color: rgba(255,255,255,0.3); margin-top: 5px; }
 .profile-card .pc-badge {
-  display: inline-block; margin-top: 8px;
-  padding: 2px 8px; border-radius: 10px;
   font-size: 9px; font-weight: 700; letter-spacing: .5px;
-  opacity: 0; transition: opacity .2s;
+  color: rgba(255,255,255,0.2); margin-top: 7px; text-transform: uppercase; opacity: 0;
 }
 .profile-card.selected .pc-badge { opacity: 1; }
-.profile-card.selected.doctor .pc-badge {
-  background: rgba(231,76,60,0.25); color: #ff6b6b;
-}
-.profile-card.selected.staff .pc-badge {
-  background: rgba(52,152,219,0.25); color: #5dade2;
-}
-.profile-card.selected.other .pc-badge {
-  background: rgba(155,89,182,0.25); color: #bf7aed;
-}
+.profile-card.selected.doctor .pc-badge { color: #ff6b6b; }
+.profile-card.selected.staff  .pc-badge { color: #5dade2; }
+.profile-card.selected.other  .pc-badge { color: #bf7aed; }
 .profile-card .check {
-  display: none; font-size: 16px; margin-top: 6px;
+  position: absolute; top: 6px; right: 8px; font-size: 12px; display: none;
 }
 .profile-card.selected .check { display: block; }
 
 .btn-next {
   width: 100%; padding: 12px; border: none; border-radius: 8px;
-  font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 14px;
-  background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.3);
-  transition: all .2s;
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.3);
+  transition: all .15s; letter-spacing: .3px;
 }
+.btn-next:disabled { cursor: not-allowed; }
 .btn-next.ready-doctor { background: #e74c3c; color: #fff; }
 .btn-next.ready-staff  { background: #3498db; color: #fff; }
 .btn-next.ready-other  { background: #9b59b6; color: #fff; }
 
-/* ── Details form (Step 2) ── */
+/* Step 2 */
 .step2 { display: none; }
 .form-header {
-  display: flex; align-items: center; gap: 10px;
-  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 9px; padding: 12px 14px; margin-bottom: 18px;
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.03); margin-bottom: 16px;
 }
 .form-header .fh-icon { font-size: 24px; }
 .form-header .fh-label { font-size: 13px; font-weight: 700; }
@@ -140,53 +104,64 @@ body {
 .form-header.other  .fh-label { color: #bf7aed; }
 
 .section-title {
-  font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.3);
-  text-transform: uppercase; letter-spacing: .7px;
-  margin-bottom: 10px; margin-top: 14px;
-  display: flex; align-items: center; gap: 8px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .8px; color: rgba(255,255,255,0.25);
+  margin: 14px 0 10px; display: flex; align-items: center; gap: 8px;
 }
 .section-title::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.07); }
 
 label {
   display: block; font-size: 11px; color: rgba(255,255,255,0.45);
-  margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px;
+  margin-bottom: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px;
 }
 input, select {
-  width: 100%; padding: 10px 12px;
-  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 6px; color: #fff; font-size: 13px; margin-bottom: 12px;
-  appearance: none; -webkit-appearance: none;
+  width: 100%; padding: 9px 12px; margin-bottom: 12px;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px; color: #fff; font-size: 13px; outline: none;
+  transition: border .15s;
 }
-input:focus, select:focus { outline: none; border-color: #e74c3c; }
-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+input:focus, select:focus { border-color: #e74c3c; }
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px;
+  cursor: pointer;
+}
 select option { background: #1a1d2a; color: #fff; }
+select:disabled { opacity: 0.45; cursor: not-allowed; }
 .hint { font-size: 11px; color: rgba(255,255,255,0.28); margin-top: -8px; margin-bottom: 12px; }
 .required-star { color: #ff6b6b; margin-left: 2px; }
 
+/* Two-column grid */
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+
 .btn-register {
-  width: 100%; padding: 13px; color: #fff;
-  border: none; border-radius: 8px; font-size: 15px; font-weight: 700;
-  cursor: pointer; margin-top: 6px;
+  width: 100%; padding: 13px; border: none; border-radius: 8px;
+  font-size: 14px; font-weight: 700; cursor: pointer; letter-spacing: .3px;
+  margin-top: 4px; transition: background .15s;
 }
-.btn-register.doctor { background: #e74c3c; }
+.btn-register.doctor { background: #e74c3c; color: #fff; }
 .btn-register.doctor:hover { background: #c0392b; }
-.btn-register.staff  { background: #3498db; }
+.btn-register.staff  { background: #3498db; color: #fff; }
 .btn-register.staff:hover  { background: #2980b9; }
-.btn-register.other  { background: #9b59b6; }
+.btn-register.other  { background: #9b59b6; color: #fff; }
 .btn-register.other:hover  { background: #7d3c98; }
 .btn-register:disabled { background: #555 !important; cursor: not-allowed; }
 
 .btn-back-step {
-  background: none; border: none; color: rgba(255,255,255,0.4);
-  font-size: 12px; cursor: pointer; margin-bottom: 8px; display: flex;
-  align-items: center; gap: 4px; padding: 0;
+  background: none; border: none; color: rgba(255,255,255,0.35);
+  font-size: 12px; cursor: pointer; padding: 0; margin-bottom: 12px;
 }
 .btn-back-step:hover { color: rgba(255,255,255,0.7); }
+
+.hospital-status {
+  padding: 8px 12px; border-radius: 6px; font-size: 12px; margin-bottom: 12px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.4); min-height: 34px; display: flex; align-items: center;
+}
 
 .err { background: rgba(231,76,60,0.15); border: 1px solid rgba(231,76,60,0.4); border-radius: 5px; padding: 9px 12px; font-size: 12px; color: #ff6b6b; margin-top: 10px; display: none; }
 .ok  { background: rgba(39,174,96,0.15); border: 1px solid rgba(39,174,96,0.4); border-radius: 5px; padding: 9px 12px; font-size: 12px; color: #2ecc71; margin-top: 10px; display: none; }
 .spinner { text-align: center; color: rgba(255,255,255,0.4); font-size: 12px; margin-top: 10px; display: none; }
-.loading-hospitals { font-size: 11px; color: rgba(255,255,255,0.4); padding: 8px 0; display: none; }
 </style>
 </head>
 <body>
@@ -260,36 +235,50 @@ select option { background: #1a1d2a; color: #fff; }
       <div class="fh-label" id="fhLabel"></div>
     </div>
 
+    <!-- Server Connection -->
     <div class="section-title">Server Connection</div>
     <label>Server IP &amp; Port <span class="required-star">*</span></label>
     <input type="text" id="serverUrl" placeholder="http://192.168.1.5:4000" autocomplete="off" autocorrect="off" spellcheck="false">
-    <div class="hint">⚠️ Use <strong style="color:#ffc107">http://</strong> (not https://) · Ask your admin for the server IP</div>
+    <div class="hint">⚠️ Use <strong style="color:#ffc107">http://</strong> · Enter the server IP then press Tab to load hospitals</div>
 
+    <!-- Hospital selection -->
     <div class="section-title">Your Hospital</div>
-    <label>Hospital Code <span class="required-star">*</span></label>
-    <input type="text" id="hospitalCode" placeholder="e.g. APL001" autocomplete="off" autocorrect="off" spellcheck="false" style="text-transform:uppercase">
-    <div class="hint">Enter the code given by your administrator, then press Tab or click away</div>
+    <label>Hospital / Clinic Name <span class="required-star">*</span></label>
+    <select id="hospitalSelect" disabled>
+      <option value="">— Enter server URL above to load —</option>
+    </select>
+    <div class="hospital-status" id="hospitalStatus" style="display:none"></div>
 
-    <label>Hospital / Clinic Name</label>
-    <div id="hospitalNameDisplay" style="
-      padding:9px 12px; border-radius:6px; font-size:13px; margin-bottom:12px;
-      background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
-      color:rgba(255,255,255,0.4); min-height:36px; display:flex; align-items:center;
-    ">Enter hospital code above to auto-fill</div>
+    <!-- Department/Block — loaded after hospital selection -->
+    <label>Department / Block</label>
+    <select id="departmentSelect" disabled>
+      <option value="">None</option>
+    </select>
 
+    <!-- User Details — in sync with server Add User form -->
     <div class="section-title">Your Details</div>
-    <label>User ID <span class="required-star">*</span></label>
-    <input type="text" id="userId" placeholder="e.g. EMP-001 or DOC-042 (must be unique)">
-    <div class="hint">Your unique employee / staff ID — provided by your administrator</div>
+    <div class="form-row">
+      <div>
+        <label>Full Name <span class="required-star">*</span></label>
+        <input type="text" id="userName" placeholder="e.g. Dr. John Smith">
+      </div>
+      <div>
+        <label>User ID <span class="required-star">*</span></label>
+        <input type="text" id="userId" placeholder="e.g. EMP-001">
+      </div>
+    </div>
+    <div class="hint" style="margin-top:-8px">User ID must be unique — provided by your administrator</div>
 
-    <label>Your Name <span class="required-star">*</span></label>
-    <input type="text" id="userName" placeholder="e.g. Dr. John Smith">
-
-    <label>Room / Location <span class="required-star">*</span></label>
-    <input type="text" id="roomNumber" placeholder="e.g. ICU-3, Ward-B, Nursing Station">
-
-    <label>System / PC Number <span class="required-star">*</span></label>
-    <input type="text" id="systemNumber" placeholder="e.g. PC-07 (label on this computer)">
+    <div class="form-row">
+      <div>
+        <label>Room Number</label>
+        <input type="text" id="roomNumber" placeholder="e.g. ICU-3">
+      </div>
+      <div>
+        <label>System / PC No.</label>
+        <input type="text" id="systemNumber" placeholder="e.g. PC-07">
+      </div>
+    </div>
 
     <button class="btn-register" id="btnRegister">REGISTER &amp; START</button>
     <div class="err"     id="errMsg"></div>
@@ -302,18 +291,20 @@ select option { background: #1a1d2a; color: #fff; }
 <script>
   const api = window.electronAPI;
   let selectedRole = null;
-  let verifiedHospitalCode = null;   // set after successful lookup
+  let verifiedHospitalCode = null;
   let verifiedHospitalName = null;
+  let allHospitals = [];
 
-  // ── Init: pre-fill if config exists ───────────────────────────
+  // ── Init ──────────────────────────────────────────────────────────────────────
   async function init() {
     const cfg = await api.getConfig();
     if (cfg && cfg.serverUrl) {
       document.getElementById('serverUrl').value = cfg.serverUrl;
+      await loadHospitals(cfg.serverUrl, cfg.hospitalCode || null);
     }
   }
 
-  // ── Profile selection ──────────────────────────────────────────
+  // ── Profile selection ─────────────────────────────────────────────────────────
   function selectProfile(role) {
     selectedRole = role;
     document.getElementById('cardDoctor').classList.toggle('selected', role === 'doctor');
@@ -327,7 +318,7 @@ select option { background: #1a1d2a; color: #fff; }
     btn.className = `btn-next ready-${role}`;
   }
 
-  // ── Step navigation ────────────────────────────────────────────
+  // ── Step navigation ───────────────────────────────────────────────────────────
   function goToStep2() {
     if (!selectedRole) return;
     document.getElementById('step1').style.display = 'none';
@@ -343,19 +334,19 @@ select option { background: #1a1d2a; color: #fff; }
     const label  = document.getElementById('fhLabel');
     const btn    = document.getElementById('btnRegister');
 
-    const cfg = {
-      doctor: { cls: 'doctor', icon: '👨‍⚕️', label: 'Doctor Profile',      desc: 'You will get a floating red ALERT button on your desktop',         btnTxt: 'REGISTER AS DOCTOR & START',       btnCls: 'doctor' },
-      staff:  { cls: 'staff',  icon: '🩺',   label: 'Staff / Nurse Profile', desc: 'You will receive alert popups when a doctor triggers an alarm',     btnTxt: 'REGISTER AS STAFF & START',        btnCls: 'staff'  },
-      other:  { cls: 'other',  icon: '👤',   label: 'Other Personnel',        desc: 'You will receive alert popups when a doctor triggers an alarm',    btnTxt: 'REGISTER AS OTHER & START',        btnCls: 'other'  },
+    const roleCfg = {
+      doctor: { cls: 'doctor', icon: '👨‍⚕️', label: 'Doctor Profile',       desc: 'You will get a floating ALERT button on your desktop',          btnTxt: 'REGISTER AS DOCTOR & START',  btnCls: 'doctor' },
+      staff:  { cls: 'staff',  icon: '🩺',   label: 'Staff / Nurse Profile', desc: 'You will receive alert popups when a doctor triggers an alarm',  btnTxt: 'REGISTER AS STAFF & START',   btnCls: 'staff'  },
+      other:  { cls: 'other',  icon: '👤',   label: 'Other Personnel',        desc: 'You will receive alert popups when a doctor triggers an alarm', btnTxt: 'REGISTER AS OTHER & START',   btnCls: 'other'  },
     }[selectedRole];
 
-    header.className = `form-header ${cfg.cls}`;
-    icon.textContent  = cfg.icon;
-    label.innerHTML   = `${cfg.label} <span>${cfg.desc}</span>`;
-    btn.className     = `btn-register ${cfg.btnCls}`;
-    btn.textContent   = cfg.btnTxt;
+    header.className  = `form-header ${roleCfg.cls}`;
+    icon.textContent  = roleCfg.icon;
+    label.innerHTML   = `${roleCfg.label} <span>${roleCfg.desc}</span>`;
+    btn.className     = `btn-register ${roleCfg.btnCls}`;
+    btn.textContent   = roleCfg.btnTxt;
 
-    document.getElementById('userId').focus();
+    document.getElementById('userName').focus();
   }
 
   function goBackToStep1() {
@@ -368,7 +359,7 @@ select option { background: #1a1d2a; color: #fff; }
     clearMessages();
   }
 
-  // ── Normalise server URL (auto-fix common mistakes) ───────────
+  // ── Normalise server URL ──────────────────────────────────────────────────────
   function normaliseUrl(raw) {
     let url = raw.trim().replace(/\/$/, '');
     if (!url) return '';
@@ -377,77 +368,133 @@ select option { background: #1a1d2a; color: #fff; }
     return url;
   }
 
-  // ── Hospital code lookup — fires on blur or Enter ──────────────
-  async function lookupHospital() {
-    const code = document.getElementById('hospitalCode').value.trim().toUpperCase();
-    const display = document.getElementById('hospitalNameDisplay');
+  // ── Load hospitals dropdown from server ───────────────────────────────────────
+  async function loadHospitals(serverUrl, preSelectCode) {
+    const sel    = document.getElementById('hospitalSelect');
+    const status = document.getElementById('hospitalStatus');
+    sel.innerHTML = '<option value="">⏳ Loading hospitals…</option>';
+    sel.disabled = true;
+    status.style.display = 'none';
     verifiedHospitalCode = null;
     verifiedHospitalName = null;
 
-    if (!code) {
-      display.textContent = 'Enter hospital code above to auto-fill';
-      display.style.color = 'rgba(255,255,255,0.4)';
+    const url = normaliseUrl(serverUrl);
+    if (!url) {
+      sel.innerHTML = '<option value="">— Enter server URL above to load —</option>';
       return;
     }
-
-    const serverUrl = normaliseUrl(document.getElementById('serverUrl').value);
-    if (!serverUrl) {
-      display.textContent = '⚠️ Enter the server URL first';
-      display.style.color = '#ffc107';
-      return;
-    }
-    document.getElementById('serverUrl').value = serverUrl;
-
-    display.textContent = '⏳ Looking up…';
-    display.style.color = 'rgba(255,255,255,0.4)';
-    clearMessages();
+    document.getElementById('serverUrl').value = url;
 
     try {
-      const resp = await fetch(`${serverUrl}/api/public/hospitals`, { signal: AbortSignal.timeout(8000) });
-      if (!resp.ok) throw new Error('Server returned HTTP ' + resp.status);
-      const hospitals = await resp.json();
-      const match = hospitals.find(h => h.hospital_code === code);
-      if (match) {
-        verifiedHospitalCode = match.hospital_code;
-        verifiedHospitalName = match.client_name;
-        display.textContent = '✅ ' + match.client_name;
-        display.style.color = '#2ecc71';
-      } else {
-        display.textContent = '❌ Hospital code not found — check with your administrator';
-        display.style.color = '#ff6b6b';
+      const resp = await fetch(`${url}/api/public/hospitals`, { signal: AbortSignal.timeout(8000) });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      allHospitals = await resp.json();
+
+      if (!allHospitals.length) {
+        sel.innerHTML = '<option value="">⚠️ No hospitals registered on server yet</option>';
+        return;
       }
+
+      sel.innerHTML = '';
+      allHospitals.forEach(h => {
+        const opt = document.createElement('option');
+        opt.value       = h.hospital_code;
+        opt.textContent = `${h.client_name}  (${h.hospital_code})`;
+        sel.appendChild(opt);
+      });
+      sel.disabled = false;
+
+      // Pre-select by code if provided, else first entry
+      const target = preSelectCode
+        ? allHospitals.find(h => h.hospital_code === preSelectCode.toUpperCase())
+        : allHospitals[0];
+      if (target) sel.value = target.hospital_code;
+
+      // Trigger the change handler to set verified values + load departments
+      onHospitalChange();
+
     } catch (e) {
-      display.textContent = '❌ Cannot reach server — check Server IP';
-      display.style.color = '#ff6b6b';
+      sel.innerHTML = '<option value="">❌ Cannot reach server</option>';
       showErr('Cannot connect to server. Check: (1) Server app is running, (2) IP is correct, (3) use http:// not https://');
     }
   }
 
-  document.getElementById('hospitalCode').addEventListener('blur', lookupHospital);
-  document.getElementById('hospitalCode').addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); lookupHospital(); }
+  // ── Hospital dropdown change ──────────────────────────────────────────────────
+  function onHospitalChange() {
+    const sel    = document.getElementById('hospitalSelect');
+    const status = document.getElementById('hospitalStatus');
+    const code   = sel.value;
+    if (!code) {
+      verifiedHospitalCode = null;
+      verifiedHospitalName = null;
+      status.style.display = 'none';
+      resetDepartments();
+      return;
+    }
+    const match = allHospitals.find(h => h.hospital_code === code);
+    if (match) {
+      verifiedHospitalCode = match.hospital_code;
+      verifiedHospitalName = match.client_name;
+    }
+    // Show confirmed name badge
+    status.textContent   = `✅ ${verifiedHospitalName}  ·  Code: ${verifiedHospitalCode}`;
+    status.style.display = 'flex';
+    status.style.color   = '#2ecc71';
+    status.style.borderColor = 'rgba(46,204,113,0.3)';
+    // Load departments for selected hospital
+    const serverUrl = normaliseUrl(document.getElementById('serverUrl').value);
+    loadDepartments(serverUrl, code);
+  }
+
+  // ── Load departments ──────────────────────────────────────────────────────────
+  function resetDepartments() {
+    const sel = document.getElementById('departmentSelect');
+    sel.innerHTML = '<option value="">None</option>';
+    sel.disabled = true;
+  }
+
+  async function loadDepartments(serverUrl, hospitalCode) {
+    const sel = document.getElementById('departmentSelect');
+    resetDepartments();
+    if (!serverUrl || !hospitalCode) return;
+    try {
+      const resp = await fetch(`${serverUrl}/api/public/departments/${hospitalCode}`, { signal: AbortSignal.timeout(5000) });
+      if (!resp.ok) return;
+      const depts = await resp.json();
+      sel.innerHTML = '<option value="">None</option>';
+      depts.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.name; opt.textContent = d.name;
+        sel.appendChild(opt);
+      });
+      sel.disabled = (depts.length === 0);
+    } catch { /* departments are optional */ }
+  }
+
+  // ── Server URL blur/change — reload hospitals ─────────────────────────────────
+  document.getElementById('serverUrl').addEventListener('blur', () => {
+    const url = document.getElementById('serverUrl').value.trim();
+    if (url) loadHospitals(url, null);
   });
-  // Re-lookup if server URL changes after code was typed
-  document.getElementById('serverUrl').addEventListener('change', () => {
-    if (document.getElementById('hospitalCode').value.trim()) lookupHospital();
+  document.getElementById('serverUrl').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); loadHospitals(document.getElementById('serverUrl').value, null); }
   });
 
-  // ── Registration ───────────────────────────────────────────────
+  document.getElementById('hospitalSelect').addEventListener('change', onHospitalChange);
+
+  // ── Registration ──────────────────────────────────────────────────────────────
   document.getElementById('btnRegister').addEventListener('click', async () => {
     const serverUrl    = normaliseUrl(document.getElementById('serverUrl').value);
-    const hospitalCode = document.getElementById('hospitalCode').value.trim().toUpperCase();
-    const userId       = document.getElementById('userId').value.trim();
     const userName     = document.getElementById('userName').value.trim();
-    const roomNumber   = document.getElementById('roomNumber').value.trim();
-    const systemNumber = document.getElementById('systemNumber').value.trim();
+    const userId       = document.getElementById('userId').value.trim();
+    const roomNumber   = document.getElementById('roomNumber').value.trim() || '';
+    const department   = document.getElementById('departmentSelect').value || null;
+    const systemNumber = document.getElementById('systemNumber').value.trim() || '';
 
-    if (!serverUrl)    { showErr('Server URL is required. Example: http://192.168.1.5:4000'); return; }
-    if (!hospitalCode) { showErr('Hospital Code is required.'); return; }
-    if (!verifiedHospitalCode) { showErr('Hospital code not verified. Please enter a valid hospital code and wait for it to be confirmed.'); return; }
-    if (!userId)       { showErr('User ID is required (unique employee ID).'); return; }
-    if (!userName)     { showErr('Your name is required.'); return; }
-    if (!roomNumber)   { showErr('Room / Location is required.'); return; }
-    if (!systemNumber) { showErr('System / PC Number is required.'); return; }
+    if (!serverUrl)          { showErr('Server URL is required. Example: http://192.168.1.5:4000'); return; }
+    if (!verifiedHospitalCode) { showErr('Please select a hospital from the dropdown.'); return; }
+    if (!userName)           { showErr('Full Name is required.'); return; }
+    if (!userId)             { showErr('User ID is required (must be unique).'); return; }
 
     document.getElementById('serverUrl').value = serverUrl;
     setBusy(true);
@@ -466,12 +513,12 @@ select option { background: #1a1d2a; color: #fff; }
           user_name     : userName,
           role          : selectedRole,
           device_id     : deviceId,
+          department    : department,
         }),
       });
       const data = await resp.json();
       if (!resp.ok) { showErr(data.error || 'Registration failed'); return; }
 
-      // Mark steps complete
       document.getElementById('dot2').className = 'step-dot done';
       document.getElementById('lbl2').className = 'step-label done';
       document.getElementById('dot3').className = 'step-dot active';
@@ -493,19 +540,21 @@ select option { background: #1a1d2a; color: #fff; }
         system_number : systemNumber,
         user_name     : userName,
         role          : selectedRole,
+        department    : department,
         deviceId,
         token         : data.token,
       };
 
       setTimeout(() => api.setupComplete(config), 1400);
 
-    } catch (e) {
+    } catch {
       showErr('Cannot connect to server. Check the server URL and ensure the server is running.');
     } finally {
       setBusy(false);
     }
   });
 
+  // ── Helpers ───────────────────────────────────────────────────────────────────
   function showErr(msg) {
     const e = document.getElementById('errMsg');
     e.textContent = msg; e.style.display = 'block';

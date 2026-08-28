@@ -1,7 +1,0 @@
-{
-  "serverUrl": "http://SERVER_IP:4000",
-  "roomName": "ROOM_NAME",
-  "role": "viewer",
-  "username": "ROOM_USERNAME",
-  "token": ""
-}

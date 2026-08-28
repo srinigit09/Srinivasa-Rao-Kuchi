@@ -14,10 +14,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -e
 DIST="$(cd "$(dirname "$0")/dist" && pwd)"
+APP_NAME="PanicAlarmClient"
+VERSION="1.0.0"
 
 fix_dmg() {
   local APP_DIR="$1"   # dist/mac-arm64 or dist/mac
-  local DMG_FILE="$2"  # dist/PanicAlarm-1.0.0-arm64.dmg or dist/PanicAlarm-1.0.0.dmg
+  local DMG_FILE="$2"  # dist/PanicAlarmClient-1.1.0-arm64.dmg or dist/PanicAlarmClient-1.1.0.dmg
   local ARCH="$3"      # arm64 or x64
 
   echo ""
@@ -31,19 +33,19 @@ fix_dmg() {
 
   # 1. Strip quarantine from unpacked app
   echo "   → Stripping quarantine from .app ..."
-  xattr -cr "$APP_DIR/PanicAlarm.app"
+  xattr -cr "$APP_DIR/${APP_NAME}.app"
 
   # 2. Ad-hoc code sign (local use — no Apple ID needed)
   echo "   → Ad-hoc signing .app ..."
-  codesign --deep --force --sign - "$APP_DIR/PanicAlarm.app"
+  codesign --deep --force --sign - "$APP_DIR/${APP_NAME}.app"
 
   # 3. Verify the signature
-  codesign --verify --deep --strict "$APP_DIR/PanicAlarm.app"
+  codesign --verify --deep --strict "$APP_DIR/${APP_NAME}.app"
   echo "   ✅ App signature valid"
 
   # 4. Rebuild DMG from the signed app
   echo "   → Rebuilding DMG ..."
-  npx electron-builder --mac dmg --"$ARCH" --prepackaged "$APP_DIR/PanicAlarm.app" 2>&1 \
+  npx electron-builder --mac dmg --"$ARCH" --prepackaged "$APP_DIR/${APP_NAME}.app" 2>&1 \
     | grep -E "building|built|error" || true
 
   # 5. Strip quarantine from the DMG itself
@@ -65,25 +67,25 @@ fix_dmg() {
 
 case "${1:-}" in
   --intel)
-    fix_dmg "$DIST/mac"           "$DIST/PanicAlarm-1.0.0.dmg"        "x64"
+    fix_dmg "$DIST/mac"           "$DIST/${APP_NAME}-${VERSION}.dmg"        "x64"
     ;;
   --both)
-    fix_dmg "$DIST/mac-arm64"     "$DIST/PanicAlarm-1.0.0-arm64.dmg"  "arm64"
-    fix_dmg "$DIST/mac"           "$DIST/PanicAlarm-1.0.0.dmg"        "x64"
+    fix_dmg "$DIST/mac-arm64"     "$DIST/${APP_NAME}-${VERSION}-arm64.dmg"  "arm64"
+    fix_dmg "$DIST/mac"           "$DIST/${APP_NAME}-${VERSION}.dmg"        "x64"
     ;;
   *)
-    fix_dmg "$DIST/mac-arm64"     "$DIST/PanicAlarm-1.0.0-arm64.dmg"  "arm64"
+    fix_dmg "$DIST/mac-arm64"     "$DIST/${APP_NAME}-${VERSION}-arm64.dmg"  "arm64"
     ;;
 esac
 
 echo ""
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  DMG fixed and ready to share!                          ║"
-echo "║                                                          ║"
-echo "║  Share:  dist/PanicAlarm-1.0.0-arm64.dmg  (M1/M2/M3)  ║"
-echo "║  Other:  dist/PanicAlarm-1.0.0.dmg        (Intel Mac)  ║"
-echo "║                                                          ║"
-echo "║  On recipient Mac, if still blocked:                    ║"
-echo "║  System Settings → Privacy & Security → Open Anyway    ║"
-echo "╚══════════════════════════════════════════════════════════╝"
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║  DMG fixed and ready to share!                              ║"
+echo "║                                                              ║"
+echo "║  Share:  dist/${APP_NAME}-${VERSION}-arm64.dmg  (M1/M2/M3)  ║"
+echo "║  Other:  dist/${APP_NAME}-${VERSION}.dmg         (Intel Mac)  ║"
+echo "║                                                              ║"
+echo "║  On recipient Mac, if still blocked:                        ║"
+echo "║  System Settings → Privacy & Security → Open Anyway         ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""

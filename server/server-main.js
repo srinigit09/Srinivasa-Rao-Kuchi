@@ -84,7 +84,7 @@ function createLoginWindow() {
   if (loginWindow && !loginWindow.isDestroyed()) { loginWindow.focus(); return; }
 
   loginWindow = new BrowserWindow({
-    width: 400, height: 520,
+    width: 400, height: 560,
     resizable: false, center: true,
     title: 'Panic Alarm Server — Login',
     icon: path.join(__dirname, 'assets', 'server-icon.png'),
@@ -112,7 +112,7 @@ function createMainWindow() {
     title: 'Panic Alarm — Admin Panel',
     icon: path.join(__dirname, 'assets', 'server-icon.png'),
     webPreferences: {
-      // Admin panel is served from the local HTTP server — no preload needed
+      preload: path.join(__dirname, 'server-preload.js'),
       contextIsolation: true, nodeIntegration: false,
     },
   });
@@ -195,9 +195,8 @@ function rebuildTrayMenu(running) {
   tray.setContextMenu(Menu.buildFromTemplate(items));
 }
 
-// ── IPC: login from login window ──────────────────────────────────────────────
-ipcMain.handle('server-login', async (_, { username, password }) => {
-  // Call our own running server's login API
+// ── Helper: attempt one HTTP login POST ───────────────────────────────────────
+function attemptLogin(username, password) {
   return new Promise((resolve) => {
     const postData = JSON.stringify({ username, password });
     const req = http.request({
@@ -209,6 +208,7 @@ ipcMain.handle('server-login', async (_, { username, password }) => {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(postData),
       },
+      timeout: 3000,
     }, (res) => {
       let body = '';
       res.on('data', chunk => { body += chunk; });
@@ -218,17 +218,36 @@ ipcMain.handle('server-login', async (_, { username, password }) => {
           if (res.statusCode === 200 && json.token) {
             resolve({ ok: true, token: json.token });
           } else {
-            resolve({ ok: false, error: json.error || 'Login failed' });
+            resolve({ ok: false, error: json.error || 'Login failed', retry: false });
           }
         } catch {
-          resolve({ ok: false, error: 'Invalid server response' });
+          resolve({ ok: false, error: 'Invalid server response', retry: false });
         }
       });
     });
-    req.on('error', () => resolve({ ok: false, error: 'Server not ready yet — please wait a moment and try again' }));
+    req.on('error', () => resolve({ ok: false, retry: true }));   // connection refused → retry
+    req.on('timeout', () => { req.destroy(); resolve({ ok: false, retry: true }); });
     req.write(postData);
     req.end();
   });
+}
+
+// ── IPC: login from login window — retries until server is ready ──────────────
+ipcMain.handle('server-login', async (_, { username, password }) => {
+  const MAX_WAIT_MS  = 12000;   // give up after 12 s
+  const RETRY_DELAYS = [300, 600, 1000, 1500, 2000, 2000, 2000, 1600]; // total ≈ 12 s
+  let attempt = 0;
+
+  while (attempt <= RETRY_DELAYS.length) {
+    const result = await attemptLogin(username, password);
+    if (!result.retry) return result;   // got a real response (ok or bad credentials)
+
+    if (attempt >= RETRY_DELAYS.length) break;
+    await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
+    attempt++;
+  }
+
+  return { ok: false, error: 'Server did not start in time. Please quit and relaunch the app.' };
 });
 
 ipcMain.handle('login-success', (_, { token }) => {
@@ -246,9 +265,50 @@ ipcMain.handle('login-success', (_, { token }) => {
   }
 });
 
+ipcMain.handle('admin-logout', () => {
+  // Close the admin panel window and reopen the login window
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+  createLoginWindow();
+});
+
 ipcMain.handle('get-server-info', () => {
   const ips = getLocalIPs();
   return { port: serverPort, ips };
+});
+
+// ── IPC: download client installer ────────────────────────────────────────────
+ipcMain.handle('download-client-installer', async () => {
+  // Find the client installer in the sibling client/dist directory
+  // or alongside the server dist folder (for packaged builds)
+  const possibleDirs = [
+    path.join(__dirname, '..', 'client', 'dist'),
+    path.join(__dirname, 'client-dist'),
+    path.join(process.resourcesPath || '', '..', '..', 'client', 'dist'),
+  ];
+  const extensions = ['.exe', '.dmg'];
+  let installerPath = null;
+  for (const dir of possibleDirs) {
+    if (fs.existsSync(dir)) {
+      const files = fs.readdirSync(dir);
+      for (const ext of extensions) {
+        const found = files.find(f => f.endsWith(ext) && f.toLowerCase().includes('panicalarmclient'));
+        if (found) { installerPath = path.join(dir, found); break; }
+      }
+    }
+    if (installerPath) break;
+  }
+  if (installerPath && fs.existsSync(installerPath)) {
+    const { filePath } = await dialog.showSaveDialog({
+      defaultPath: path.basename(installerPath),
+      title: 'Save Client Installer',
+    });
+    if (filePath) {
+      fs.copyFileSync(installerPath, filePath);
+      shell.showItemInFolder(filePath);
+      return { ok: true, path: filePath };
+    }
+  }
+  return { ok: false, error: 'Client installer not found. Build the client first.' };
 });
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
@@ -256,8 +316,8 @@ app.whenReady().then(() => {
   // Start embedded server immediately (before showing any window)
   startEmbeddedServer();
   createTray();
-  // Small delay to let server initialize, then show login
-  setTimeout(createLoginWindow, 800);
+  // Show login window promptly — the login IPC handler now retries automatically
+  setTimeout(createLoginWindow, 400);
 });
 
 app.on('window-all-closed', () => {

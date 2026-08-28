@@ -3,118 +3,173 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src *;">
-<title>ALERT</title>
+<title>PANIC ALARM</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { width: 130px; height: 130px; background: transparent; overflow: hidden; user-select: none; }
+html, body {
+  width: 90px; height: 90px;
+  background: transparent;
+  overflow: hidden; user-select: none;
+}
 .wrap {
-  width: 130px; height: 130px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 4px;
-  /* No -webkit-app-region here — we use JS dragging instead */
+  width: 90px; height: 90px;
+  display: flex; align-items: center; justify-content: center;
 }
 .btn-alert {
-  width: 110px; height: 110px;
+  width: 78px; height: 78px;
   border-radius: 50%;
-  background: radial-gradient(circle at 38% 32%, #ff6b6b, #c0392b);
-  border: 5px solid #fff;
-  box-shadow: 0 0 0 4px rgba(231,76,60,0.7), 0 6px 24px rgba(0,0,0,0.6);
+  background: var(--btn-bg, radial-gradient(circle at 38% 30%, #ff6b6b, #c0392b));
+  border: 3px solid rgba(255,255,255,0.9);
+  box-shadow: 0 0 0 3px var(--glow, rgba(231,76,60,0.5)), 0 4px 14px rgba(0,0,0,0.55);
   cursor: grab;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  transition: transform 0.1s;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 2px;
+  transition: transform .08s, box-shadow .1s;
 }
-.btn-alert:active { cursor: grabbing; }
-.btn-alert.firing { animation: pulse 0.5s ease-in-out 3; cursor: grab; }
-@keyframes pulse {
-  0%   { box-shadow: 0 0 0 4px rgba(231,76,60,0.7); }
-  50%  { box-shadow: 0 0 0 20px rgba(231,76,60,0.25), 0 6px 40px rgba(231,76,60,0.5); }
-  100% { box-shadow: 0 0 0 4px rgba(231,76,60,0.7); }
+.btn-alert:hover {
+  transform: scale(1.04);
+  box-shadow: 0 0 0 5px var(--glow, rgba(231,76,60,0.65)), 0 6px 20px rgba(0,0,0,0.6);
 }
-.alert-text { font-family: -apple-system,"Segoe UI",sans-serif; font-size: 18px; font-weight: 900; color: #fff; letter-spacing: 1px; text-transform: uppercase; text-shadow: 0 1px 3px rgba(0,0,0,0.5); pointer-events: none; }
-.alert-icon { font-size: 24px; pointer-events: none; }
-.status { font-family: -apple-system,"Segoe UI",sans-serif; font-size: 9px; color: rgba(255,255,255,0.5); text-align: center; max-width: 120px; pointer-events: none; }
+.btn-alert:active { cursor: grabbing; transform: scale(0.95); }
+
+/* Armed state — yellow highlight, no animation */
+.btn-alert.armed {
+  border-color: #ffe066;
+  box-shadow: 0 0 0 6px rgba(255,224,0,0.6), 0 6px 24px rgba(0,0,0,0.65);
+  transform: scale(1.04);
+}
+
+.btn-label {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 10px; font-weight: 900;
+  color: #fff; letter-spacing: 1.5px;
+  text-transform: uppercase;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+  pointer-events: none; line-height: 1;
+}
+.btn-sublabel {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 8px; font-weight: 700;
+  color: rgba(255,255,255,0.82);
+  letter-spacing: 1px; text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  pointer-events: none;
+}
 </style>
 </head>
 <body>
-<div class="wrap" id="wrap">
-  <button class="btn-alert" id="btnAlert" title="Drag to move · Click to send ALERT">
-    <div class="alert-icon">🆘</div>
-    <div class="alert-text">ALERT</div>
+<div class="wrap">
+  <button class="btn-alert" id="btnAlert"
+    title="Click to arm · Click again to send PANIC ALARM · Drag to move">
+    <div class="btn-label"    id="btnLabel">PANIC</div>
+    <div class="btn-sublabel" id="btnSub">ALARM</div>
   </button>
-  <div class="status" id="status">Ready · Drag to move</div>
 </div>
 
 <script>
   const api = window.electronAPI;
-  let config = null, isFiring = false;
+  let config   = null;
+  let isFiring = false;
+  let armed    = false;
+  let armTimer = null;
 
-  function applyConfig(cfg) { config = cfg; }
+  // ── Colour presets ────────────────────────────────────────────────
+  const COLOURS = [
+    { start: '#ff6b6b', end: '#c0392b', glow: 'rgba(231,76,60,0.55)'  },
+    { start: '#ff9f43', end: '#e17055', glow: 'rgba(255,159,67,0.6)'  },
+    { start: '#ffd32a', end: '#c8a800', glow: 'rgba(255,211,42,0.6)'  },
+    { start: '#55efc4', end: '#00b894', glow: 'rgba(0,184,148,0.6)'   },
+    { start: '#74b9ff', end: '#0984e3', glow: 'rgba(9,132,227,0.6)'   },
+    { start: '#a29bfe', end: '#6c5ce7', glow: 'rgba(108,92,231,0.6)'  },
+    { start: '#636e72', end: '#2d3436', glow: 'rgba(99,110,114,0.6)'  },
+  ];
+
+  function applyColour(idx) {
+    const c = COLOURS[idx] || COLOURS[0];
+    document.documentElement.style.setProperty('--btn-bg',
+      `radial-gradient(circle at 38% 30%, ${c.start}, ${c.end})`);
+    document.documentElement.style.setProperty('--glow', c.glow);
+  }
+
+  function applyConfig(cfg) {
+    config = cfg;
+    applyColour(cfg?.alertButtonColour ?? 0);
+  }
   api.getConfig().then(applyConfig);
   api.onClientConfig(applyConfig);
 
-  // ── Drag to move the window ──────────────────────────────────────
-  let dragging = false;
-  let dragStartX = 0, dragStartY = 0;
-  let moved = false;   // distinguish drag from click
+  // ── Right-click → colour picker ───────────────────────────────────
+  document.addEventListener('contextmenu', e => { e.preventDefault(); api.showColourMenu(); });
+  api.onColourChange(idx => { applyColour(idx); api.setAlertButtonColour(idx); });
 
-  document.getElementById('btnAlert').addEventListener('mousedown', (e) => {
-    if (isFiring) return;
-    dragging = true;
-    moved = false;
-    dragStartX = e.screenX;
-    dragStartY = e.screenY;
+  // ── Drag to move ──────────────────────────────────────────────────
+  let dragging = false, dragX = 0, dragY = 0, moved = false;
+
+  document.getElementById('btnAlert').addEventListener('mousedown', e => {
+    if (e.button !== 0 || isFiring) return;
+    dragging = true; moved = false;
+    dragX = e.screenX; dragY = e.screenY;
     e.preventDefault();
   });
-
-  document.addEventListener('mousemove', (e) => {
+  document.addEventListener('mousemove', e => {
     if (!dragging) return;
-    const dx = e.screenX - dragStartX;
-    const dy = e.screenY - dragStartY;
+    const dx = e.screenX - dragX, dy = e.screenY - dragY;
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
-    if (moved) {
-      api.moveAlarmWindow({ dx, dy });
-      dragStartX = e.screenX;
-      dragStartY = e.screenY;
-    }
+    if (moved) { api.moveAlarmWindow({ dx, dy }); dragX = e.screenX; dragY = e.screenY; }
   });
-
-  document.addEventListener('mouseup', async (e) => {
+  document.addEventListener('mouseup', e => {
+    if (e.button !== 0) return;
     const wasDrag = moved;
-    dragging = false;
-    moved = false;
-
-    // Only fire alarm if it was a click (not a drag)
-    if (!wasDrag) {
-      await fireAlarm();
-    }
+    dragging = false; moved = false;
+    if (!wasDrag) handleClick();
   });
 
-  // ── Fire alarm ───────────────────────────────────────────────────
+  // ── Click: arm → confirm → fire ──────────────────────────────────
+  function handleClick() {
+    if (isFiring) return;
+    if (!armed) { arm(); } else { disarm(); fireAlarm(); }
+  }
+
+  function arm() {
+    armed = true;
+    document.getElementById('btnAlert').classList.add('armed');
+    document.getElementById('btnLabel').textContent = 'TAP';
+    document.getElementById('btnSub').textContent   = 'AGAIN!';
+    armTimer = setTimeout(() => {
+      disarm();
+    }, 3000);
+  }
+
+  function disarm() {
+    armed = false;
+    clearTimeout(armTimer); armTimer = null;
+    document.getElementById('btnAlert').classList.remove('armed');
+    document.getElementById('btnLabel').textContent = 'PANIC';
+    document.getElementById('btnSub').textContent   = 'ALARM';
+  }
+
+  // ── Fire alarm ────────────────────────────────────────────────────
   async function fireAlarm() {
     if (isFiring || !config?.token) return;
     isFiring = true;
-    const btn    = document.getElementById('btnAlert');
-    const status = document.getElementById('status');
-    btn.classList.add('firing');
-    status.textContent = 'Sending…';
+    const btn = document.getElementById('btnAlert');
+    document.getElementById('btnLabel').textContent = 'SENT';
+    document.getElementById('btnSub').textContent   = '...';
 
     try {
-      const resp = await fetch(`${config.serverUrl}/api/client/alarm/trigger`, {
+      await fetch(`${config.serverUrl}/api/client/alarm/trigger`, {
         method : 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.token}` },
         body   : '{}',
       });
-      const data = await resp.json();
-      status.textContent = resp.ok ? '✅ Sent!' : '❌ ' + (data.error || 'Error');
-    } catch {
-      status.textContent = '❌ No server';
-    }
+    } catch { /* best effort */ }
 
     setTimeout(() => {
-      btn.classList.remove('firing');
-      status.textContent = 'Ready · Drag to move';
+      document.getElementById('btnLabel').textContent = 'PANIC';
+      document.getElementById('btnSub').textContent   = 'ALARM';
       isFiring = false;
-    }, 3000);
+    }, 2000);
   }
 </script>
 </body>

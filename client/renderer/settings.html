@@ -3,237 +3,414 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src *;">
-<title>My Details</title>
+<title>Edit My Profile</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: -apple-system,"Segoe UI",sans-serif;
-  background: #0f1117; color: #e0e0e0;
-  display: flex; align-items: flex-start; justify-content: center;
-  min-height: 100vh; padding: 20px;
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+  background: #f0f4f8; color: #1e293b;
+  height: 100vh; display: flex; align-items: center; justify-content: center;
+  padding: 12px 16px;
 }
-.card {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 14px; padding: 28px 28px; width: 440px;
-  margin-top: 10px;
-}
-h2 { font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 4px; }
-p.sub { font-size: 12px; color: rgba(255,255,255,0.4); margin-bottom: 20px; }
 
-/* Section titles */
-.section-title {
-  font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.3);
-  text-transform: uppercase; letter-spacing: .7px;
-  margin-bottom: 10px; margin-top: 14px;
-  display: flex; align-items: center; gap: 8px;
+/* ── Card ── */
+.card {
+  width: 460px; background: #fff;
+  border-radius: 14px; overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.10);
 }
-.section-title::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.07); }
+
+/* ── Body ── */
+.card-body { padding: 14px 20px 16px; }
+
+/* ── Hospital pill ── */
+.hospital-pill {
+  display: flex; align-items: center; gap: 8px;
+  background: #f0fdf4; border: 1px solid #bbf7d0;
+  border-radius: 8px; padding: 7px 12px; margin-bottom: 12px;
+}
+.hospital-pill .hp-icon { font-size: 17px; }
+.hospital-pill .hp-text { flex: 1; }
+.hospital-pill .hp-name { font-size: 12px; font-weight: 700; color: #166534; }
+.hospital-pill .hp-code { font-size: 10px; color: #4ade80; margin-top: 1px; }
+
+/* ── Section title ── */
+.section-title {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .8px; color: #94a3b8;
+  margin: 12px 0 8px; display: flex; align-items: center; gap: 8px;
+}
+.section-title::after { content: ''; flex: 1; height: 1px; background: #e2e8f0; }
 .section-title:first-of-type { margin-top: 0; }
 
-label {
-  display: block; font-size: 11px; color: rgba(255,255,255,0.4);
-  margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px;
-}
-input, select {
-  width: 100%; padding: 10px 12px;
-  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 6px; color: #fff; font-size: 13px; margin-bottom: 12px;
-  appearance: none; -webkit-appearance: none;
-}
-input:focus, select:focus { outline: none; border-color: #3498db; }
-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
-select option { background: #1a1d2a; color: #fff; }
-
-/* Read-only hospital pill */
-.readonly-field {
-  font-size: 12px; color: rgba(255,255,255,0.5);
-  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 5px; padding: 8px 12px; margin-bottom: 12px;
-}
-
-/* Role picker cards (compact 3-column) */
-.role-grid { display: flex; gap: 8px; margin-bottom: 12px; }
+/* ── Role cards ── */
+.role-grid { display: flex; gap: 6px; margin-bottom: 12px; }
 .role-card {
-  flex: 1; border-radius: 10px;
-  border: 2px solid rgba(255,255,255,0.1);
-  background: rgba(255,255,255,0.04);
-  padding: 12px 8px; text-align: center;
-  cursor: pointer; transition: all .2s; user-select: none;
+  flex: 1; border-radius: 8px; cursor: pointer;
+  border: 2px solid #e2e8f0; background: #f8fafc;
+  padding: 8px 6px; text-align: center; transition: all .15s; user-select: none;
 }
-.role-card:hover {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(255,255,255,0.2);
-}
-.role-card.selected.doctor {
-  background: rgba(231,76,60,0.15); border-color: #e74c3c;
-}
-.role-card.selected.staff {
-  background: rgba(52,152,219,0.15); border-color: #3498db;
-}
-.role-card.selected.other {
-  background: rgba(155,89,182,0.15); border-color: #9b59b6;
-}
-.role-card .rc-icon { font-size: 22px; margin-bottom: 5px; display: block; }
-.role-card .rc-label { font-size: 11px; font-weight: 700; color: #fff; margin-bottom: 2px; }
-.role-card.selected.doctor .rc-label { color: #ff6b6b; }
-.role-card.selected.staff  .rc-label { color: #5dade2; }
-.role-card.selected.other  .rc-label { color: #bf7aed; }
-.role-card .rc-check { display: none; font-size: 11px; margin-top: 3px; }
+.role-card:hover { background: #f1f5f9; border-color: #cbd5e1; }
+.role-card.selected.doctor { background: #fff1f2; border-color: #e74c3c; }
+.role-card.selected.staff  { background: #eff6ff; border-color: #3498db; }
+.role-card.selected.other  { background: #faf5ff; border-color: #9b59b6; }
+.role-card .rc-icon  { font-size: 18px; margin-bottom: 3px; display: block; }
+.role-card .rc-label { font-size: 10px; font-weight: 700; color: #64748b; }
+.role-card.selected.doctor .rc-label { color: #e74c3c; }
+.role-card.selected.staff  .rc-label { color: #3498db; }
+.role-card.selected.other  .rc-label { color: #9b59b6; }
+.role-card .rc-check { display: none; font-size: 10px; margin-top: 2px; color: #22c55e; }
 .role-card.selected .rc-check { display: block; }
+.role-card.required { animation: shake .3s ease; border-color: #e74c3c !important; }
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  25%      { transform: translateX(-4px); }
+  75%      { transform: translateX(4px); }
+}
 
+/* ── Form grid ── */
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.fg { margin-bottom: 10px; }
+
+label {
+  display: block; font-size: 10px; font-weight: 600; color: #64748b;
+  text-transform: uppercase; letter-spacing: .4px; margin-bottom: 4px;
+}
+.required-star { color: #e74c3c; margin-left: 2px; }
+
+input, select {
+  width: 100%; padding: 7px 10px;
+  background: #f8fafc; border: 1.5px solid #e2e8f0;
+  border-radius: 7px; color: #1e293b; font-size: 12px;
+  transition: border .15s; outline: none;
+}
+input:focus, select:focus { border-color: #1565c0; box-shadow: 0 0 0 3px rgba(21,101,192,.1); }
+input:read-only { background: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+  padding-right: 28px; cursor: pointer;
+}
+
+/* ── Buttons ── */
 .btn-save {
-  width: 100%; padding: 12px;
-  color: #fff; border: none; border-radius: 7px;
-  font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 4px;
-  background: #3498db;
+  padding: 10px; margin-top: 0;
+  background: linear-gradient(135deg, #1565c0, #0d47a1);
+  color: #fff; border: none; border-radius: 8px;
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  letter-spacing: .3px; transition: opacity .2s;
 }
-.btn-save:hover { background: #2980b9; }
+.btn-save:hover { opacity: .9; }
+.btn-save:disabled { opacity: .5; cursor: not-allowed; }
+.btn-reset {
+  padding: 10px 14px; margin-top: 0;
+  background: #f1f5f9; color: #475569;
+  border: 1.5px solid #e2e8f0; border-radius: 8px;
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: all .15s; white-space: nowrap;
+}
+.btn-reset:hover { background: #e2e8f0; color: #1e293b; }
+.btn-reset:disabled { opacity: .5; cursor: not-allowed; }
 
+/* ── Flash messages ── */
 .flash {
-  padding: 9px 12px; border-radius: 5px; font-size: 12px;
-  margin-top: 12px; display: none;
+  padding: 8px 12px; border-radius: 7px; font-size: 11px; font-weight: 500;
+  margin-top: 8px; display: none;
 }
-.flash.ok  { background: rgba(39,174,96,0.2); color: #2ecc71; border: 1px solid rgba(39,174,96,0.3); }
-.flash.err { background: rgba(231,76,60,0.2); color: #ff6b6b; border: 1px solid rgba(231,76,60,0.3); }
+.flash.ok  { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+.flash.err { background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; }
 </style>
 </head>
 <body>
 <div class="card">
-  <h2>My Details</h2>
-  <p class="sub">Update your information — changes sync to the server</p>
+  <div class="card-body">
 
-  <div class="section-title">Server Connection</div>
-  <label>Server URL</label>
-  <input type="text" id="serverUrl" placeholder="http://192.168.1.5:4000" autocomplete="off" spellcheck="false">
-  <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:-8px;margin-bottom:12px">Use http:// not https:// · e.g. http://192.168.1.5:4000</div>
+    <!-- Page heading -->
+    <div style="text-align:center; padding: 10px 0 12px; border-bottom: 1px solid #e2e8f0; margin-bottom: 12px;">
+      <div style="font-size:13px; font-weight:800; letter-spacing:1.5px; color:#1e293b; text-transform:uppercase;">Panic Alarm Client</div>
+      <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Edit My Profile</div>
+    </div>
 
-  <div class="section-title">Hospital</div>
-  <label>Current Hospital</label>
-  <div class="readonly-field" id="hospitalDisplay">—</div>
+    <!-- Hospital pill -->
+    <div class="hospital-pill">
+      <div class="hp-text">
+        <div class="hp-name" id="hospitalName">—</div>
+        <div class="hp-code" id="hospitalCode">—</div>
+      </div>
+    </div>
 
-  <div class="section-title">Role</div>
-  <div class="role-grid">
-    <div class="role-card doctor" id="rcDoctor" onclick="selectRole('doctor')">
-      <span class="rc-icon">👨‍⚕️</span>
-      <div class="rc-label">Doctor</div>
-      <div class="rc-check">✅</div>
+    <!-- Role -->
+    <div class="section-title">Role</div>
+    <div class="role-grid">
+      <div class="role-card doctor" id="rcDoctor" onclick="selectRole('doctor')">
+        <span class="rc-icon">👨‍⚕️</span>
+        <div class="rc-label">Doctor</div>
+        <div class="rc-check">✔</div>
+      </div>
+      <div class="role-card staff" id="rcStaff" onclick="selectRole('staff')">
+        <span class="rc-icon">🩺</span>
+        <div class="rc-label">Staff / Nurse</div>
+        <div class="rc-check">✔</div>
+      </div>
+      <div class="role-card other" id="rcOther" onclick="selectRole('other')">
+        <span class="rc-icon">👤</span>
+        <div class="rc-label">Other</div>
+        <div class="rc-check">✔</div>
+      </div>
     </div>
-    <div class="role-card staff" id="rcStaff" onclick="selectRole('staff')">
-      <span class="rc-icon">🩺</span>
-      <div class="rc-label">Staff/Nurse</div>
-      <div class="rc-check">✅</div>
+
+    <!-- User details -->
+    <div class="section-title">Your Details</div>
+    <div class="form-row">
+      <div class="fg">
+        <label>User ID <span class="required-star">*</span></label>
+        <input type="text" id="userId" placeholder="e.g. EMP-001">
+      </div>
+      <div class="fg">
+        <label>Full Name <span class="required-star">*</span></label>
+        <input type="text" id="userName" placeholder="e.g. Dr. John Smith">
+      </div>
     </div>
-    <div class="role-card other" id="rcOther" onclick="selectRole('other')">
-      <span class="rc-icon">👤</span>
-      <div class="rc-label">Other</div>
-      <div class="rc-check">✅</div>
+    <div class="form-row">
+      <div class="fg">
+        <label>Room Number</label>
+        <input type="text" id="roomNumber" placeholder="e.g. ICU-3">
+      </div>
+      <div class="fg">
+        <label>System / PC No.</label>
+        <input type="text" id="systemNumber" placeholder="e.g. PC-07">
+      </div>
     </div>
+    <div class="fg">
+      <label>Department / Block</label>
+      <select id="departmentSelect">
+        <option value="">None</option>
+      </select>
+    </div>
+
+    <!-- Server connection -->
+    <div class="section-title">Server Connection</div>
+    <div class="fg">
+      <label>Server URL</label>
+      <input type="text" id="serverUrl" placeholder="http://192.168.1.5:4000" autocomplete="off" spellcheck="false">
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn-save" id="btnSave" style="flex:1">SAVE CHANGES</button>
+      <button class="btn-reset" id="btnReset" title="Reset form to last saved server data">↺ Reset</button>
+    </div>
+    <div class="flash" id="flash"></div>
+
   </div>
-
-  <div class="section-title">Your Information</div>
-  <label>User ID (Unique Employee ID)</label>
-  <input type="text" id="userId" placeholder="Your unique employee/staff ID">
-
-  <label>Your Name</label>
-  <input type="text" id="userName" placeholder="Your full name">
-
-  <label>Room / Location</label>
-  <input type="text" id="roomNumber" placeholder="e.g. ICU-3, Ward-B, Nursing Station">
-
-  <label>System / PC Number</label>
-  <input type="text" id="systemNumber" placeholder="e.g. PC-07">
-
-  <button class="btn-save" id="btnSave">SAVE CHANGES</button>
-  <div class="flash" id="flash"></div>
 </div>
 
 <script>
   const api = window.electronAPI;
-  let config = null;
-  let selectedRole = 'staff';
+  let config = null;       // saved local config (serverUrl + token only)
+  let selectedRole = null; // null = nothing selected
 
+  // ── Role selection ────────────────────────────────────────────────────────────
   function selectRole(role) {
     selectedRole = role;
-    document.getElementById('rcDoctor').classList.toggle('selected', role === 'doctor');
-    document.getElementById('rcStaff').classList.toggle('selected',  role === 'staff');
-    document.getElementById('rcOther').classList.toggle('selected',  role === 'other');
+    ['doctor','staff','other'].forEach(r => {
+      document.getElementById('rc' + r.charAt(0).toUpperCase() + r.slice(1))
+        .classList.toggle('selected', r === role);
+    });
   }
 
-  // Normalize legacy 'viewer' role to 'staff'
-  function normalizeRole(r) {
-    if (!r) return 'staff';
-    const s = r.toLowerCase().trim();
-    if (s === 'doctor') return 'doctor';
-    if (s === 'other')  return 'other';
-    return 'staff';
+  function clearRole() {
+    selectedRole = null;
+    ['rcDoctor','rcStaff','rcOther'].forEach(id =>
+      document.getElementById(id).classList.remove('selected')
+    );
   }
 
-  function applyConfig(cfg) {
+  function setLoading(on) {
+    document.getElementById('btnSave').disabled  = on;
+    document.getElementById('btnReset').disabled = on;
+  }
+
+  async function loadDepartments(serverUrl, hospitalCode, current) {
+    const sel = document.getElementById('departmentSelect');
+    sel.innerHTML = '<option value="">None</option>';
+    if (!serverUrl || !hospitalCode) return;
+    try {
+      const resp = await fetch(`${serverUrl}/api/public/departments/${hospitalCode}`,
+        { signal: AbortSignal.timeout(5000) });
+      if (!resp.ok) return;
+      const depts = await resp.json();
+      depts.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.name; opt.textContent = d.name;
+        sel.appendChild(opt);
+      });
+      if (current) sel.value = current;
+    } catch { /* optional */ }
+  }
+
+  // ── Clear all user-input fields (role, user details) — leave hospital + serverUrl + department ──
+  function clearUserFields() {
+    clearRole();
+    document.getElementById('userId').value       = '';
+    document.getElementById('userName').value     = '';
+    document.getElementById('roomNumber').value   = '';
+    document.getElementById('systemNumber').value = '';
+    document.getElementById('flash').style.display = 'none';
+  }
+
+  // ── Populate only the server-sourced read-only fields ────────────────────────
+  function populateServerFields(hospitalName, hospitalCode, serverUrl) {
+    document.getElementById('hospitalName').textContent = hospitalName || hospitalCode || '—';
+    document.getElementById('hospitalCode').textContent = hospitalCode
+      ? `Code: ${hospitalCode}` : '—';
+    document.getElementById('serverUrl').value = serverUrl || '';
+  }
+
+  // ── Fetch hospital info from server (no user fields touched) ─────────────────
+  async function loadFromServer() {
+    if (!config?.serverUrl || !config?.token) return;
+    setLoading(true);
+
+    // Show serverUrl immediately from config
+    populateServerFields(config.clientName, config.hospitalCode, config.serverUrl);
+
+    try {
+      const meResp = await fetch(`${config.serverUrl}/api/client/me`, {
+        headers: { 'Authorization': `Bearer ${config.token}` },
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (meResp.status === 401 || meResp.status === 403) {
+        flash('⚠️ Session expired — please re-run the Setup Wizard to reconnect', false);
+        // Still load departments from saved config even if token expired
+        loadDepartments(config.serverUrl, config.hospitalCode, config.department || '');
+        setLoading(false);
+        return;
+      }
+
+      // For any non-OK response, still load departments from saved config
+      if (!meResp.ok) {
+        loadDepartments(config.serverUrl, config.hospitalCode, config.department || '');
+        setLoading(false);
+        return;
+      }
+
+      const me = await meResp.json();
+
+      // Fetch live hospital name
+      let hospitalName = config.clientName || me.hospital_code || '';
+      try {
+        const hResp = await fetch(`${config.serverUrl}/api/public/hospitals`,
+          { signal: AbortSignal.timeout(5000) });
+        if (hResp.ok) {
+          const hospitals = await hResp.json();
+          const match = hospitals.find(h => h.hospital_code === me.hospital_code);
+          if (match) hospitalName = match.client_name;
+        }
+      } catch { /* use cached name */ }
+
+      // Update only hospital pill + serverUrl — NOT user fields
+      populateServerFields(hospitalName, me.hospital_code, config.serverUrl);
+
+      // Load departments dropdown, pre-select from saved config
+      loadDepartments(config.serverUrl, me.hospital_code, config.department || '');
+
+    } catch (err) {
+      const msg = err?.name === 'TimeoutError'
+        ? '⚠️ Server not responding — check server is running'
+        : `⚠️ Cannot reach server — ${err?.message || err}`;
+      flash(msg, false);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Init — load server info, leave user fields blank ─────────────────────────
+  let serverLoaded = false;
+
+  function initWithConfig(cfg) {
+    if (!cfg?.serverUrl || !cfg?.token) return;
+    if (serverLoaded) return;
+    serverLoaded = true;
     config = cfg;
-    // Show hospital name + code
-    const display = cfg.clientName
-      ? `${cfg.clientName} (${cfg.hospitalCode || ''})`
-      : (cfg.hospitalCode || '—');
-    document.getElementById('serverUrl').value    = cfg.serverUrl     || '';
-    document.getElementById('hospitalDisplay').textContent = display;
-    document.getElementById('userId').value       = cfg.user_id      || '';
-    document.getElementById('userName').value     = cfg.user_name    || '';
-    document.getElementById('roomNumber').value   = cfg.room_number  || '';
-    document.getElementById('systemNumber').value = cfg.system_number || '';
-    selectRole(normalizeRole(cfg.role));
+    clearUserFields();       // always start with blank user fields
+    loadFromServer();        // only fills hospital pill + serverUrl
   }
 
-  api.getConfig().then(cfg => { if (cfg) applyConfig(cfg); });
-  api.onClientConfig(applyConfig);
+  api.getConfig().then(initWithConfig);
+  api.onClientConfig(initWithConfig);
 
+  // ── Reset — clears user-input fields and reloads department dropdown ─────────
+  document.getElementById('btnReset').addEventListener('click', () => {
+    clearUserFields();
+    // Reload department dropdown so it isn't empty after a reset
+    if (config?.serverUrl && config?.hospitalCode) {
+      loadDepartments(config.serverUrl, config.hospitalCode, '');
+    }
+    flash('↺ Form cleared', true);
+  });
+
+  // ── Save ──────────────────────────────────────────────────────────────────────
   document.getElementById('btnSave').addEventListener('click', async () => {
     if (!config) return;
-    const serverUrl     = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
+
+    let serverUrl = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
+    if (!serverUrl) { flash('Server URL is required', false); return; }
+    if (serverUrl.startsWith('https://')) serverUrl = 'http://' + serverUrl.slice(8);
+    if (!serverUrl.startsWith('http://'))  serverUrl = 'http://' + serverUrl;
+
     const user_id       = document.getElementById('userId').value.trim();
     const user_name     = document.getElementById('userName').value.trim();
     const room_number   = document.getElementById('roomNumber').value.trim();
     const system_number = document.getElementById('systemNumber').value.trim();
+    const department    = document.getElementById('departmentSelect').value || null;
 
-    if (!serverUrl)     { flash('Server URL is required', false); return; }
-    if (!user_id)       { flash('User ID is required', false); return; }
-    if (!user_name)     { flash('Your name is required', false); return; }
-    if (!room_number)   { flash('Room / Location is required', false); return; }
-    if (!system_number) { flash('System / PC Number is required', false); return; }
+    if (!user_id)      { flash('User ID is required', false); return; }
+    if (!user_name)    { flash('Full Name is required', false); return; }
+    if (!selectedRole) {
+      flash('Please select a role', false);
+      // Shake the role cards to draw attention
+      ['rcDoctor','rcStaff','rcOther'].forEach(id => {
+        const el = document.getElementById(id);
+        el.classList.add('required');
+        setTimeout(() => el.classList.remove('required'), 400);
+      });
+      return;
+    }
 
-    // Auto-fix https → http
-    const url = serverUrl.startsWith('https://') ? 'http://' + serverUrl.slice(8) :
-                serverUrl.startsWith('http://')  ? serverUrl : 'http://' + serverUrl;
-
+    setLoading(true);
     try {
-      const resp = await fetch(`${url}/api/client/me`, {
-        method  : 'PUT',
-        headers : { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.token}` },
-        body    : JSON.stringify({ user_id, user_name, room_number, system_number, role: selectedRole }),
+      const resp = await fetch(`${serverUrl}/api/client/me`, {
+        method : 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.token}` },
+        body   : JSON.stringify({ user_id, user_name, room_number, system_number, role: selectedRole, department }),
       });
       const data = await resp.json();
       if (!resp.ok) { flash(data.error || 'Update failed', false); return; }
 
       const newConfig = {
         ...config,
-        serverUrl: url,
-        user_id, user_name, room_number, system_number,
-        role: selectedRole,
+        serverUrl, user_id, user_name, room_number, system_number,
+        role: selectedRole, department,
         token: data.token || config.token,
       };
+      config = newConfig;
       await api.settingsUpdated(newConfig);
-      flash('Details updated successfully!', true);
+      flash('✅ Profile updated successfully!', true);
     } catch {
-      flash('Cannot connect to server. Check the Server URL is correct.', false);
+      flash('Cannot connect to server. Check the Server URL.', false);
+    } finally {
+      setLoading(false);
     }
   });
 
+  // ── Flash ─────────────────────────────────────────────────────────────────────
   function flash(msg, ok) {
     const el = document.getElementById('flash');
     el.textContent = msg;
     el.className = 'flash ' + (ok ? 'ok' : 'err');
-    el.style.display = 'block';
-    setTimeout(() => el.style.display = 'none', 4000);
+    el.style.display = msg ? 'block' : 'none';
+    if (ok) setTimeout(() => el.style.display = 'none', 3000);
   }
 </script>
 </body>

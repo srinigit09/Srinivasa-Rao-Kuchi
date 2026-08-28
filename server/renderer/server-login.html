@@ -7,60 +7,77 @@
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
-  width: 400px; height: 520px; overflow: hidden;
+  width: 400px; height: 560px; overflow: hidden;
   font-family: -apple-system, "Segoe UI", sans-serif;
-  background: #0f1117; color: #e0e0e0;
+  background: #ffffff; color: #1f2328;
   display: flex; align-items: center; justify-content: center;
 }
 
 .card {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 14px; padding: 40px 36px; width: 340px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px; padding: 36px 32px; width: 360px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
 }
-.logo { text-align: center; margin-bottom: 28px; }
-.logo .icon { font-size: 48px; }
-.logo h1 { font-size: 17px; color: #fff; margin-top: 10px; font-weight: 700; letter-spacing: 0.5px; }
-.logo p  { font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 5px; }
+.logo { text-align: center; margin-bottom: 24px; }
+.logo .icon { font-size: 44px; }
+.logo h1 { font-size: 16px; color: #1f2328; margin-top: 8px; font-weight: 700; letter-spacing: 0.5px; }
+.logo p  { font-size: 12px; color: #57606a; margin-top: 4px; }
 
 .server-badge {
-  background: rgba(39,174,96,0.12); border: 1px solid rgba(39,174,96,0.3);
-  border-radius: 6px; padding: 8px 12px; font-size: 11px; color: #2ecc71;
-  text-align: center; margin-bottom: 22px;
+  background: #f0fdf4; border: 1px solid #bbf7d0;
+  border-radius: 6px; padding: 8px 12px; font-size: 11px; color: #16a34a;
+  text-align: center; margin-bottom: 20px; font-weight: 600;
 }
 
 label {
-  display: block; font-size: 11px; color: rgba(255,255,255,0.45);
-  margin-bottom: 5px; text-transform: uppercase; letter-spacing: .5px;
+  display: block; font-size: 12px; color: #57606a;
+  margin-bottom: 5px; font-weight: 600;
 }
 input {
-  width: 100%; padding: 11px 13px;
-  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 7px; color: #fff; font-size: 14px; margin-bottom: 14px;
+  width: 100%; padding: 10px 12px;
+  background: #f7f8fa; border: 1px solid #e5e7eb;
+  border-radius: 7px; color: #1f2328; font-size: 14px; margin-bottom: 14px;
 }
-input:focus { outline: none; border-color: #e74c3c; }
+input:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgba(59,130,212,0.15); }
 
 .btn-login {
-  width: 100%; padding: 13px; background: #e74c3c; color: #fff;
-  border: none; border-radius: 8px; font-size: 15px; font-weight: 700;
+  width: 100%; padding: 12px; background: #3b82d4; color: #fff;
+  border: none; border-radius: 8px; font-size: 14px; font-weight: 700;
   cursor: pointer; transition: background .2s;
 }
-.btn-login:hover { background: #c0392b; }
-.btn-login:disabled { background: #555; cursor: not-allowed; }
+.btn-login:hover { background: #2563b0; }
+.btn-login:disabled { background: #93c5fd; cursor: not-allowed; }
+
+.btn-link {
+  width: 100%; padding: 8px; background: none; color: #3b82d4;
+  border: none; font-size: 12px; cursor: pointer; margin-top: 8px; text-decoration: underline;
+}
+.btn-link:hover { color: #2563b0; }
 
 .err-msg {
-  background: rgba(231,76,60,0.15); border: 1px solid rgba(231,76,60,0.4);
-  border-radius: 5px; padding: 9px 12px; font-size: 12px; color: #ff6b6b;
-  margin-top: 12px; display: none; text-align: center;
+  background: #fef2f2; border: 1px solid #fecaca;
+  border-radius: 5px; padding: 9px 12px; font-size: 12px; color: #dc2626;
+  margin-top: 10px; display: none; text-align: center;
+}
+.ok-msg {
+  background: #f0fdf4; border: 1px solid #bbf7d0;
+  border-radius: 5px; padding: 9px 12px; font-size: 12px; color: #16a34a;
+  margin-top: 10px; display: none; text-align: center;
 }
 .spinner {
-  text-align: center; font-size: 12px; color: rgba(255,255,255,0.4);
-  margin-top: 12px; display: none;
+  text-align: center; font-size: 12px; color: #57606a;
+  margin-top: 10px; display: none;
 }
 .info {
-  font-size: 11px; color: rgba(255,255,255,0.28); text-align: center;
+  font-size: 11px; color: #57606a; text-align: center;
   margin-top: 16px; line-height: 1.6;
 }
+hr { border: none; border-top: 1px solid #e5e7eb; margin: 14px 0; }
+
+/* Reset key section — hidden by default */
+.reset-section { display: none; }
+.reset-section label { margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -73,43 +90,71 @@ input:focus { outline: none; border-color: #e74c3c; }
 
   <div class="server-badge" id="serverBadge">🟢 Server starting on port 4000…</div>
 
-  <label>Username</label>
-  <input type="text" id="username" placeholder="admin" autocomplete="username" value="admin">
+  <!-- Login form -->
+  <div id="loginSection">
+    <label>Username</label>
+    <input type="text" id="username" placeholder="admin" autocomplete="username" value="admin">
 
-  <label>Password</label>
-  <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+    <label>Password</label>
+    <input type="password" id="password" placeholder="Password" autocomplete="current-password">
 
-  <button class="btn-login" id="btnLogin">SIGN IN TO ADMIN PANEL</button>
+    <button class="btn-login" id="btnLogin">SIGN IN</button>
+    <button class="btn-link" id="btnShowReset">Forgot key? Reset installation key</button>
+  </div>
+
+  <!-- Key reset section -->
+  <div class="reset-section" id="resetSection">
+    <p style="font-size:12px;color:#57606a;margin-bottom:12px;">An OTP will be sent to the administrator email address.</p>
+    <button class="btn-login" id="btnSendOtp">SEND OTP</button>
+    <hr>
+    <label>OTP Code</label>
+    <input type="text" id="otpCode" placeholder="6-digit OTP" maxlength="6">
+    <label>New Installation Key</label>
+    <input type="text" id="newKey" placeholder="New key (min 6 characters)">
+    <button class="btn-login" id="btnResetKey">RESET KEY</button>
+    <button class="btn-link" id="btnBackToLogin">← Back to login</button>
+  </div>
 
   <div class="err-msg" id="errMsg"></div>
-  <div class="spinner" id="spinner">Authenticating…</div>
+  <div class="ok-msg"  id="okMsg"></div>
+  <div class="spinner" id="spinner">Processing…</div>
 
-  <div class="info" id="serverInfo">
-    Fetching server address…
-  </div>
+  <div class="info" id="serverInfo">Fetching server address…</div>
 </div>
 
 <script>
   const sapi = window.serverAPI;
 
-  // Load server info (IP + port)
   async function loadServerInfo() {
     try {
       const info = await sapi.getServerInfo();
       const ip = info.ips && info.ips[0] ? info.ips[0] : 'localhost';
-      document.getElementById('serverBadge').textContent =
-        `🟢 Server running  ·  Port ${info.port}`;
+      document.getElementById('serverBadge').textContent = `🟢 Server running  ·  Port ${info.port}`;
       document.getElementById('serverInfo').innerHTML =
-        `Clients connect to: <strong style="color:#fff">http://${ip}:${info.port}</strong><br>` +
-        `Admin panel: <strong style="color:#fff">http://${ip}:${info.port}/admin/</strong>`;
+        `Clients connect to: <strong style="color:#1f2328">http://${ip}:${info.port}</strong><br>` +
+        `Admin panel: <strong style="color:#1f2328">http://${ip}:${info.port}/admin/</strong>`;
     } catch {
       document.getElementById('serverBadge').textContent = '⏳ Server starting…';
     }
   }
 
   loadServerInfo();
-  // Refresh info after a second (server may still be initialising)
   setTimeout(loadServerInfo, 1500);
+
+  function clearMessages() {
+    document.getElementById('errMsg').style.display = 'none';
+    document.getElementById('okMsg').style.display = 'none';
+  }
+  function showErr(msg) {
+    document.getElementById('errMsg').textContent = msg;
+    document.getElementById('errMsg').style.display = 'block';
+    document.getElementById('okMsg').style.display = 'none';
+  }
+  function showOk(msg) {
+    document.getElementById('okMsg').textContent = msg;
+    document.getElementById('okMsg').style.display = 'block';
+    document.getElementById('errMsg').style.display = 'none';
+  }
 
   document.getElementById('btnLogin').addEventListener('click', doLogin);
   document.getElementById('password').addEventListener('keydown', e => {
@@ -119,36 +164,99 @@ input:focus { outline: none; border-color: #e74c3c; }
   async function doLogin() {
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value;
-    const errEl    = document.getElementById('errMsg');
-    const spinner  = document.getElementById('spinner');
-    const btn      = document.getElementById('btnLogin');
+    clearMessages();
+    if (!username || !password) { showErr('Please enter username and password'); return; }
 
-    errEl.style.display = 'none';
-    if (!username || !password) {
-      errEl.textContent = 'Please enter username and password';
-      errEl.style.display = 'block';
-      return;
-    }
-
+    const btn = document.getElementById('btnLogin');
+    const spinner = document.getElementById('spinner');
     btn.disabled = true;
+    spinner.textContent = 'Connecting…';
     spinner.style.display = 'block';
 
     try {
       const result = await sapi.login({ username, password });
       if (result.ok) {
+        spinner.textContent = '✅ Logging in…';
         await sapi.loginSuccess({ token: result.token });
       } else {
-        errEl.textContent = result.error || 'Invalid credentials';
-        errEl.style.display = 'block';
+        showErr(result.error || 'Invalid credentials');
       }
     } catch (e) {
-      errEl.textContent = 'Cannot connect to server: ' + e.message;
-      errEl.style.display = 'block';
+      showErr('Cannot connect to server: ' + e.message);
     } finally {
       btn.disabled = false;
       spinner.style.display = 'none';
+      spinner.textContent = 'Processing…';
     }
   }
+
+  // ── Key reset flow ─────────────────────────────────────────────
+  document.getElementById('btnShowReset').addEventListener('click', () => {
+    document.getElementById('loginSection').style.display = 'none';
+    document.getElementById('resetSection').style.display = 'block';
+    clearMessages();
+  });
+
+  document.getElementById('btnBackToLogin').addEventListener('click', () => {
+    document.getElementById('resetSection').style.display = 'none';
+    document.getElementById('loginSection').style.display = 'block';
+    clearMessages();
+  });
+
+  document.getElementById('btnSendOtp').addEventListener('click', async () => {
+    clearMessages();
+    const btn = document.getElementById('btnSendOtp');
+    btn.disabled = true;
+    document.getElementById('spinner').style.display = 'block';
+    try {
+      const info = await sapi.getServerInfo();
+      const serverUrl = `http://localhost:${info.port}`;
+      const resp = await fetch(`${serverUrl}/api/admin/request-key-reset`, { method: 'POST' });
+      const data = await resp.json();
+      showOk(data.message || 'OTP sent');
+    } catch (e) {
+      showErr('Failed to send OTP: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      document.getElementById('spinner').style.display = 'none';
+    }
+  });
+
+  document.getElementById('btnResetKey').addEventListener('click', async () => {
+    clearMessages();
+    const otp    = document.getElementById('otpCode').value.trim();
+    const newKey = document.getElementById('newKey').value.trim();
+    if (!otp || !newKey) { showErr('OTP and new key are required'); return; }
+
+    const btn = document.getElementById('btnResetKey');
+    btn.disabled = true;
+    document.getElementById('spinner').style.display = 'block';
+    try {
+      const info = await sapi.getServerInfo();
+      const serverUrl = `http://localhost:${info.port}`;
+      const resp = await fetch(`${serverUrl}/api/admin/reset-key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otp, newKey }),
+      });
+      const data = await resp.json();
+      if (resp.ok) {
+        showOk('Key reset successfully. You can now log in.');
+        setTimeout(() => {
+          document.getElementById('resetSection').style.display = 'none';
+          document.getElementById('loginSection').style.display = 'block';
+          clearMessages();
+        }, 2000);
+      } else {
+        showErr(data.error || 'Reset failed');
+      }
+    } catch (e) {
+      showErr('Failed: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      document.getElementById('spinner').style.display = 'none';
+    }
+  });
 </script>
 </body>
 </html>
