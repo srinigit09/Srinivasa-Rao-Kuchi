@@ -152,7 +152,10 @@ function createAlarmButton(config) {
   alarmButton.webContents.once('did-finish-load', () => {
     alarmButton.webContents.send('client-config', config);
   });
-  alarmButton.on('closed', () => { alarmButton = null; });
+  alarmButton.on('closed', () => {
+    alarmButton = null;
+    rebuildTrayMenu(loadConfig(), socket?.connected || false);
+  });
 }
 
 // ── Alert popup — shown when a panic alarm is received ────────────────────────
@@ -234,6 +237,15 @@ function rebuildTrayMenu(config, connected) {
     { label: serverInfo, enabled: false },
     { label: statusLabel, enabled: false },
     { type: 'separator' },
+    ...(config.role === 'doctor' ? [{
+      label: alarmButton && !alarmButton.isDestroyed()
+        ? '🔴  Alarm Button: ON'
+        : '▶  Show Alarm Button',
+      click: () => {
+        if (!alarmButton || alarmButton.isDestroyed()) createAlarmButton(loadConfig());
+      },
+      enabled: !alarmButton || alarmButton.isDestroyed(),
+    }] : []),
     { label: '✏️  Edit User Details', click: createSettingsWindow },
     { type: 'separator' },
     { label: 'Quit Panic Alarm', click: () => app.quit() },
@@ -308,13 +320,13 @@ const COLOUR_LABELS = [
   '🟢 Green', '🔵 Blue', '🟣 Purple', '⚫ Dark',
 ];
 
-// Right-click on alarm button → show native colour-picker context menu
+// Right-click on alarm button → colour picker + Quit Alarm Button
 ipcMain.on('show-colour-menu', () => {
   if (!alarmButton || alarmButton.isDestroyed()) return;
   const config  = loadConfig();
   const current = config?.alertButtonColour ?? 0;
-  const menu = Menu.buildFromTemplate(
-    COLOUR_LABELS.map((label, idx) => ({
+  const menu = Menu.buildFromTemplate([
+    ...COLOUR_LABELS.map((label, idx) => ({
       label,
       type : 'radio',
       checked: idx === current,
@@ -323,8 +335,13 @@ ipcMain.on('show-colour-menu', () => {
           alarmButton.webContents.send('alert-colour-change', idx);
         }
       },
-    }))
-  );
+    })),
+    { type: 'separator' },
+    { label: '✖  Quit Alarm Button', click: () => {
+        if (alarmButton && !alarmButton.isDestroyed()) alarmButton.close();
+      }
+    },
+  ]);
   menu.popup({ window: alarmButton });
 });
 
