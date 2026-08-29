@@ -199,7 +199,7 @@ function createSettingsWindow() {
   settingsWindow = new BrowserWindow({
     width: 500, height: 560,
     resizable: false, center: true,
-    title: 'Panic Alarm — Edit My Profile',
+    title: 'Panic Alarm — User Details',
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -326,16 +326,19 @@ ipcMain.on('show-colour-menu', () => {
   const config  = loadConfig();
   const current = config?.alertButtonColour ?? 0;
   const menu = Menu.buildFromTemplate([
-    ...COLOUR_LABELS.map((label, idx) => ({
-      label,
-      type : 'radio',
-      checked: idx === current,
-      click: () => {
-        if (alarmButton && !alarmButton.isDestroyed()) {
-          alarmButton.webContents.send('alert-colour-change', idx);
-        }
-      },
-    })),
+    {
+      label: '🎨  Change Colour',
+      submenu: COLOUR_LABELS.map((label, idx) => ({
+        label,
+        type   : 'radio',
+        checked: idx === current,
+        click  : () => {
+          if (alarmButton && !alarmButton.isDestroyed()) {
+            alarmButton.webContents.send('alert-colour-change', idx);
+          }
+        },
+      })),
+    },
     { type: 'separator' },
     { label: '✖  Quit Alarm Button', click: () => {
         if (alarmButton && !alarmButton.isDestroyed()) alarmButton.close();

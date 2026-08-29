@@ -135,8 +135,6 @@ function buildAppMenu() {
     {
       label: 'File',
       submenu: [
-        { label: 'Open Admin Panel', click: () => createMainWindow() },
-        { type: 'separator' },
         { label: 'Quit Server', click: () => app.quit() },
       ],
     },
@@ -181,8 +179,6 @@ function rebuildTrayMenu(running) {
   const items = [
     { label: running ? `🟢 Server Running — Port ${serverPort}` : '⏳ Starting server…', enabled: false },
     ...(running ? [{ label: `IP: ${ips.join(', ') || 'N/A'}`, enabled: false }] : []),
-    { type: 'separator' },
-    { label: '📊 Open Admin Panel', click: createMainWindow },
     { type: 'separator' },
     { label: 'Quit Server', click: () => app.quit() },
   ];
