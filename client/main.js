@@ -215,30 +215,8 @@ function createSettingsWindow() {
 //  TRAY
 // ═══════════════════════════════════════════════════════════════════════════════
 function createTray(config) {
-  // Build a simple 16x16 tray icon from raw PNG bytes — no file dependency
-  // This is a small red/white circle encoded as base64 PNG
-  const TRAY_ICON_B64 =
-    'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABmJLR0QA/wD/AP+gvaeTAAAA' +
-    'AklEQVQ4y2NgGAWkAgABBAABnV5q6QAAAABJRU5ErkJggg==';
-  // Use a simple approach: create from the png file, fall back to createEmpty
-  const pngPath = path.join(__dirname, 'assets', 'icon.png');
-  let img;
-  try {
-    if (fs.existsSync(pngPath)) {
-      img = nativeImage.createFromPath(pngPath).resize({ width: 16, height: 16 });
-    } else {
-      // Fallback: create a simple colored native image
-      img = nativeImage.createFromDataURL(
-        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAA' +
-        'BVBMVEX/AAD///+nxH5EAAAAAnRSTlP/AOW3MEoAAAAaSURBVBjTY2BgYGBkYGBiYGBg' +
-        'YGBgYGBgAAACAAFJRxGNAAAAAElFTkSuQmCC'
-      );
-    }
-  } catch(e) {
-    img = nativeImage.createEmpty();
-  }
-  tray = new Tray(img);
-  tray.setTitle('');  // no text beside tray icon on macOS
+  tray = new Tray(nativeImage.createEmpty());
+  tray.setTitle('🏥');  // hospital emoji — distinguishes client from server (🖥️)
   rebuildTrayMenu(config, false);
 }
 
@@ -256,15 +234,7 @@ function rebuildTrayMenu(config, connected) {
     { label: serverInfo, enabled: false },
     { label: statusLabel, enabled: false },
     { type: 'separator' },
-    { label: '✏️  Edit My Profile', click: createSettingsWindow },
-    { label: '🔄  Re-run Setup Wizard', click: () => {
-        if (app.dock) app.dock.show();   // temporarily show dock for the wizard window
-        // Close settings window if open to avoid two windows
-        if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.close();
-        if (!setupWindow || setupWindow.isDestroyed()) createSetupWindow();
-        else { setupWindow.show(); setupWindow.focus(); setupWindow.moveTop(); }
-      }
-    },
+    { label: '✏️  Edit User Details', click: createSettingsWindow },
     { type: 'separator' },
     { label: 'Quit Panic Alarm', click: () => app.quit() },
   ] : [

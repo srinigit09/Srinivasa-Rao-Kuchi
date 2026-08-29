@@ -158,13 +158,7 @@ function buildAppMenu() {
 
 // ── Tray ──────────────────────────────────────────────────────────────────────
 function createTray() {
-  const iconPath = path.join(__dirname, 'assets', 'server-icon.png');
-  let img;
-  try {
-    img = fs.existsSync(iconPath)
-      ? nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
-      : nativeImage.createEmpty();
-  } catch { img = nativeImage.createEmpty(); }
+  const img = nativeImage.createEmpty();
 
   tray = new Tray(img);
   tray.setTitle('🖥️');

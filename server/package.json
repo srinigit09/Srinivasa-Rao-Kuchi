@@ -68,6 +68,14 @@
       "uninstallerIcon": "assets/server-icon.ico",
       "runAfterFinish": true
     },
+    "dmg": {
+      "internetEnabled": false,
+      "window": { "width": 540, "height": 380 },
+      "contents": [
+        { "x": 150, "y": 185, "type": "file" },
+        { "x": 390, "y": 185, "type": "link", "path": "/Applications" }
+      ]
+    },
     "mac": {
       "target": [
         {
