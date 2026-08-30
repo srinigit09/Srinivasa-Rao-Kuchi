@@ -313,9 +313,9 @@ app.put('/api/admin/client-users/:id', requireAdmin, (req, res) => {
   const normalizedRole = normalizeRole(role || u.role);
   updateClientUser.run(
     user_id       !== undefined ? user_id       : u.user_id,
-    room_number   || u.room_number,
-    system_number || u.system_number,
-    user_name     || u.user_name,
+    room_number   !== undefined ? room_number   : u.room_number,
+    system_number !== undefined ? system_number : u.system_number,
+    user_name     !== undefined ? (user_name || u.user_name) : u.user_name,
     normalizedRole,
     department    !== undefined ? department    : u.department,
     req.params.id
@@ -569,10 +569,10 @@ app.put('/api/client/me', requireClient, (req, res) => {
 
   const normalizedRole = normalizeRole(role || u.role);
   updateClientUser.run(
-    newUserId     || u.user_id,
-    room_number   || u.room_number,
-    system_number || u.system_number,
-    user_name     || u.user_name,
+    newUserId,
+    room_number   !== undefined ? room_number   : u.room_number,
+    system_number !== undefined ? system_number : u.system_number,
+    user_name     !== undefined ? (user_name || u.user_name) : u.user_name,
     normalizedRole,
     department    !== undefined ? department : u.department,
     u.id
