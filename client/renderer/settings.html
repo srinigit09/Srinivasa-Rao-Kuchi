@@ -9,8 +9,9 @@
 body {
   font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
   background: #f0f4f8; color: #1e293b;
-  min-height: 100vh; display: flex; align-items: center; justify-content: center;
-  padding: 16px;
+  height: 100vh; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  padding: 12px;
 }
 
 /* ── Card ── */
@@ -136,10 +137,10 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
   <div class="card-body">
 
     <!-- Page heading -->
-    <div style="text-align:center; padding: 10px 0 12px; border-bottom: 1px solid #e2e8f0; margin-bottom: 12px;">
-      <div style="font-size:22px; margin-bottom:4px;">🚨</div>
-      <div style="font-size:13px; font-weight:800; letter-spacing:1.5px; color:#1e293b; text-transform:uppercase;">Panic Alarm Client</div>
-      <div style="font-size:10px; color:#94a3b8; margin-top:2px;" id="pageSubtitle">User Details</div>
+    <div style="text-align:center; padding: 6px 0 8px; border-bottom: 1px solid #e2e8f0; margin-bottom: 10px;">
+      <div style="font-size:16px; margin-bottom:2px;">🚨</div>
+      <div style="font-size:11px; font-weight:800; letter-spacing:1.5px; color:#1e293b; text-transform:uppercase;">Panic Alarm Client</div>
+      <div style="font-size:10px; color:#94a3b8; margin-top:1px;" id="pageSubtitle">User Details</div>
     </div>
 
     <!-- Server connection (register mode only) -->
