@@ -9,8 +9,8 @@
 body {
   font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
   background: #f0f4f8; color: #1e293b;
-  height: 100vh; display: flex; align-items: center; justify-content: center;
-  padding: 12px 16px;
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  padding: 16px;
 }
 
 /* ── Card ── */
@@ -21,7 +21,7 @@ body {
 }
 
 /* ── Body ── */
-.card-body { padding: 14px 20px 16px; }
+.card-body { padding: 16px 20px 18px; }
 
 /* ── Hospital pill ── */
 .hospital-pill {
@@ -29,10 +29,9 @@ body {
   background: #f0fdf4; border: 1px solid #bbf7d0;
   border-radius: 8px; padding: 7px 12px; margin-bottom: 12px;
 }
-.hospital-pill .hp-icon { font-size: 17px; }
 .hospital-pill .hp-text { flex: 1; }
 .hospital-pill .hp-name { font-size: 12px; font-weight: 700; color: #166534; }
-.hospital-pill .hp-code { font-size: 10px; color: #4ade80; margin-top: 1px; }
+.hospital-pill .hp-code { font-size: 10px; color: #16a34a; margin-top: 1px; }
 
 /* ── Section title ── */
 .section-title {
@@ -41,7 +40,6 @@ body {
   margin: 12px 0 8px; display: flex; align-items: center; gap: 8px;
 }
 .section-title::after { content: ''; flex: 1; height: 1px; background: #e2e8f0; }
-.section-title:first-of-type { margin-top: 0; }
 
 /* ── Role cards ── */
 .role-grid { display: flex; gap: 6px; margin-bottom: 12px; }
@@ -85,32 +83,41 @@ input, select {
   transition: border .15s; outline: none;
 }
 input:focus, select:focus { border-color: #1565c0; box-shadow: 0 0 0 3px rgba(21,101,192,.1); }
-input:read-only { background: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
 select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 10px center;
   padding-right: 28px; cursor: pointer;
 }
+select:disabled { opacity: 0.5; cursor: not-allowed; }
+.hint { font-size: 10px; color: #94a3b8; margin-top: -6px; margin-bottom: 10px; }
 
 /* ── Buttons ── */
-.btn-save {
-  padding: 10px; margin-top: 0;
+.btn-primary {
+  flex: 1; padding: 10px; margin-top: 0;
   background: linear-gradient(135deg, #1565c0, #0d47a1);
   color: #fff; border: none; border-radius: 8px;
   font-size: 13px; font-weight: 700; cursor: pointer;
   letter-spacing: .3px; transition: opacity .2s;
 }
-.btn-save:hover { opacity: .9; }
-.btn-save:disabled { opacity: .5; cursor: not-allowed; }
-.btn-reset {
+.btn-primary:hover { opacity: .9; }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.btn-secondary {
   padding: 10px 14px; margin-top: 0;
-  background: #f1f5f9; color: #475569;
-  border: 1.5px solid #e2e8f0; border-radius: 8px;
+  background: #fff3e0; color: #e65100;
+  border: 1.5px solid #ffcc80; border-radius: 8px;
   font-size: 13px; font-weight: 700; cursor: pointer;
   transition: all .15s; white-space: nowrap;
 }
-.btn-reset:hover { background: #e2e8f0; color: #1e293b; }
-.btn-reset:disabled { opacity: .5; cursor: not-allowed; }
+.btn-secondary:hover { background: #ffe0b2; border-color: #ffa726; color: #bf360c; }
+.btn-secondary:disabled { opacity: .5; cursor: not-allowed; }
+.btn-reload {
+  padding: 6px 10px; background: #eff6ff; color: #1565c0;
+  border: 1.5px solid #bfdbfe; border-radius: 7px;
+  font-size: 11px; font-weight: 700; cursor: pointer;
+  transition: all .15s; white-space: nowrap; flex-shrink: 0;
+}
+.btn-reload:hover { background: #dbeafe; border-color: #93c5fd; }
+.btn-reload:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ── Flash messages ── */
 .flash {
@@ -119,6 +126,9 @@ select {
 }
 .flash.ok  { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
 .flash.err { background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; }
+
+/* ── Spinner ── */
+.spinner { font-size: 11px; color: #94a3b8; margin-top: 8px; display: none; text-align: center; }
 </style>
 </head>
 <body>
@@ -127,12 +137,36 @@ select {
 
     <!-- Page heading -->
     <div style="text-align:center; padding: 10px 0 12px; border-bottom: 1px solid #e2e8f0; margin-bottom: 12px;">
+      <div style="font-size:22px; margin-bottom:4px;">🚨</div>
       <div style="font-size:13px; font-weight:800; letter-spacing:1.5px; color:#1e293b; text-transform:uppercase;">Panic Alarm Client</div>
-      <div style="font-size:10px; color:#94a3b8; margin-top:2px;">User Details</div>
+      <div style="font-size:10px; color:#94a3b8; margin-top:2px;" id="pageSubtitle">User Details</div>
     </div>
 
-    <!-- Hospital pill -->
-    <div class="hospital-pill">
+    <!-- Server connection (register mode only) -->
+    <div id="serverSection">
+      <div class="fg">
+        <label>Server IP &amp; Port <span class="required-star">*</span></label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" id="serverUrl" placeholder="http://192.168.1.5:4000" autocomplete="off" spellcheck="false" style="margin-bottom:0;flex:1">
+          <button class="btn-reload" id="btnReload" title="Connect / Reload hospitals">⟳ Connect</button>
+        </div>
+      </div>
+      <div class="fg">
+        <label>Hospital / Clinic Name <span class="required-star">*</span></label>
+        <select id="hospitalSelect" disabled>
+          <option value="">— Enter server URL above to load —</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Department / Block</label>
+        <select id="departmentSelect" disabled>
+          <option value="">None</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Hospital pill (edit mode only) -->
+    <div class="hospital-pill" id="hospitalPill" style="display:none">
       <div class="hp-text">
         <div class="hp-name" id="hospitalName">—</div>
         <div class="hp-code" id="hospitalCode">—</div>
@@ -164,50 +198,53 @@ select {
     <div class="form-row">
       <div class="fg">
         <label>User ID <span class="required-star">*</span></label>
-        <input type="text" id="userId" placeholder="e.g. EMP-001">
+        <input type="text" id="userId" placeholder="e.g. EMP-001" autocomplete="off">
       </div>
       <div class="fg">
         <label>Full Name <span class="required-star">*</span></label>
-        <input type="text" id="userName" placeholder="e.g. Dr. John Smith">
+        <input type="text" id="userName" placeholder="e.g. Dr. John Smith" autocomplete="off">
       </div>
     </div>
     <div class="form-row">
       <div class="fg">
         <label>Room Number</label>
-        <input type="text" id="roomNumber" placeholder="e.g. ICU-3">
+        <input type="text" id="roomNumber" placeholder="e.g. ICU-3" autocomplete="off">
       </div>
       <div class="fg">
         <label>System / PC No.</label>
-        <input type="text" id="systemNumber" placeholder="e.g. PC-07">
+        <input type="text" id="systemNumber" placeholder="e.g. PC-07" autocomplete="off">
       </div>
     </div>
-    <div class="fg">
+
+    <!-- Server URL + Department (edit mode only) -->
+    <div class="fg" id="deptEditSection" style="display:none">
+      <label>Server URL</label>
+      <input type="text" id="serverUrlEdit" placeholder="http://192.168.1.5:4000" autocomplete="off" spellcheck="false">
+      <div style="height:8px"></div>
       <label>Department / Block</label>
-      <select id="departmentSelect">
+      <select id="departmentSelectEdit">
         <option value="">None</option>
       </select>
     </div>
 
-    <!-- Server connection -->
-    <div class="section-title">Server Connection</div>
-    <div class="fg">
-      <label>Server URL</label>
-      <input type="text" id="serverUrl" placeholder="http://192.168.1.5:4000" autocomplete="off" spellcheck="false">
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn-primary" id="btnPrimary" style="flex:1">REGISTER &amp; START</button>
+      <button class="btn-secondary" id="btnSecondary">↺ Reset</button>
     </div>
-
-    <div style="display:flex;gap:8px;margin-top:4px">
-      <button class="btn-save" id="btnSave" style="flex:1">SAVE CHANGES</button>
-      <button class="btn-reset" id="btnReset" title="Reset form to last saved server data">↺ Reset</button>
-    </div>
-    <div class="flash" id="flash"></div>
+    <div class="flash"   id="flash"></div>
+    <div class="spinner" id="spinner">Connecting to server…</div>
 
   </div>
 </div>
 
 <script>
   const api = window.electronAPI;
-  let config = null;       // saved local config (serverUrl + token only)
-  let selectedRole = null; // null = nothing selected
+  let config       = null;   // null in register mode, populated object in edit mode
+  let isRegister   = true;   // true = new user registration, false = edit existing
+  let selectedRole = null;
+  let allHospitals = [];
+  let verifiedHospitalCode = null;
+  let verifiedHospitalName = null;
 
   // ── Role selection ────────────────────────────────────────────────────────────
   function selectRole(role) {
@@ -217,21 +254,93 @@ select {
         .classList.toggle('selected', r === role);
     });
   }
-
   function clearRole() {
     selectedRole = null;
     ['rcDoctor','rcStaff','rcOther'].forEach(id =>
-      document.getElementById(id).classList.remove('selected')
-    );
+      document.getElementById(id).classList.remove('selected'));
   }
 
-  function setLoading(on) {
-    document.getElementById('btnSave').disabled  = on;
-    document.getElementById('btnReset').disabled = on;
+  // ── Normalise URL ─────────────────────────────────────────────────────────────
+  function normaliseUrl(raw) {
+    let url = (raw || '').trim().replace(/\/$/, '');
+    if (!url) return '';
+    if (url.startsWith('https://')) url = 'http://' + url.slice(8);
+    if (!url.startsWith('http://'))  url = 'http://' + url;
+    return url;
   }
 
-  async function loadDepartments(serverUrl, hospitalCode, current) {
+  // ── Load hospitals dropdown ───────────────────────────────────────────────────
+  // preSelectCode: hospital code to pre-select after loading (optional)
+  async function loadHospitals(serverUrl, preSelectCode) {
+    const sel = document.getElementById('hospitalSelect');
+    sel.innerHTML = '<option value="">⏳ Loading hospitals…</option>';
+    sel.disabled = true;
+    verifiedHospitalCode = null;
+    verifiedHospitalName = null;
+
+    const url = normaliseUrl(serverUrl);
+    document.getElementById('serverUrl').value = url;
+    if (!url) { sel.innerHTML = '<option value="">— Enter server URL above to load —</option>'; return; }
+
+    try {
+      const resp = await fetch(`${url}/api/public/hospitals`, { signal: AbortSignal.timeout(8000) });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      allHospitals = await resp.json();
+      if (!allHospitals.length) {
+        sel.innerHTML = '<option value="">⚠️ No hospitals on server yet</option>';
+        return;
+      }
+      sel.innerHTML = '';
+      allHospitals.forEach(h => {
+        const opt = document.createElement('option');
+        opt.value = h.hospital_code;
+        opt.textContent = `${h.client_name}  (${h.hospital_code})`;
+        sel.appendChild(opt);
+      });
+      sel.disabled = false;
+      // Pre-select by saved hospital code, else fall back to first entry
+      const target = preSelectCode
+        ? allHospitals.find(h => h.hospital_code === preSelectCode.toUpperCase())
+        : null;
+      sel.value = target ? target.hospital_code : allHospitals[0].hospital_code;
+      onHospitalChange();
+    } catch {
+      sel.innerHTML = '<option value="">❌ Cannot reach server</option>';
+      flash('Cannot connect to server. Check the IP address and ensure the server is running.', false);
+    }
+  }
+
+  function onHospitalChange() {
+    const sel  = document.getElementById('hospitalSelect');
+    const code = sel.value;
+    if (!code) { verifiedHospitalCode = null; verifiedHospitalName = null; return; }
+    const match = allHospitals.find(h => h.hospital_code === code);
+    if (match) { verifiedHospitalCode = match.hospital_code; verifiedHospitalName = match.client_name; }
+    const url = normaliseUrl(document.getElementById('serverUrl').value);
+    loadDepartmentsRegister(url, code);
+  }
+
+  async function loadDepartmentsRegister(serverUrl, hospitalCode) {
     const sel = document.getElementById('departmentSelect');
+    sel.innerHTML = '<option value="">None</option>';
+    sel.disabled = true;
+    if (!serverUrl || !hospitalCode) return;
+    try {
+      const resp = await fetch(`${serverUrl}/api/public/departments/${hospitalCode}`,
+        { signal: AbortSignal.timeout(5000) });
+      if (!resp.ok) return;
+      const depts = await resp.json();
+      depts.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.name; opt.textContent = d.name;
+        sel.appendChild(opt);
+      });
+      sel.disabled = (depts.length === 0);
+    } catch { /* departments optional */ }
+  }
+
+  async function loadDepartmentsEdit(serverUrl, hospitalCode, current) {
+    const sel = document.getElementById('departmentSelectEdit');
     sel.innerHTML = '<option value="">None</option>';
     if (!serverUrl || !hospitalCode) return;
     try {
@@ -248,128 +357,160 @@ select {
     } catch { /* optional */ }
   }
 
-  // ── Clear all user-input fields (role, user details) — leave hospital + serverUrl + department ──
-  function clearUserFields() {
+  // ── Server URL events (register mode) — user can edit & reload ───────────────
+  document.getElementById('serverUrl').addEventListener('blur', () => {
+    const url = document.getElementById('serverUrl').value.trim();
+    if (url) loadHospitals(url, null);
+  });
+  document.getElementById('serverUrl').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); loadHospitals(document.getElementById('serverUrl').value, null); }
+  });
+  document.getElementById('btnReload').addEventListener('click', () => {
+    const url = document.getElementById('serverUrl').value.trim();
+    if (url) loadHospitals(url, null);
+    else flash('Enter a Server IP & Port first.', false);
+  });
+  document.getElementById('hospitalSelect').addEventListener('change', onHospitalChange);
+
+  // ── Mode setup ────────────────────────────────────────────────────────────────
+  async function setupRegisterMode() {
+    isRegister = true;
+    document.getElementById('pageSubtitle').textContent    = 'New User Registration';
+    document.getElementById('serverSection').style.display = 'block';
+    document.getElementById('hospitalPill').style.display  = 'none';
+    document.getElementById('deptEditSection').style.display = 'none';
+    document.getElementById('btnPrimary').textContent      = 'REGISTER & START';
+    document.getElementById('btnSecondary').style.display  = 'inline-block';
+    document.getElementById('btnSecondary').title          = 'Clear form and reload server data';
+    // All user fields blank
     clearRole();
     document.getElementById('userId').value       = '';
     document.getElementById('userName').value     = '';
     document.getElementById('roomNumber').value   = '';
     document.getElementById('systemNumber').value = '';
-    document.getElementById('flash').style.display = 'none';
+    // Auto-connect: load last known server URL + pre-select saved hospital + dept
+    const hint = await api.getLastServerHint();
+    if (hint && hint.serverUrl) {
+      document.getElementById('serverUrl').value = hint.serverUrl;
+      await loadHospitals(hint.serverUrl, hint.hospitalCode || null);
+    }
   }
 
-  // ── Populate only the server-sourced read-only fields ────────────────────────
-  function populateServerFields(hospitalName, hospitalCode, serverUrl) {
-    document.getElementById('hospitalName').textContent = hospitalName || hospitalCode || '—';
-    document.getElementById('hospitalCode').textContent = hospitalCode
-      ? `Code: ${hospitalCode}` : '—';
-    document.getElementById('serverUrl').value = serverUrl || '';
+  function setupEditMode(cfg) {
+    isRegister = false;
+    config = cfg;
+    document.getElementById('pageSubtitle').textContent    = 'Edit User Details';
+    document.getElementById('serverSection').style.display = 'none';
+    document.getElementById('hospitalPill').style.display  = 'flex';
+    document.getElementById('deptEditSection').style.display = 'block';
+    document.getElementById('btnPrimary').textContent      = 'SAVE CHANGES';
+    document.getElementById('btnSecondary').style.display  = 'inline-block';
+    document.getElementById('btnSecondary').title          = 'Reset to last saved values';
+
+    // Hospital pill
+    document.getElementById('hospitalName').textContent = cfg.clientName || cfg.hospitalCode || '—';
+    document.getElementById('hospitalCode').textContent = cfg.hospitalCode ? `Code: ${cfg.hospitalCode}` : '—';
+
+    // Server URL (edit section)
+    document.getElementById('serverUrlEdit').value = cfg.serverUrl || '';
+
+    // Pre-fill user fields
+    if (cfg.role) selectRole(cfg.role);
+    document.getElementById('userId').value       = cfg.user_id      || '';
+    document.getElementById('userName').value     = cfg.user_name    || '';
+    document.getElementById('roomNumber').value   = cfg.room_number  || '';
+    document.getElementById('systemNumber').value = cfg.system_number || '';
+
+    // Load departments
+    loadDepartmentsEdit(cfg.serverUrl, cfg.hospitalCode, cfg.department || '');
+
+    // Fetch live server data to refresh hospital name
+    fetchLiveServerData(cfg);
   }
 
-  // ── Fetch hospital info from server (no user fields touched) ─────────────────
-  async function loadFromServer() {
-    if (!config?.serverUrl || !config?.token) return;
-    setLoading(true);
-
-    // Show serverUrl immediately from config
-    populateServerFields(config.clientName, config.hospitalCode, config.serverUrl);
-
+  async function fetchLiveServerData(cfg) {
+    if (!cfg?.serverUrl || !cfg?.token) return;
     try {
-      const meResp = await fetch(`${config.serverUrl}/api/client/me`, {
-        headers: { 'Authorization': `Bearer ${config.token}` },
+      const meResp = await fetch(`${cfg.serverUrl}/api/client/me`, {
+        headers: { 'Authorization': `Bearer ${cfg.token}` },
         signal: AbortSignal.timeout(8000),
       });
-
-      if (meResp.status === 401 || meResp.status === 403) {
-        flash('⚠️ Session expired — please re-run the Setup Wizard to reconnect', false);
-        // Still load departments from saved config even if token expired
-        loadDepartments(config.serverUrl, config.hospitalCode, config.department || '');
-        setLoading(false);
-        return;
-      }
-
-      // For any non-OK response, still load departments from saved config
-      if (!meResp.ok) {
-        loadDepartments(config.serverUrl, config.hospitalCode, config.department || '');
-        setLoading(false);
-        return;
-      }
-
+      if (!meResp.ok) return;
       const me = await meResp.json();
-
-      // Fetch live hospital name
-      let hospitalName = config.clientName || me.hospital_code || '';
       try {
-        const hResp = await fetch(`${config.serverUrl}/api/public/hospitals`,
+        const hResp = await fetch(`${cfg.serverUrl}/api/public/hospitals`,
           { signal: AbortSignal.timeout(5000) });
         if (hResp.ok) {
           const hospitals = await hResp.json();
           const match = hospitals.find(h => h.hospital_code === me.hospital_code);
-          if (match) hospitalName = match.client_name;
+          if (match) {
+            document.getElementById('hospitalName').textContent = match.client_name;
+            document.getElementById('hospitalCode').textContent = `Code: ${match.hospital_code}`;
+          }
         }
-      } catch { /* use cached name */ }
+      } catch { /* use cached */ }
+    } catch { /* server offline — no update */ }
+  }
 
-      // Update only hospital pill + serverUrl — NOT user fields
-      populateServerFields(hospitalName, me.hospital_code, config.serverUrl);
-
-      // Load departments dropdown, pre-select from saved config
-      loadDepartments(config.serverUrl, me.hospital_code, config.department || '');
-
-    } catch (err) {
-      const msg = err?.name === 'TimeoutError'
-        ? '⚠️ Server not responding — check server is running'
-        : `⚠️ Cannot reach server — ${err?.message || err}`;
-      flash(msg, false);
-    } finally {
-      setLoading(false);
+  // ── Init: decide mode based on whether config exists ─────────────────────────
+  async function init() {
+    const cfg = await api.getConfig();
+    if (cfg && cfg.token) {
+      setupEditMode(cfg);
+    } else {
+      await setupRegisterMode();
     }
   }
 
-  // ── Init — load server info, leave user fields blank ─────────────────────────
-  let serverLoaded = false;
-
-  function initWithConfig(cfg) {
-    if (!cfg?.serverUrl || !cfg?.token) return;
-    if (serverLoaded) return;
-    serverLoaded = true;
-    config = cfg;
-    clearUserFields();       // always start with blank user fields
-    loadFromServer();        // only fills hospital pill + serverUrl
-  }
-
-  api.getConfig().then(initWithConfig);
-  api.onClientConfig(initWithConfig);
-
-  // ── Reset — clears user-input fields and reloads department dropdown ─────────
-  document.getElementById('btnReset').addEventListener('click', () => {
-    clearUserFields();
-    // Reload department dropdown so it isn't empty after a reset
-    if (config?.serverUrl && config?.hospitalCode) {
-      loadDepartments(config.serverUrl, config.hospitalCode, '');
-    }
-    flash('↺ Form cleared', true);
+  // Also handle config pushed from main process (edit mode opened via tray)
+  api.onClientConfig(cfg => {
+    if (cfg && cfg.token) setupEditMode(cfg);
   });
 
-  // ── Save ──────────────────────────────────────────────────────────────────────
-  document.getElementById('btnSave').addEventListener('click', async () => {
-    if (!config) return;
+  // ── Reset button — clears form and reloads server data ───────────────────────
+  document.getElementById('btnSecondary').addEventListener('click', async () => {
+    if (isRegister) {
+      // Register mode: wipe user fields + reload server data from hint
+      document.getElementById('flash').style.display = 'none';
+      await setupRegisterMode();
+      flash('↺ Form reset', true);
+    } else if (config) {
+      // Edit mode: restore saved values
+      if (config.role) selectRole(config.role);
+      document.getElementById('userId').value        = config.user_id      || '';
+      document.getElementById('userName').value      = config.user_name    || '';
+      document.getElementById('roomNumber').value    = config.room_number  || '';
+      document.getElementById('systemNumber').value  = config.system_number || '';
+      document.getElementById('serverUrlEdit').value = config.serverUrl    || '';
+      loadDepartmentsEdit(config.serverUrl, config.hospitalCode, config.department || '');
+      flash('↺ Reset to saved values', true);
+    }
+  });
 
-    let serverUrl = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
-    if (!serverUrl) { flash('Server URL is required', false); return; }
-    if (serverUrl.startsWith('https://')) serverUrl = 'http://' + serverUrl.slice(8);
-    if (!serverUrl.startsWith('http://'))  serverUrl = 'http://' + serverUrl;
+  // ── Primary button: Register (new) or Save (edit) ────────────────────────────
+  document.getElementById('btnPrimary').addEventListener('click', async () => {
+    if (isRegister) {
+      await doRegister();
+    } else {
+      await doSave();
+    }
+  });
 
-    const user_id       = document.getElementById('userId').value.trim();
-    const user_name     = document.getElementById('userName').value.trim();
-    const room_number   = document.getElementById('roomNumber').value.trim();
-    const system_number = document.getElementById('systemNumber').value.trim();
-    const department    = document.getElementById('departmentSelect').value || null;
+  // ── REGISTER new user ─────────────────────────────────────────────────────────
+  async function doRegister() {
+    const serverUrl    = normaliseUrl(document.getElementById('serverUrl').value);
+    const userId       = document.getElementById('userId').value.trim();
+    const userName     = document.getElementById('userName').value.trim();
+    const roomNumber   = document.getElementById('roomNumber').value.trim() || '';
+    const systemNumber = document.getElementById('systemNumber').value.trim() || '';
+    const department   = document.getElementById('departmentSelect').value || null;
 
-    if (!user_id)      { flash('User ID is required', false); return; }
-    if (!user_name)    { flash('Full Name is required', false); return; }
+    if (!serverUrl)            { flash('Server URL is required.', false); return; }
+    if (!verifiedHospitalCode) { flash('Please select a hospital from the dropdown.', false); return; }
+    if (!userName)             { flash('Full Name is required.', false); return; }
+    if (!userId)               { flash('User ID is required.', false); return; }
     if (!selectedRole) {
-      flash('Please select a role', false);
-      // Shake the role cards to draw attention
+      flash('Please select a role.', false);
       ['rcDoctor','rcStaff','rcOther'].forEach(id => {
         const el = document.getElementById(id);
         el.classList.add('required');
@@ -378,7 +519,76 @@ select {
       return;
     }
 
-    setLoading(true);
+    document.getElementById('serverUrl').value = serverUrl;
+    setBusy(true);
+
+    const deviceId = await api.getDeviceId();
+    try {
+      const resp = await fetch(`${serverUrl}/api/client/register`, {
+        method : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body   : JSON.stringify({
+          hospital_code : verifiedHospitalCode,
+          user_id       : userId,
+          room_number   : roomNumber,
+          system_number : systemNumber,
+          user_name     : userName,
+          role          : selectedRole,
+          device_id     : deviceId,
+          department    : department,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) { flash(data.error || 'Registration failed', false); return; }
+
+      flash('✅ Registered! Starting…', true);
+      const newConfig = {
+        serverUrl,
+        hospitalCode  : data.hospitalCode  || verifiedHospitalCode,
+        clientName    : data.clientName    || verifiedHospitalName || verifiedHospitalCode,
+        user_id       : userId,
+        room_number   : roomNumber,
+        system_number : systemNumber,
+        user_name     : userName,
+        role          : selectedRole,
+        department    : department,
+        deviceId,
+        token         : data.token,
+      };
+      setTimeout(() => api.setupComplete(newConfig), 1200);
+    } catch {
+      flash('Cannot connect to server. Check the server URL and ensure the server is running.', false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ── SAVE existing user ────────────────────────────────────────────────────────
+  async function doSave() {
+    if (!config) return;
+
+    let serverUrl = normaliseUrl(document.getElementById('serverUrlEdit').value);
+    if (!serverUrl) { flash('Server URL is required', false); return; }
+
+    const user_id       = document.getElementById('userId').value.trim();
+    const user_name     = document.getElementById('userName').value.trim();
+    const room_number   = document.getElementById('roomNumber').value.trim();
+    const system_number = document.getElementById('systemNumber').value.trim();
+    const department    = document.getElementById('departmentSelectEdit').value || null;
+
+    if (!user_id)   { flash('User ID is required', false); return; }
+    if (!user_name) { flash('Full Name is required', false); return; }
+    if (!selectedRole) {
+      flash('Please select a role', false);
+      ['rcDoctor','rcStaff','rcOther'].forEach(id => {
+        const el = document.getElementById(id);
+        el.classList.add('required');
+        setTimeout(() => el.classList.remove('required'), 400);
+      });
+      return;
+    }
+
+    setBusy(true);
     try {
       const resp = await fetch(`${serverUrl}/api/client/me`, {
         method : 'PUT',
@@ -400,11 +610,19 @@ select {
     } catch {
       flash('Cannot connect to server. Check the Server URL.', false);
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
-  });
+  }
 
-  // ── Flash ─────────────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+  function setBusy(on) {
+    document.getElementById('btnPrimary').disabled   = on;
+    document.getElementById('btnSecondary').disabled = on;
+    const reload = document.getElementById('btnReload');
+    if (reload) reload.disabled = on;
+    document.getElementById('spinner').style.display = on ? 'block' : 'none';
+  }
+
   function flash(msg, ok) {
     const el = document.getElementById('flash');
     el.textContent = msg;
@@ -412,6 +630,8 @@ select {
     el.style.display = msg ? 'block' : 'none';
     if (ok) setTimeout(() => el.style.display = 'none', 3000);
   }
+
+  init();
 </script>
 </body>
 </html>

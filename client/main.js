@@ -5,9 +5,41 @@ const path   = require('path');
 const fs     = require('fs');
 const { io } = require('socket.io-client');
 
-// ── Config (persisted in user data dir, survives app updates) ─────────────────
-const CONFIG_DIR  = app.getPath('userData');
-const CONFIG_FILE = path.join(CONFIG_DIR, 'panic-alarm-config.json');
+// ── Config (stored in user data dir) ──────────────────────────────────────────
+const CONFIG_DIR        = app.getPath('userData');
+const CONFIG_FILE       = path.join(CONFIG_DIR, 'panic-alarm-config.json');
+const LAST_SERVER_FILE  = path.join(CONFIG_DIR, 'last-server-url');   // survives config wipe
+const LAST_HINT_FILE    = path.join(CONFIG_DIR, 'last-server-hint');  // serverUrl|hospitalCode
+
+// Every launch is treated as a fresh installation.
+// Wipe the saved config unconditionally so the New User Registration form
+// always opens on startup. last-server-url / last-server-hint and device-id
+// survive — they are used to pre-populate the registration form automatically.
+function clearConfigOnLaunch() {
+  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+
+  // Seed last-server-hint from .bak if hint file doesn't exist yet
+  if (!fs.existsSync(LAST_HINT_FILE)) {
+    const bakFile = CONFIG_FILE + '.bak';
+    try {
+      const bak = JSON.parse(fs.readFileSync(bakFile, 'utf8'));
+      if (bak.serverUrl) {
+        const hint = JSON.stringify({ serverUrl: bak.serverUrl, hospitalCode: bak.hospitalCode || '' });
+        fs.writeFileSync(LAST_HINT_FILE, hint, 'utf8');
+        fs.writeFileSync(LAST_SERVER_FILE, bak.serverUrl, 'utf8');
+        console.log('[Launch] Seeded server hint from backup:', bak.serverUrl, bak.hospitalCode);
+      }
+    } catch { /* no bak — first ever install */ }
+  }
+
+  if (fs.existsSync(CONFIG_FILE)) {
+    fs.unlinkSync(CONFIG_FILE);
+    console.log('[Launch] Config wiped — New User Registration form will open');
+  }
+  // Also remove legacy installed-version file if present
+  const legacyVer = path.join(CONFIG_DIR, 'installed-version');
+  if (fs.existsSync(legacyVer)) fs.unlinkSync(legacyVer);
+}
 
 function loadConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); }
@@ -16,6 +48,22 @@ function loadConfig() {
 function saveConfig(cfg) {
   if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2));
+  // Persist server hint so it survives future config wipes
+  if (cfg.serverUrl) {
+    fs.writeFileSync(LAST_SERVER_FILE, cfg.serverUrl, 'utf8');
+    const hint = JSON.stringify({ serverUrl: cfg.serverUrl, hospitalCode: cfg.hospitalCode || '' });
+    fs.writeFileSync(LAST_HINT_FILE, hint, 'utf8');
+  }
+}
+function getLastServerHint() {
+  try {
+    const raw = fs.readFileSync(LAST_HINT_FILE, 'utf8').trim();
+    return JSON.parse(raw);   // { serverUrl, hospitalCode }
+  } catch {
+    // Fall back to plain last-server-url file
+    try { return { serverUrl: fs.readFileSync(LAST_SERVER_FILE, 'utf8').trim(), hospitalCode: '' }; }
+    catch { return null; }
+  }
 }
 function getOrCreateDeviceId() {
   const f = path.join(CONFIG_DIR, 'device-id');
@@ -109,9 +157,9 @@ function connectSocket(config) {
 // ── First-run setup wizard ─────────────────────────────────────────────────────
 function createSetupWindow() {
   setupWindow = new BrowserWindow({
-    width: 500, height: 700,
+    width: 500, height: 680,
     resizable: false, center: true,
-    title: 'Panic Alarm — Setup',
+    title: 'Panic Alarm — New User Registration',
     show: true,
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
@@ -120,7 +168,7 @@ function createSetupWindow() {
     },
   });
   setupWindow.setMenu(null);
-  setupWindow.loadFile(path.join(__dirname, 'renderer', 'setup.html'));
+  setupWindow.loadFile(path.join(__dirname, 'renderer', 'settings.html'));
   setupWindow.show();
   setupWindow.focus();
   setupWindow.moveTop();
@@ -218,6 +266,8 @@ function createSettingsWindow() {
 //  TRAY
 // ═══════════════════════════════════════════════════════════════════════════════
 function createTray(config) {
+  // Destroy any existing tray first — prevents duplicate icons on re-launch
+  if (tray) { try { tray.destroy(); } catch { /* already gone */ } tray = null; }
   tray = new Tray(nativeImage.createEmpty());
   tray.setTitle('🏥');  // hospital emoji — distinguishes client from server (🖥️)
   rebuildTrayMenu(config, false);
@@ -237,16 +287,16 @@ function rebuildTrayMenu(config, connected) {
     { label: serverInfo, enabled: false },
     { label: statusLabel, enabled: false },
     { type: 'separator' },
+    { label: '✏️  Edit User Details', click: createSettingsWindow },
     ...(config.role === 'doctor' ? [{
       label: alarmButton && !alarmButton.isDestroyed()
-        ? '🔴  Alarm Button: ON'
-        : '▶  Show Alarm Button',
+        ? '🔴  Panic Alarm: ON'
+        : '▶  Show Panic Alarm',
       click: () => {
         if (!alarmButton || alarmButton.isDestroyed()) createAlarmButton(loadConfig());
       },
       enabled: !alarmButton || alarmButton.isDestroyed(),
     }] : []),
-    { label: '✏️  Edit User Details', click: createSettingsWindow },
     { type: 'separator' },
     { label: 'Quit Panic Alarm', click: () => app.quit() },
   ] : [
@@ -274,8 +324,9 @@ function rebuildTrayMenu(config, connected) {
 // ═══════════════════════════════════════════════════════════════════════════════
 //  IPC HANDLERS
 // ═══════════════════════════════════════════════════════════════════════════════
-ipcMain.handle('get-config',    () => loadConfig());
-ipcMain.handle('get-device-id', () => getOrCreateDeviceId());
+ipcMain.handle('get-config',           () => loadConfig());
+ipcMain.handle('get-device-id',        () => getOrCreateDeviceId());
+ipcMain.handle('get-last-server-hint', () => getLastServerHint());
 
 // Called by setup.html after successful registration
 ipcMain.handle('setup-complete', (_, config) => {
@@ -357,6 +408,16 @@ ipcMain.handle('set-alert-colour', (_, idx) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+//  AUTO-LAUNCH (login item) — silent, no macOS popup notification
+// ═══════════════════════════════════════════════════════════════════════════════
+function setAutoLaunch(enabled) {
+  app.setLoginItemSettings({
+    openAtLogin : enabled,
+    // openAsHidden intentionally omitted — it triggers macOS "added to login items" popup
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 //  LAUNCH
 // ═══════════════════════════════════════════════════════════════════════════════
 function hideDock() {
@@ -366,7 +427,10 @@ function hideDock() {
 
 function launchAfterSetup(config) {
   hideDock();
-  createTray(config);
+  // Ensure auto-launch is enabled once the user has completed setup
+  setAutoLaunch(true);
+  // Rebuild the existing tray menu — do NOT call createTray() again (would add a second icon)
+  rebuildTrayMenu(config, false);
   // Doctor gets the floating ALERT button
   if (config.role === 'doctor') createAlarmButton(config);
   // Everyone connects to the socket silently in background
@@ -374,14 +438,10 @@ function launchAfterSetup(config) {
 }
 
 app.whenReady().then(() => {
-  hideDock();   // hide immediately — before any window opens
-  const config = loadConfig();
-  if (config && config.token) {
-    launchAfterSetup(config);
-  } else {
-    createTray(null);
-    createSetupWindow();
-  }
+  clearConfigOnLaunch();   // always wipe config — every launch is a fresh registration
+  hideDock();              // hide dock immediately — before any window opens
+  createTray(null);
+  createSetupWindow();     // always open New User Registration form on launch
 });
 
 // On macOS activate — do NOT show dock icon; open settings via tray instead

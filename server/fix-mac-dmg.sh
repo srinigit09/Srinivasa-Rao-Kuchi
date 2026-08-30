@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# fix-mac-dmg.sh  (PanicAlarmClient)
+# fix-mac-dmg.sh  (PanicAlarmServer)
 #
 # Run AFTER building the DMG. Ad-hoc signs the .app and strips quarantine
 # from both the .app and the DMG so Gatekeeper allows installation.
@@ -12,12 +12,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -e
 DIST="$(cd "$(dirname "$0")/dist" && pwd)"
-APP_NAME="PanicAlarmClient"
+APP_NAME="PanicAlarmServer"
 VERSION="1.0.0"
 
 fix_dmg() {
   local APP_DIR="$1"  # e.g. dist/mac-arm64
-  local DMG="$2"      # e.g. dist/PanicAlarmClient-1.0.0-arm64.dmg
+  local DMG="$2"      # e.g. dist/PanicAlarmServer-1.0.0-arm64.dmg
   local ARCH="$3"     # arm64 or x64
 
   echo ""

@@ -171,7 +171,7 @@ select:disabled { opacity: 0.45; cursor: not-allowed; }
   <div class="logo">
     <div class="icon">🚨</div>
     <h1>PANIC ALARM SYSTEM</h1>
-    <p>First-time setup — select your profile to begin</p>
+    <p>New User Registration — select your role to begin</p>
   </div>
 
   <!-- Step indicators -->
@@ -255,32 +255,32 @@ select:disabled { opacity: 0.45; cursor: not-allowed; }
       <option value="">None</option>
     </select>
 
-    <!-- User Details — in sync with server Add User form -->
-    <div class="section-title">Your Details</div>
+    <!-- User Details — new user registration, all fields start empty -->
+    <div class="section-title">New User Details</div>
     <div class="form-row">
       <div>
-        <label>Full Name <span class="required-star">*</span></label>
-        <input type="text" id="userName" placeholder="e.g. Dr. John Smith">
+        <label>User ID <span class="required-star">*</span></label>
+        <input type="text" id="userId" placeholder="e.g. EMP-001" autocomplete="off">
       </div>
       <div>
-        <label>User ID <span class="required-star">*</span></label>
-        <input type="text" id="userId" placeholder="e.g. EMP-001">
+        <label>Full Name <span class="required-star">*</span></label>
+        <input type="text" id="userName" placeholder="e.g. Dr. John Smith" autocomplete="off">
       </div>
     </div>
-    <div class="hint" style="margin-top:-8px">User ID must be unique — provided by your administrator</div>
+    <div class="hint" style="margin-top:-8px">User ID must be unique — assign a new ID for this user (e.g. EMP-001)</div>
 
     <div class="form-row">
       <div>
         <label>Room Number</label>
-        <input type="text" id="roomNumber" placeholder="e.g. ICU-3">
+        <input type="text" id="roomNumber" placeholder="e.g. ICU-3" autocomplete="off">
       </div>
       <div>
         <label>System / PC No.</label>
-        <input type="text" id="systemNumber" placeholder="e.g. PC-07">
+        <input type="text" id="systemNumber" placeholder="e.g. PC-07" autocomplete="off">
       </div>
     </div>
 
-    <button class="btn-register" id="btnRegister">REGISTER &amp; START</button>
+    <button class="btn-register" id="btnRegister">REGISTER NEW USER &amp; START</button>
     <div class="err"     id="errMsg"></div>
     <div class="ok"      id="okMsg"></div>
     <div class="spinner" id="spinner">Connecting to server…</div>
@@ -295,13 +295,14 @@ select:disabled { opacity: 0.45; cursor: not-allowed; }
   let verifiedHospitalName = null;
   let allHospitals = [];
 
-  // ── Init ──────────────────────────────────────────────────────────────────────
+  // ── Init — new user registration: all fields intentionally blank ──────────────
   async function init() {
-    const cfg = await api.getConfig();
-    if (cfg && cfg.serverUrl) {
-      document.getElementById('serverUrl').value = cfg.serverUrl;
-      await loadHospitals(cfg.serverUrl, cfg.hospitalCode || null);
-    }
+    // All user fields (User ID, Full Name, Room Number, System/PC No.) are left
+    // empty — this is a new user registration form, not an edit form.
+    document.getElementById('userId').value       = '';
+    document.getElementById('userName').value     = '';
+    document.getElementById('roomNumber').value   = '';
+    document.getElementById('systemNumber').value = '';
   }
 
   // ── Profile selection ─────────────────────────────────────────────────────────

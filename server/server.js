@@ -261,9 +261,17 @@ app.delete('/api/admin/clients/:id', requireAdmin, (req, res) => {
 
 // ── Client-users management ────────────────────────────────────
 
-// GET /api/admin/clients/:id/users
+// GET /api/admin/clients/:id/users  — :id may be numeric client id OR hospital_code
 app.get('/api/admin/clients/:id/users', requireAdmin, (req, res) => {
-  res.json(listClientUsers.all(req.params.id));
+  const param = req.params.id;
+  // Resolve to numeric client_id — try hospital_code first, fall back to numeric id
+  let clientId = param;
+  if (isNaN(param)) {
+    const c = findClientByCode.get(param.toUpperCase());
+    if (!c) return res.json([]);
+    clientId = c.id;
+  }
+  res.json(listClientUsers.all(clientId));
 });
 
 // POST /api/admin/clients/:id/users  (admin can add users manually)
