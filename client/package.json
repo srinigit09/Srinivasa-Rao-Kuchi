@@ -22,6 +22,7 @@
     "appId": "com.hospital.panicalarmclient",
     "productName": "PanicAlarmClient",
     "copyright": "Hospital Panic Alarm System",
+    "electronLanguages": ["en"],
     "directories": {
       "output": "dist"
     },
@@ -30,7 +31,13 @@
       "preload.js",
       "renderer/**/*",
       "assets/**/*",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "!node_modules/@types/**",
+      "!node_modules/**/*.md",
+      "!node_modules/**/*.ts",
+      "!node_modules/**/test/**",
+      "!node_modules/**/tests/**",
+      "!node_modules/**/.github/**"
     ],
     "win": {
       "target": [

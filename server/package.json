@@ -32,6 +32,7 @@
     "appId": "com.hospital.panicalarm.server",
     "productName": "PanicAlarmServer",
     "copyright": "Hospital Panic Alarm System",
+    "electronLanguages": ["en"],
     "directories": {
       "output": "dist"
     },
@@ -45,7 +46,20 @@
       "renderer/**/*",
       "public/**/*",
       "assets/**/*",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "!node_modules/@types/**",
+      "!node_modules/prebuild-install/**",
+      "!node_modules/node-gyp/**",
+      "!node_modules/napi-build-utils/**",
+      "!node_modules/node-abi/**",
+      "!node_modules/detect-libc/**",
+      "!node_modules/expand-template/**",
+      "!node_modules/github-from-package/**",
+      "!node_modules/**/*.md",
+      "!node_modules/**/*.ts",
+      "!node_modules/**/test/**",
+      "!node_modules/**/tests/**",
+      "!node_modules/**/.github/**"
     ],
     "win": {
       "target": [

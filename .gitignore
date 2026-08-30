@@ -37,3 +37,13 @@ server_icns_*.png
 *_orig_*.png
 server/data/security.log
 client-configs/
+*.zip
+builder-debug.yml
+
+# ── Intermediate electron-builder staging folders ──────────────
+client/dist/mac/
+client/dist/mac-arm64/
+client/dist/win-unpacked/
+server/dist/mac/
+server/dist/mac-arm64/
+server/dist/win-unpacked/
