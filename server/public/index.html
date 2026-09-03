@@ -20,6 +20,10 @@ body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; background
   display: flex; flex-direction: column; z-index: 50;
   border-right: 1px solid #e2e8f0;
   box-shadow: 2px 0 8px rgba(0,0,0,.06);
+  overflow: hidden;
+}
+.sidebar-scroll {
+  flex: 1; overflow-y: auto; min-height: 0;
 }
 .sidebar .brand {
   padding: 20px 18px 16px;
@@ -59,8 +63,9 @@ body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; background
 .nav-download .icon { font-size: 15px; width: 20px; text-align: center; }
 
 /* Sidebar bottom — user + logout */
-.nav-spacer { flex: 1; }
+.nav-spacer { display: none; }
 .nav-bottom {
+  flex-shrink: 0;
   padding: 12px 14px 14px;
   border-top: 1px solid #f1f5f9;
   background: #fafbfd;
@@ -234,50 +239,50 @@ tr:hover td { background: #f8fafc; }
       </div>
     </div>
 
-    <div class="nav-section">
-      <div class="nav-section-label">Overview</div>
-      <a class="nav-link active" onclick="showPage('dashboard')" id="nav-dashboard">
-        <span class="icon">📊</span> Dashboard
-      </a>
-    </div>
+    <div class="sidebar-scroll">
+      <div class="nav-section">
+        <div class="nav-section-label">Overview</div>
+        <a class="nav-link active" onclick="showPage('dashboard')" id="nav-dashboard">
+          <span class="icon">📊</span> Dashboard
+        </a>
+      </div>
 
-    <div class="nav-section">
-      <div class="nav-section-label">Management</div>
-      <a class="nav-link" onclick="showPage('clients')" id="nav-clients">
-        <span class="icon">🏥</span> Add Client
-      </a>
-      <a class="nav-link" onclick="showPage('clientList')" id="nav-clientList">
-        <span class="icon">📋</span> Client List
-      </a>
-      <a class="nav-link" onclick="showPage('departments')" id="nav-departments">
-        <span class="icon">🏢</span> Locations
-      </a>
-      <a class="nav-link" onclick="showPage('deptBlocks')" id="nav-deptBlocks">
-        <span class="icon">🗂</span> Departments
-      </a>
-    </div>
+      <div class="nav-section">
+        <div class="nav-section-label">Management</div>
+        <a class="nav-link" onclick="showPage('clients')" id="nav-clients">
+          <span class="icon">🏥</span> Add Client
+        </a>
+        <a class="nav-link" onclick="showPage('clientList')" id="nav-clientList">
+          <span class="icon">📋</span> Client List
+        </a>
+        <a class="nav-link" onclick="showPage('departments')" id="nav-departments">
+          <span class="icon">🏢</span> Locations
+        </a>
+        <a class="nav-link" onclick="showPage('deptBlocks')" id="nav-deptBlocks">
+          <span class="icon">🗂</span> Departments
+        </a>
+      </div>
 
-    <div class="nav-section">
-      <div class="nav-section-label">Reports</div>
-      <a class="nav-link" onclick="showPage('reports')" id="nav-reports">
-        <span class="icon">📈</span> Reports
-      </a>
-      <a class="nav-link" onclick="showPage('logs')" id="nav-logs">
-        <span class="icon">🗂</span> Alarm Logs
-      </a>
-    </div>
+      <div class="nav-section">
+        <div class="nav-section-label">Reports</div>
+        <a class="nav-link" onclick="showPage('reports')" id="nav-reports">
+          <span class="icon">📈</span> Reports
+        </a>
+        <a class="nav-link" onclick="showPage('logs')" id="nav-logs">
+          <span class="icon">🗂</span> Alarm Logs
+        </a>
+      </div>
 
-    <div class="nav-section">
-      <div class="nav-section-label">Settings</div>
-      <a class="nav-link" onclick="showPage('changePassword')" id="nav-changePassword">
-        <span class="icon">🔑</span> Change Password
-      </a>
-      <a class="nav-download" id="btnDownloadClient" style="cursor:pointer" title="Save the client installer to your desktop">
-        <span class="icon">⬇️</span> Download Client Installer
-      </a>
-    </div>
-
-    <div class="nav-spacer"></div>
+      <div class="nav-section">
+        <div class="nav-section-label">Settings</div>
+        <a class="nav-link" onclick="showPage('changePassword')" id="nav-changePassword">
+          <span class="icon">🔑</span> Change Password
+        </a>
+        <a class="nav-download" id="btnDownloadClient" style="cursor:pointer" title="Save the client installer to your desktop">
+          <span class="icon">⬇️</span> Download Client Installer
+        </a>
+      </div>
+    </div><!-- /.sidebar-scroll -->
 
     <div class="nav-bottom">
       <div class="user-pill">

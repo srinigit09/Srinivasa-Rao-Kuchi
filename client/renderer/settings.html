@@ -272,7 +272,9 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
 
   // ── Load hospitals dropdown ───────────────────────────────────────────────────
   // preSelectCode: hospital code to pre-select after loading (optional)
-  async function loadHospitals(serverUrl, preSelectCode) {
+  // writeBackUrl:  when true, write the normalised URL back into the input (only
+  //                used during init/pre-fill so the user's own typing is never overwritten)
+  async function loadHospitals(serverUrl, preSelectCode, writeBackUrl) {
     const sel = document.getElementById('hospitalSelect');
     sel.innerHTML = '<option value="">⏳ Loading hospitals…</option>';
     sel.disabled = true;
@@ -280,7 +282,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     verifiedHospitalName = null;
 
     const url = normaliseUrl(serverUrl);
-    document.getElementById('serverUrl').value = url;
+    if (writeBackUrl) document.getElementById('serverUrl').value = url;
     if (!url) { sel.innerHTML = '<option value="">— Enter server URL above to load —</option>'; return; }
 
     try {
@@ -361,14 +363,14 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
   // ── Server URL events (register mode) — user can edit & reload ───────────────
   document.getElementById('serverUrl').addEventListener('blur', () => {
     const url = document.getElementById('serverUrl').value.trim();
-    if (url) loadHospitals(url, null);
+    if (url) loadHospitals(url, null, false);
   });
   document.getElementById('serverUrl').addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); loadHospitals(document.getElementById('serverUrl').value, null); }
+    if (e.key === 'Enter') { e.preventDefault(); loadHospitals(document.getElementById('serverUrl').value, null, false); }
   });
   document.getElementById('btnReload').addEventListener('click', () => {
     const url = document.getElementById('serverUrl').value.trim();
-    if (url) loadHospitals(url, null);
+    if (url) loadHospitals(url, null, false);
     else flash('Enter a Server IP & Port first.', false);
   });
   document.getElementById('hospitalSelect').addEventListener('change', onHospitalChange);
@@ -393,7 +395,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     const hint = await api.getLastServerHint();
     if (hint && hint.serverUrl) {
       document.getElementById('serverUrl').value = hint.serverUrl;
-      await loadHospitals(hint.serverUrl, hint.hospitalCode || null);
+      await loadHospitals(hint.serverUrl, hint.hospitalCode || null, true);
     }
   }
 
