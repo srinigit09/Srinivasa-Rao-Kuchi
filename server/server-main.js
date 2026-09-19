@@ -173,12 +173,20 @@ function createTray() {
 function rebuildTrayMenu(running) {
   if (!tray) return;
   const ips = getLocalIPs();
+  const clientUrl = `http://${ips[0] || 'localhost'}:${serverPort}`;
   tray.setToolTip(running
-    ? `Panic Alarm Server — Running on port ${serverPort}`
+    ? `Panic Alarm Server — ${clientUrl}`
     : 'Panic Alarm Server — Starting…');
   const items = [
     { label: running ? `🟢 Server Running — Port ${serverPort}` : '⏳ Starting server…', enabled: false },
-    ...(running ? [{ label: `IP: ${ips.join(', ') || 'N/A'}`, enabled: false }] : []),
+    ...(running ? [
+      { label: `IP: ${ips.join(', ') || 'N/A'}`, enabled: false },
+      { type: 'separator' },
+      { label: `📋 Copy Client URL  (${clientUrl})`, click: () => {
+          require('electron').clipboard.writeText(clientUrl);
+        }
+      },
+    ] : []),
     { type: 'separator' },
     { label: 'Quit Server', click: () => app.quit() },
   ];

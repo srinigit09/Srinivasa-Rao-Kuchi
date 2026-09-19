@@ -6,9 +6,7 @@
   "scripts": {
     "start": "electron .",
     "build-win": "electron-builder --win --x64",
-    "build-mac": "electron-builder --mac --x64 && bash fix-mac-dmg.sh --intel",
-    "build-mac-arm": "electron-builder --mac --arm64 && bash fix-mac-dmg.sh",
-    "build-both-mac": "electron-builder --mac --x64 --arm64 && bash fix-mac-dmg.sh --both",
+    "build-mac": "electron-builder --mac --arm64 && bash fix-mac-dmg.sh",
     "build-linux": "electron-builder --linux"
   },
   "dependencies": {
@@ -65,7 +63,6 @@
         {
           "target": "dmg",
           "arch": [
-            "x64",
             "arm64"
           ]
         }

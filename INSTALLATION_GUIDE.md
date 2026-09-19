@@ -40,7 +40,7 @@ Everything is bundled inside — Node.js, the database, all libraries, the deskt
    - **Password:** `admin@PanicAlarm2026`
 5. The admin panel opens in a window ✅
 6. The 🖥️ icon in the menu bar shows the server is running
-7. Note the **Server IP address** shown on the login screen (e.g. `192.168.1.10`) — you need this for client setup
+7. Note the **Server IP address** shown on the login screen (e.g. `<server-ip>`) — you need this for client setup
 
 ### On Windows:
 1. Double-click `PanicAlarmServer Setup 1.0.0.exe`
@@ -100,7 +100,7 @@ The hospital code is what staff enter during client setup.
 
 | Field | Example | Notes |
 |---|---|---|
-| Server URL | `http://192.168.1.10:4000` | The IP noted in Step 1 |
+| Server URL | `http://<server-ip>:4000` | The IP noted in Step 1 |
 | Hospital / Clinic Name | *(dropdown)* | Click **Load Hospitals** → select from list |
 | User ID | `DOC-001` | Unique ID for this person (e.g. employee number) |
 | Your Name | `Dr. John Smith` | |
@@ -191,7 +191,7 @@ netsh advfirewall firewall add rule name="PanicAlarm" dir=in action=allow protoc
 
 | Problem | Fix |
 |---|---|
-| **"Cannot connect to server"** during client setup | Check Server URL is correct (e.g. `http://192.168.1.10:4000`) · Make sure server app is running · Check firewall (see above) |
+| **"Cannot connect to server"** during client setup | Check Server URL is correct (e.g. `http://<server-ip>:4000`) · Make sure server app is running · Check firewall (see above) |
 | **Hospital dropdown is empty** | Click "Load Hospitals from Server" after entering the Server URL · Make sure a hospital was added in the admin panel first |
 | **"User ID already registered"** | Each person needs a unique User ID · Try `DOC-002` instead of `DOC-001` |
 | **No popup on alarm** | Check client is connected — tray icon shows 🟢 Connected · Check both machines are on the same hospital network |

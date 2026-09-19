@@ -148,7 +148,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
       <div class="fg">
         <label>Server IP &amp; Port <span class="required-star">*</span></label>
         <div style="display:flex;gap:6px;align-items:center">
-          <input type="text" id="serverUrl" placeholder="http://192.168.1.5:4000" autocomplete="off" spellcheck="false" style="margin-bottom:0;flex:1">
+          <input type="text" id="serverUrl" placeholder="http://<server-ip>:<port>" autocomplete="off" spellcheck="false" style="margin-bottom:0;flex:1">
           <button class="btn-reload" id="btnReload" title="Connect / Reload hospitals">⟳ Connect</button>
         </div>
       </div>
@@ -220,7 +220,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     <!-- Server URL + Department (edit mode only) -->
     <div class="fg" id="deptEditSection" style="display:none">
       <label>Server URL</label>
-      <input type="text" id="serverUrlEdit" placeholder="http://192.168.1.5:4000" autocomplete="off" spellcheck="false">
+      <input type="text" id="serverUrlEdit" placeholder="http://<server-ip>:<port>" autocomplete="off" spellcheck="false">
       <div style="height:8px"></div>
       <label>Department / Block</label>
       <select id="departmentSelectEdit">

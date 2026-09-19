@@ -88,7 +88,7 @@ hr { border: none; border-top: 1px solid #e5e7eb; margin: 14px 0; }
     <p>Secure Admin Access</p>
   </div>
 
-  <div class="server-badge" id="serverBadge">🟢 Server starting on port 4000…</div>
+  <div class="server-badge" id="serverBadge">⏳ Server starting…</div>
 
   <!-- Login form -->
   <div id="loginSection">
@@ -128,14 +128,26 @@ hr { border: none; border-top: 1px solid #e5e7eb; margin: 14px 0; }
   async function loadServerInfo() {
     try {
       const info = await sapi.getServerInfo();
-      const ip = info.ips && info.ips[0] ? info.ips[0] : 'localhost';
-      document.getElementById('serverBadge').textContent = `🟢 Server running  ·  Port ${info.port}`;
+      const ips  = info.ips && info.ips.length ? info.ips : [];
+      const primaryIp = ips[0] || null;
+      const port = info.port;
+      document.getElementById('serverBadge').textContent =
+        primaryIp ? `🟢 Running  ·  ${primaryIp}:${port}` : `🟢 Running  ·  Port ${port}`;
+      const allIps = ips.length
+        ? ips.map(ip => `<strong style="color:#1f2328">http://${ip}:${port}</strong>`).join('<br>')
+        : `<strong style="color:#1f2328">http://localhost:${port}</strong>`;
       document.getElementById('serverInfo').innerHTML =
-        `Clients connect to: <strong style="color:#1f2328">http://${ip}:${info.port}</strong><br>` +
-        `Admin panel: <strong style="color:#1f2328">http://${ip}:${info.port}/admin/</strong>`;
+        `<span style="color:#57606a">Client URL${ips.length > 1 ? 's' : ''}:</span><br>${allIps}` +
+        `<br><button onclick="copyUrl('http://${primaryIp || 'localhost'}:${port}')" ` +
+        `style="margin-top:6px;font-size:11px;padding:3px 10px;cursor:pointer;border:1px solid #d0d7de;border-radius:4px;background:#f6f8fa;">` +
+        `📋 Copy URL</button>`;
     } catch {
       document.getElementById('serverBadge').textContent = '⏳ Server starting…';
     }
+  }
+
+  function copyUrl(url) {
+    navigator.clipboard.writeText(url).catch(() => {});
   }
 
   loadServerInfo();
