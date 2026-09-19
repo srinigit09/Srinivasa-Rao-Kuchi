@@ -141,6 +141,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
       <div style="font-size:16px; margin-bottom:2px;">🚨</div>
       <div style="font-size:11px; font-weight:800; letter-spacing:1.5px; color:#1e293b; text-transform:uppercase;">Panic Alarm Client</div>
       <div style="font-size:10px; color:#94a3b8; margin-top:1px;" id="pageSubtitle">User Details</div>
+      <div id="connStatus" style="font-size:10px; margin-top:4px; display:none;"></div>
     </div>
 
     <!-- Server connection (register mode only) -->
@@ -342,15 +343,19 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     } catch { /* departments optional */ }
   }
 
+  let _deptEditToken = 0;
   async function loadDepartmentsEdit(serverUrl, hospitalCode, current) {
+    const token = ++_deptEditToken;
     const sel = document.getElementById('departmentSelectEdit');
     sel.innerHTML = '<option value="">None</option>';
     if (!serverUrl || !hospitalCode) return;
     try {
       const resp = await fetch(`${serverUrl}/api/public/departments/${hospitalCode}`,
         { signal: AbortSignal.timeout(5000) });
+      if (token !== _deptEditToken) return;  // stale — a newer call already took over
       if (!resp.ok) return;
       const depts = await resp.json();
+      if (token !== _deptEditToken) return;  // stale
       depts.forEach(d => {
         const opt = document.createElement('option');
         opt.value = d.name; opt.textContent = d.name;
@@ -399,7 +404,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     }
   }
 
-  function setupEditMode(cfg) {
+  async function setupEditMode(cfg) {
     isRegister = false;
     config = cfg;
     document.getElementById('pageSubtitle').textContent    = 'Edit User Details';
@@ -424,10 +429,22 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     document.getElementById('roomNumber').value   = cfg.room_number  || '';
     document.getElementById('systemNumber').value = cfg.system_number || '';
 
+    // Show live connection status
+    const connEl = document.getElementById('connStatus');
+    connEl.style.display = 'block';
+    try {
+      const { connected } = await api.getConnectionStatus();
+      connEl.textContent  = connected ? '🟢 Connected to server' : '🔴 Not connected to server';
+      connEl.style.color  = connected ? '#16a34a' : '#dc2626';
+    } catch {
+      connEl.textContent = '🔴 Not connected to server';
+      connEl.style.color = '#dc2626';
+    }
+
     // Load departments
     loadDepartmentsEdit(cfg.serverUrl, cfg.hospitalCode, cfg.department || '');
 
-    // Fetch live server data to refresh hospital name
+    // Fetch live server data to refresh hospital name (silent, best-effort)
     fetchLiveServerData(cfg);
   }
 

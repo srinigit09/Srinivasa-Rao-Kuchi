@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getConfig           : ()      => ipcRenderer.invoke('get-config'),
   getDeviceId         : ()      => ipcRenderer.invoke('get-device-id'),
   getLastServerHint   : ()      => ipcRenderer.invoke('get-last-server-hint'),
+  getConnectionStatus : ()      => ipcRenderer.invoke('get-connection-status'),
   setupComplete       : (cfg)   => ipcRenderer.invoke('setup-complete', cfg),
   settingsUpdated     : (cfg)   => ipcRenderer.invoke('settings-updated', cfg),
   dismissAlert        : ()      => ipcRenderer.invoke('dismiss-alert'),

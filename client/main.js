@@ -11,11 +11,8 @@ const CONFIG_FILE       = path.join(CONFIG_DIR, 'panic-alarm-config.json');
 const LAST_SERVER_FILE  = path.join(CONFIG_DIR, 'last-server-url');   // survives config wipe
 const LAST_HINT_FILE    = path.join(CONFIG_DIR, 'last-server-hint');  // serverUrl|hospitalCode
 
-// Every launch is treated as a fresh installation.
-// Wipe the saved config unconditionally so the New User Registration form
-// always opens on startup. last-server-url / last-server-hint and device-id
-// survive — they are used to pre-populate the registration form automatically.
-function clearConfigOnLaunch() {
+// Ensure config dir exists and seed hint from backup on very first run
+function initConfigDir() {
   if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
 
   // Seed last-server-hint from .bak if hint file doesn't exist yet
@@ -27,16 +24,11 @@ function clearConfigOnLaunch() {
         const hint = JSON.stringify({ serverUrl: bak.serverUrl, hospitalCode: bak.hospitalCode || '' });
         fs.writeFileSync(LAST_HINT_FILE, hint, 'utf8');
         fs.writeFileSync(LAST_SERVER_FILE, bak.serverUrl, 'utf8');
-        console.log('[Launch] Seeded server hint from backup:', bak.serverUrl, bak.hospitalCode);
       }
     } catch { /* no bak — first ever install */ }
   }
 
-  if (fs.existsSync(CONFIG_FILE)) {
-    fs.unlinkSync(CONFIG_FILE);
-    console.log('[Launch] Config wiped — New User Registration form will open');
-  }
-  // Also remove legacy installed-version file if present
+  // Remove legacy installed-version file if present
   const legacyVer = path.join(CONFIG_DIR, 'installed-version');
   if (fs.existsSync(legacyVer)) fs.unlinkSync(legacyVer);
 }
@@ -101,7 +93,11 @@ app.on('second-instance', () => {
 //  SOCKET.IO — runs in main process, no renderer window needed
 // ═══════════════════════════════════════════════════════════════════════════════
 function connectSocket(config) {
-  if (socket) { socket.disconnect(); socket = null; }
+  if (socket) {
+    socket.off();          // remove all listeners before disconnecting to prevent spurious events
+    socket.disconnect();
+    socket = null;
+  }
 
   if (!config.serverUrl || !config.token) {
     console.error('[Socket] Cannot connect — missing serverUrl or token in config');
@@ -114,26 +110,57 @@ function connectSocket(config) {
     reconnectionDelay: 3000,
     auth            : { token: config.token },
   });
+  let wasConnected = false;
+
+  // Show "server not reachable" dialog if no connection within 10s on launch
+  let launchTimer = setTimeout(() => {
+    if (!socket.connected) {
+      dialog.showMessageBox({
+        type   : 'warning',
+        title  : 'Server Not Reachable',
+        message: 'Cannot connect to the Panic Alarm Server.',
+        detail : `The app will keep retrying in the background.\n\nServer: ${config.serverUrl}\n\nIf this persists, check the server is running and the URL is correct via tray → Edit User Details.`,
+        buttons: ['OK'],
+      });
+    }
+  }, 10000);
 
   socket.on('connect', () => {
     console.log('[Socket] Connected');
-    // Always send hospitalCode in uppercase so it matches the broadcast room name
+    wasConnected = true;
+    clearTimeout(launchTimer);
+    launchTimer = null;
     socket.emit('join', {
       hospitalCode: (config.hospitalCode || '').toUpperCase(),
       userName    : config.user_name,
       deviceId    : config.deviceId,
     });
     rebuildTrayMenu(config, true);
+    // Show alarm button only when connected
+    if (!alarmButton || alarmButton.isDestroyed()) createAlarmButton(config);
   });
 
   socket.on('disconnect', () => {
     console.log('[Socket] Disconnected');
     rebuildTrayMenu(config, false);
+    if (alarmButton && !alarmButton.isDestroyed()) alarmButton.close();
+    // Only show dialog if we had an established connection (not initial connect failures)
+    if (wasConnected) {
+      wasConnected = false;
+      dialog.showMessageBox({
+        type   : 'warning',
+        title  : 'Server Disconnected',
+        message: 'Connection to the Panic Alarm Server was lost.',
+        detail : 'The alarm button has been disabled. The app will automatically reconnect when the server is available again.',
+        buttons: ['OK'],
+      });
+    }
   });
 
   socket.on('connect_error', (err) => {
     console.log('[Socket] Error:', err.message);
     rebuildTrayMenu(config, false);
+    if (alarmButton && !alarmButton.isDestroyed()) alarmButton.close();
   });
 
   // ── This is the key event — show popup on every registered PC ────────────────
@@ -327,6 +354,7 @@ function rebuildTrayMenu(config, connected) {
 ipcMain.handle('get-config',           () => loadConfig());
 ipcMain.handle('get-device-id',        () => getOrCreateDeviceId());
 ipcMain.handle('get-last-server-hint', () => getLastServerHint());
+ipcMain.handle('get-connection-status',() => ({ connected: socket?.connected || false }));
 
 // Called by setup.html after successful registration
 ipcMain.handle('setup-complete', (_, config) => {
@@ -445,21 +473,25 @@ function hideDock() {
 
 function launchAfterSetup(config) {
   hideDock();
-  // Ensure auto-launch is enabled once the user has completed setup
   setAutoLaunch(true);
-  // Rebuild the existing tray menu — do NOT call createTray() again (would add a second icon)
   rebuildTrayMenu(config, false);
-  // Doctor gets the floating ALERT button
-  createAlarmButton(config);
-  // Everyone connects to the socket silently in background
+  // Alarm button only appears once socket connects — see socket.on('connect')
   connectSocket(config);
 }
 
 app.whenReady().then(() => {
-  clearConfigOnLaunch();   // always wipe config — every launch is a fresh registration
-  hideDock();              // hide dock immediately — before any window opens
-  createTray(null);
-  createSetupWindow();     // always open New User Registration form on launch
+  initConfigDir();
+  hideDock();
+  const config = loadConfig();
+  if (config && config.token) {
+    // Already registered — skip form, go straight to running
+    createTray(config);
+    launchAfterSetup(config);
+  } else {
+    // First run or no config — show registration form
+    createTray(null);
+    createSetupWindow();
+  }
 });
 
 // On macOS activate — do NOT show dock icon; open settings via tray instead

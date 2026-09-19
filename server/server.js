@@ -591,9 +591,6 @@ app.put('/api/client/me', requireClient, (req, res) => {
 // POST /api/client/alarm/trigger
 app.post('/api/client/alarm/trigger', requireClient, (req, res) => {
   const u = req.clientUser;
-  const role = normalizeRole(u.role);
-  if (role !== 'doctor')
-    return res.status(403).json({ error: 'Only doctors can trigger alarms' });
 
   const alarmId  = uuidv4();
   const userId   = u.user_id || u.userId || '';
