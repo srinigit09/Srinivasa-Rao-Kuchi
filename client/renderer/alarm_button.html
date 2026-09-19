@@ -16,54 +16,39 @@ html, body {
   display: flex; align-items: center; justify-content: center;
 }
 .btn-alert {
-  width: 78px; height: 78px;
+  width: 86px; height: 86px;
   border-radius: 50%;
-  background: var(--btn-bg, radial-gradient(circle at 38% 30%, #ff6b6b, #c0392b));
-  border: 3px solid rgba(255,255,255,0.9);
-  box-shadow: 0 0 0 3px var(--glow, rgba(231,76,60,0.5)), 0 4px 14px rgba(0,0,0,0.55);
+  background: var(--btn-fill, rgba(5,150,105,0.25));
+  border: 0.5px solid var(--btn-border, rgba(5,150,105,0.55));
+  box-shadow: none;
   cursor: grab;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  gap: 2px;
-  transition: transform .08s, box-shadow .1s;
+  transition: transform .08s, background .15s, border-color .15s;
 }
 .btn-alert:hover {
+  background: var(--btn-fill-hover, rgba(5,150,105,0.45));
+  border-color: var(--btn-border-hover, rgba(5,150,105,0.8));
   transform: scale(1.04);
-  box-shadow: 0 0 0 5px var(--glow, rgba(231,76,60,0.65)), 0 6px 20px rgba(0,0,0,0.6);
 }
 .btn-alert:active { cursor: grabbing; transform: scale(0.95); }
 
-/* Armed state — yellow highlight, no animation */
+/* Armed state */
 .btn-alert.armed {
-  border-color: #ffe066;
-  box-shadow: 0 0 0 6px rgba(255,224,0,0.6), 0 6px 24px rgba(0,0,0,0.65);
+  background: rgba(255,200,0,0.35);
+  border-color: rgba(255,200,0,0.75);
   transform: scale(1.04);
 }
 
-.btn-label {
-  font-family: -apple-system, "Segoe UI", sans-serif;
-  font-size: 10px; font-weight: 900;
-  color: #fff; letter-spacing: 1.5px;
-  text-transform: uppercase;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.7);
-  pointer-events: none; line-height: 1;
-}
-.btn-sublabel {
-  font-family: -apple-system, "Segoe UI", sans-serif;
-  font-size: 8px; font-weight: 700;
-  color: rgba(255,255,255,0.82);
-  letter-spacing: 1px; text-transform: uppercase;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
-  pointer-events: none;
-}
+.btn-label, .btn-sublabel { display: none; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <button class="btn-alert" id="btnAlert"
     title="Click to arm · Click again to send PANIC ALARM · Drag to move">
-    <div class="btn-label"    id="btnLabel">PANIC</div>
-    <div class="btn-sublabel" id="btnSub">ALARM</div>
+    <div class="btn-label"    id="btnLabel"></div>
+    <div class="btn-sublabel" id="btnSub"></div>
   </button>
 </div>
 
@@ -74,27 +59,43 @@ html, body {
   let armed    = false;
   let armTimer = null;
 
-  // ── Colour presets ────────────────────────────────────────────────
+  // ── Colour presets — [r, g, b] ────────────────────────────────────
   const COLOURS = [
-    { start: '#ff6b6b', end: '#c0392b', glow: 'rgba(231,76,60,0.55)'  },
-    { start: '#ff9f43', end: '#e17055', glow: 'rgba(255,159,67,0.6)'  },
-    { start: '#ffd32a', end: '#c8a800', glow: 'rgba(255,211,42,0.6)'  },
-    { start: '#55efc4', end: '#00b894', glow: 'rgba(0,184,148,0.6)'   },
-    { start: '#74b9ff', end: '#0984e3', glow: 'rgba(9,132,227,0.6)'   },
-    { start: '#a29bfe', end: '#6c5ce7', glow: 'rgba(108,92,231,0.6)'  },
-    { start: '#636e72', end: '#2d3436', glow: 'rgba(99,110,114,0.6)'  },
+    [220,  38,  38],   // red
+    [234,  88,  12],   // orange
+    [202, 138,   4],   // yellow
+    [  5, 150, 105],   // green
+    [ 37,  99, 235],   // blue
+    [124,  58, 237],   // purple
+    [ 71,  85, 105],   // dark
   ];
 
+  let isSolid = false;
+
   function applyColour(idx) {
-    const c = COLOURS[idx] || COLOURS[0];
-    document.documentElement.style.setProperty('--btn-bg',
-      `radial-gradient(circle at 38% 30%, ${c.start}, ${c.end})`);
-    document.documentElement.style.setProperty('--glow', c.glow);
+    const [r, g, b] = COLOURS[idx] || COLOURS[3];
+    const root = document.documentElement;
+    const fill   = isSolid ? 1.0 : 0.25;
+    const border = isSolid ? 1.0 : 0.55;
+    const fillH  = isSolid ? 1.0 : 0.45;
+    const bordH  = isSolid ? 1.0 : 0.8;
+    root.style.setProperty('--btn-fill',         `rgba(${r},${g},${b},${fill})`);
+    root.style.setProperty('--btn-border',        `rgba(${r},${g},${b},${border})`);
+    root.style.setProperty('--btn-fill-hover',    `rgba(${r},${g},${b},${fillH})`);
+    root.style.setProperty('--btn-border-hover',  `rgba(${r},${g},${b},${bordH})`);
+  }
+
+  function applySolid(solid) {
+    isSolid = solid;
+    const cfg = config;
+    applyColour(cfg?.alertButtonColour ?? 3);
+    api.setAlertSolid(solid);
   }
 
   function applyConfig(cfg) {
     config = cfg;
-    applyColour(cfg?.alertButtonColour ?? 0);
+    isSolid = cfg?.alertButtonSolid ?? false;
+    applyColour(cfg?.alertButtonColour ?? 3);
   }
   api.getConfig().then(applyConfig);
   api.onClientConfig(applyConfig);
@@ -102,6 +103,7 @@ html, body {
   // ── Right-click → colour picker ───────────────────────────────────
   document.addEventListener('contextmenu', e => { e.preventDefault(); api.showColourMenu(); });
   api.onColourChange(idx => { applyColour(idx); api.setAlertButtonColour(idx); });
+  api.onSolidChange(solid => applySolid(solid));
 
   // ── Drag to move ──────────────────────────────────────────────────
   let dragging = false, dragX = 0, dragY = 0, moved = false;

@@ -76,7 +76,7 @@ function getOrCreateDeviceId() {
 
 // ── Window refs ────────────────────────────────────────────────────────────────
 let setupWindow    = null;   // first-run wizard (closes after setup)
-let alarmButton    = null;   // doctor only: floating round ALERT button
+let alarmButton    = null;   // floating round ALERT button (all roles)
 let alertPopup     = null;   // alert notification popup (all roles)
 let settingsWindow = null;   // tray → My Details
 let tray           = null;
@@ -288,7 +288,7 @@ function rebuildTrayMenu(config, connected) {
     { label: statusLabel, enabled: false },
     { type: 'separator' },
     { label: '✏️  Edit User Details', click: createSettingsWindow },
-    ...(config.role === 'doctor' ? [{
+    ...(true ? [{
       label: alarmButton && !alarmButton.isDestroyed()
         ? '🔴  Panic Alarm: ON'
         : '▶  Show Panic Alarm',
@@ -367,15 +367,16 @@ ipcMain.on('move-alarm-window', (_, { dx, dy }) => {
 
 // ── Alert button colour ────────────────────────────────────────────────────────
 const COLOUR_LABELS = [
-  '🔴 Red (default)', '🟠 Orange', '🟡 Yellow',
-  '🟢 Green', '🔵 Blue', '🟣 Purple', '⚫ Dark',
+  '🔴 Red', '🟠 Orange', '🟡 Yellow',
+  '🟢 Green (default)', '🔵 Blue', '🟣 Purple', '⚫ Dark',
 ];
 
-// Right-click on alarm button → colour picker + Quit Alarm Button
+// Right-click on alarm button → colour picker + solid toggle + Quit
 ipcMain.on('show-colour-menu', () => {
   if (!alarmButton || alarmButton.isDestroyed()) return;
   const config  = loadConfig();
-  const current = config?.alertButtonColour ?? 0;
+  const current = config?.alertButtonColour ?? 3;
+  const solid   = config?.alertButtonSolid  ?? false;
   const menu = Menu.buildFromTemplate([
     {
       label: '🎨  Change Colour',
@@ -389,6 +390,15 @@ ipcMain.on('show-colour-menu', () => {
           }
         },
       })),
+    },
+    {
+      label  : solid ? '◑  Solid (on) — click to make transparent' : '◑  Transparent (on) — click to make solid',
+      type   : 'normal',
+      click  : () => {
+        if (alarmButton && !alarmButton.isDestroyed()) {
+          alarmButton.webContents.send('alert-solid-change', !solid);
+        }
+      },
     },
     { type: 'separator' },
     { label: '✖  Quit Alarm Button', click: () => {
@@ -404,6 +414,14 @@ ipcMain.handle('set-alert-colour', (_, idx) => {
   const config = loadConfig();
   if (!config) return;
   config.alertButtonColour = idx;
+  saveConfig(config);
+});
+
+// Persist solid toggle from renderer
+ipcMain.handle('set-alert-solid', (_, solid) => {
+  const config = loadConfig();
+  if (!config) return;
+  config.alertButtonSolid = solid;
   saveConfig(config);
 });
 
@@ -432,7 +450,7 @@ function launchAfterSetup(config) {
   // Rebuild the existing tray menu — do NOT call createTray() again (would add a second icon)
   rebuildTrayMenu(config, false);
   // Doctor gets the floating ALERT button
-  if (config.role === 'doctor') createAlarmButton(config);
+  createAlarmButton(config);
   // Everyone connects to the socket silently in background
   connectSocket(config);
 }
