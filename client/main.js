@@ -113,6 +113,7 @@ let alertPopup     = null;   // alert notification popup (all roles)
 let settingsWindow = null;   // tray → My Details
 let tray           = null;
 let socket         = null;   // Socket.IO connection in main process
+let isQuitting     = false;  // true once the user has quit — suppresses disconnect dialog
 
 // ── Single instance lock — prevents multiple tray icons ──────────────────────
 const gotLock = app.requestSingleInstanceLock();
@@ -184,8 +185,8 @@ function connectSocket(config) {
     console.log('[Socket] Disconnected');
     rebuildTrayMenu(config, false);
     if (alarmButton && !alarmButton.isDestroyed()) alarmButton.close();
-    // Only show dialog if we had an established connection (not initial connect failures)
-    if (wasConnected) {
+    // Only show dialog if we had an established connection AND the user did not quit the app
+    if (wasConnected && !isQuitting) {
       wasConnected = false;
       dialog.showMessageBox({
         type   : 'warning',
@@ -557,5 +558,6 @@ app.on('activate', () => {
 app.on('window-all-closed', () => { /* intentionally empty — stay in tray */ });
 
 app.on('before-quit', () => {
-  if (socket) { socket.disconnect(); socket = null; }
+  isQuitting = true;              // prevent disconnect dialog when we initiated the quit
+  if (socket) { socket.off(); socket.disconnect(); socket = null; }
 });
