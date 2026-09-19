@@ -10,6 +10,7 @@ const CONFIG_DIR        = app.getPath('userData');
 const CONFIG_FILE       = path.join(CONFIG_DIR, 'panic-alarm-config.json');
 const LAST_SERVER_FILE  = path.join(CONFIG_DIR, 'last-server-url');   // survives config wipe
 const LAST_HINT_FILE    = path.join(CONFIG_DIR, 'last-server-hint');  // serverUrl|hospitalCode
+const SEEN_INSTALL_FILE = path.join(CONFIG_DIR, 'seen-install-id');   // tracks last seen install stamp
 
 // Ensure config dir exists and seed hint from backup on very first run
 function initConfigDir() {
@@ -31,6 +32,45 @@ function initConfigDir() {
   // Remove legacy installed-version file if present
   const legacyVer = path.join(CONFIG_DIR, 'installed-version');
   if (fs.existsSync(legacyVer)) fs.unlinkSync(legacyVer);
+}
+
+/**
+ * Detect whether this is a fresh installation or just a reopen.
+ *
+ * How it works:
+ *   - At build time, afterPack.js stamps a unique UUID into resources/install-id
+ *     inside the packaged app bundle. This file IS replaced on every reinstall.
+ *   - On first launch after any install we read that UUID and save it to
+ *     userData/seen-install-id (which survives reopens but NOT reinstalls,
+ *     because userData persists across reopens).
+ *   - Wait — userData is NOT wiped by the installer, so seen-install-id also
+ *     survives reinstall. The key is: resources/install-id CHANGES each build
+ *     (new UUID), so comparing the two reveals a reinstall.
+ *
+ * Returns true if this is a fresh install (config should be wiped).
+ */
+function isFreshInstall() {
+  const installIdFile = path.join(process.resourcesPath, 'install-id');
+  if (!fs.existsSync(installIdFile)) return false;  // dev mode / no stamp → treat as reopen
+
+  const currentId = fs.readFileSync(installIdFile, 'utf8').trim();
+  if (!currentId) return false;
+
+  let seenId = null;
+  try { seenId = fs.readFileSync(SEEN_INSTALL_FILE, 'utf8').trim(); } catch { /* not yet written */ }
+
+  if (seenId === currentId) return false;  // same install — just a reopen
+
+  // New install-id → fresh install. Save it so subsequent reopens pass through.
+  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  fs.writeFileSync(SEEN_INSTALL_FILE, currentId, 'utf8');
+  return true;
+}
+
+/** Wipe user config (but keep server hint so new-install form is pre-filled). */
+function wipeConfigForFreshInstall() {
+  try { fs.unlinkSync(CONFIG_FILE); } catch { /* already gone */ }
+  // Keep LAST_HINT_FILE and LAST_SERVER_FILE so the server URL field is pre-filled
 }
 
 function loadConfig() {
@@ -482,13 +522,19 @@ function launchAfterSetup(config) {
 app.whenReady().then(() => {
   initConfigDir();
   hideDock();
+
+  // Detect reinstall: if resources/install-id changed since last launch, wipe config
+  if (isFreshInstall()) {
+    wipeConfigForFreshInstall();
+  }
+
   const config = loadConfig();
   if (config && config.token) {
-    // Already registered — skip form, go straight to running
+    // Existing registration found — reopen, go straight to running
     createTray(config);
     launchAfterSetup(config);
   } else {
-    // First run or no config — show registration form
+    // Fresh install or no config — show registration form
     createTray(null);
     createSetupWindow();
   }

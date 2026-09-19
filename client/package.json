@@ -17,6 +17,7 @@
     "electron-builder": "26.15.3"
   },
   "build": {
+    "afterPack": "./afterPack.js",
     "appId": "com.hospital.panicalarmclient",
     "productName": "PanicAlarmClient",
     "copyright": "Hospital Panic Alarm System",
