@@ -11,12 +11,10 @@ const { v4: uuidv4 } = require('uuid');
 const os          = require('os');
 const path        = require('path');
 const crypto      = require('crypto');
-const cookieParser = require('cookie-parser');
-
 const { requireAdmin, requireClient, adminLogin, signClientToken, signAdminToken } = require('./auth');
 const {
   db,
-  findAdmin, listAdmins, updateAdminPassword,
+  findAdmin, updateAdminPassword,
   listClients, findClientByCode, findClientById, createClient, updateClient, deleteClient, countClientUsers, setClientLocation,
   listClientUsers, findClientUser, findClientUserById, findClientUserByUserId,
   createClientUser, createClientUserAdmin, updateClientUser,
@@ -62,9 +60,6 @@ function decryptValue(stored) {
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-try {
-  app.use(cookieParser());
-} catch { /* cookie-parser optional */ }
 
 // Serve web admin panel static files
 app.use('/admin', express.static(path.join(__dirname, 'public')));

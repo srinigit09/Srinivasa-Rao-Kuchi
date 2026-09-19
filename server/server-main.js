@@ -11,7 +11,7 @@
  *  4. System tray icon keeps the server running even when window is closed
  */
 
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } = require('electron');
 const path   = require('path');
 const fs     = require('fs');
 const http   = require('http');
@@ -28,12 +28,10 @@ function getServerRoot() {
 }
 
 // ── Window + state refs ───────────────────────────────────────────────────────
-let loginWindow  = null;
-let mainWindow   = null;
-let tray         = null;
-let serverProcess = null;   // child process (when running packaged)
-let embeddedApp  = null;    // embedded express app (dev mode)
-let serverPort   = 4000;
+let loginWindow   = null;
+let mainWindow    = null;
+let tray          = null;
+let serverPort    = 4000;
 let serverStarted = false;
 
 // ── Config persistence ────────────────────────────────────────────────────────
@@ -156,9 +154,7 @@ function buildAppMenu() {
 
 // ── Tray ──────────────────────────────────────────────────────────────────────
 function createTray() {
-  const img = nativeImage.createEmpty();
-
-  tray = new Tray(img);
+  tray = new Tray(nativeImage.createEmpty());
   tray.setTitle('🖥️');
   rebuildTrayMenu(false);
   tray.on('click', () => {

@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, dialog, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, dialog } = require('electron');
 const path   = require('path');
 const fs     = require('fs');
 const { io } = require('socket.io-client');
@@ -160,7 +160,7 @@ function connectSocket(config) {
         type   : 'warning',
         title  : 'Server Not Reachable',
         message: 'Cannot connect to the Panic Alarm Server.',
-        detail : `The app will keep retrying in the background.\n\nServer: ${config.serverUrl}\n\nIf this persists, check the server is running and the URL is correct via tray → Edit User Details.`,
+        detail : `The Panic Alarm app is running in the tray and will keep retrying automatically.\n\nThe alarm button will appear as soon as the server becomes reachable.\n\nServer: ${config.serverUrl}\n\nTo change the server address: right-click tray icon → Edit User Details.`,
         buttons: ['OK'],
       });
     }
@@ -184,21 +184,29 @@ function connectSocket(config) {
   socket.on('disconnect', () => {
     console.log('[Socket] Disconnected');
     if (alarmButton && !alarmButton.isDestroyed()) alarmButton.close();
-    // Only notify and quit if we had an established connection AND the user did not already quit
+    // Only show dialog if we had an established connection AND the user did not already quit
     if (wasConnected && !isQuitting) {
       wasConnected = false;
-      isQuitting = true;  // prevent any further quit-triggered events
-      // Show a non-blocking OS notification then quit
-      if (Notification.isSupported()) {
-        const n = new Notification({
-          title  : 'Panic Alarm — Server Disconnected',
-          body   : 'Connection to the server was lost. The app will now close.',
-          silent : false,
-        });
-        n.show();
-      }
-      // Give the notification a moment to appear before quitting
-      setTimeout(() => app.quit(), 1500);
+      isQuitting = true;  // tentatively set — cleared if user chooses Reconnect
+      rebuildTrayMenu(config, false);
+      dialog.showMessageBox({
+        type      : 'warning',
+        title     : 'Panic Alarm Server Disconnected',
+        message   : 'The Panic Alarm Server has stopped or is unreachable.',
+        detail    : `The alarm button has been disabled.\n\nIf the server has been restarted, click "Try Reconnect".\nOtherwise click "Close App" and reopen once the server is running.\n\nServer: ${config.serverUrl}`,
+        buttons   : ['Try Reconnect', 'Close App'],
+        defaultId : 0,
+        cancelId  : 1,
+      }).then(({ response }) => {
+        if (response === 0) {
+          // User chose Reconnect — reset state and reconnect socket
+          isQuitting = false;
+          wasConnected = false;
+          connectSocket(config);
+        } else {
+          app.quit();
+        }
+      });
     }
   });
 
@@ -288,8 +296,7 @@ function showAlertPopup(alarmData) {
     return;
   }
 
-  const displays = screen.getAllDisplays();
-  const primary  = screen.getPrimaryDisplay();
+  const primary = screen.getPrimaryDisplay();
 
   alertPopup = new BrowserWindow({
     width: 580, height: 300,
@@ -341,7 +348,7 @@ function createTray(config) {
   // Destroy any existing tray first — prevents duplicate icons on re-launch
   if (tray) { try { tray.destroy(); } catch { /* already gone */ } tray = null; }
   tray = new Tray(nativeImage.createEmpty());
-  tray.setTitle('🏥');  // hospital emoji — distinguishes client from server (🖥️)
+  tray.setTitle('🏥');
   rebuildTrayMenu(config, false);
 }
 
@@ -360,7 +367,7 @@ function rebuildTrayMenu(config, connected) {
     { label: statusLabel, enabled: false },
     { type: 'separator' },
     { label: '✏️  Edit User Details', click: createSettingsWindow },
-    ...(true ? [{
+    {
       label: alarmButton && !alarmButton.isDestroyed()
         ? '🔴  Panic Alarm: ON'
         : '▶  Show Panic Alarm',
@@ -368,7 +375,7 @@ function rebuildTrayMenu(config, connected) {
         if (!alarmButton || alarmButton.isDestroyed()) createAlarmButton(loadConfig());
       },
       enabled: !alarmButton || alarmButton.isDestroyed(),
-    }] : []),
+    },
     { type: 'separator' },
     { label: 'Quit Panic Alarm', click: () => app.quit() },
   ] : [
@@ -424,11 +431,6 @@ ipcMain.handle('settings-updated', (_, newConfig) => {
 // Alert popup dismiss (called from alert_popup.html)
 ipcMain.handle('dismiss-alert', () => {
   if (alertPopup && !alertPopup.isDestroyed()) alertPopup.close();
-});
-
-// Show alert popup from renderer (e.g. viewer window forwarding a socket event)
-ipcMain.handle('show-alert-popup', (_, alarmData) => {
-  showAlertPopup(alarmData);
 });
 
 // Drag the frameless alarm button
