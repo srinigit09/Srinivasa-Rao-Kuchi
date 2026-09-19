@@ -439,37 +439,6 @@ app.delete('/api/admin/logs', requireAdmin, (req, res) => {
   res.status(400).json({ error: 'Provide ids[] or all:true' });
 });
 
-// Serve client installer for browser download (when not in Electron desktop)
-app.get('/api/admin/client-installer-path', requireAdmin, (req, res) => {
-  const fs = require('fs');
-  const clientDist = path.join(__dirname, '..', 'client', 'dist');
-  const candidates = [
-    'PanicAlarmClient Setup 1.1.0.exe',
-    'PanicAlarmClient-1.1.0-arm64.dmg',
-    'PanicAlarmClient-1.1.0.dmg',
-  ];
-  for (const name of candidates) {
-    const full = path.join(clientDist, name);
-    if (fs.existsSync(full)) {
-      // Serve via a static route — mount on demand
-      return res.json({ url: `/client-installer/${encodeURIComponent(name)}`, filename: name });
-    }
-  }
-  res.json({ error: 'No client installer found. Run build-win or build-mac-arm in the client folder first.' });
-});
-
-// Serve the installer file itself
-app.get('/client-installer/:filename', requireAdmin, (req, res) => {
-  const fs = require('fs');
-  const name = decodeURIComponent(req.params.filename);
-  // Whitelist only expected filenames to prevent path traversal
-  if (!/^PanicAlarmClient[-\s][^/\\]+\.(exe|dmg)$/.test(name))
-    return res.status(400).json({ error: 'Invalid filename' });
-  const full = path.join(__dirname, '..', 'client', 'dist', name);
-  if (!fs.existsSync(full)) return res.status(404).json({ error: 'File not found' });
-  res.download(full, name);
-});
-
 // ── Settings ───────────────────────────────────────────────────
 
 app.get('/api/admin/settings', requireAdmin, (req, res) => {

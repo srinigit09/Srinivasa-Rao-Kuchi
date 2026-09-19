@@ -183,18 +183,22 @@ function connectSocket(config) {
 
   socket.on('disconnect', () => {
     console.log('[Socket] Disconnected');
-    rebuildTrayMenu(config, false);
     if (alarmButton && !alarmButton.isDestroyed()) alarmButton.close();
-    // Only show dialog if we had an established connection AND the user did not quit the app
+    // Only notify and quit if we had an established connection AND the user did not already quit
     if (wasConnected && !isQuitting) {
       wasConnected = false;
-      dialog.showMessageBox({
-        type   : 'warning',
-        title  : 'Server Disconnected',
-        message: 'Connection to the Panic Alarm Server was lost.',
-        detail : 'The alarm button has been disabled. The app will automatically reconnect when the server is available again.',
-        buttons: ['OK'],
-      });
+      isQuitting = true;  // prevent any further quit-triggered events
+      // Show a non-blocking OS notification then quit
+      if (Notification.isSupported()) {
+        const n = new Notification({
+          title  : 'Panic Alarm — Server Disconnected',
+          body   : 'Connection to the server was lost. The app will now close.',
+          silent : false,
+        });
+        n.show();
+      }
+      // Give the notification a moment to appear before quitting
+      setTimeout(() => app.quit(), 1500);
     }
   });
 

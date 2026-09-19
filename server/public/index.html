@@ -278,9 +278,6 @@ tr:hover td { background: #f8fafc; }
         <a class="nav-link" onclick="showPage('changePassword')" id="nav-changePassword">
           <span class="icon">🔑</span> Change Password
         </a>
-        <a class="nav-download" id="btnDownloadClient" style="cursor:pointer" title="Save the client installer to your desktop">
-          <span class="icon">⬇️</span> Download Client Installer
-        </a>
       </div>
     </div><!-- /.sidebar-scroll -->
 
@@ -716,7 +713,6 @@ window.addEventListener('DOMContentLoaded', () => {
   initReport();
   initDepartments();
   initDeptBlocks();
-  initDownloadClient();
   initLogsClear();
   initDashClear();
 });
@@ -926,34 +922,6 @@ function initDashClear() {
     if (r.error) { flash(r.error, false); return; }
     flash(`✅ All logs cleared (${r.deleted} entries)`, true);
     loadDashboard();
-  });
-}
-
-// ── Download client installer ──────────────────────────────────
-function initDownloadClient() {
-  document.getElementById('btnDownloadClient').addEventListener('click', async () => {
-    if (window.serverAPI && window.serverAPI.downloadClientInstaller) {
-      const r = await window.serverAPI.downloadClientInstaller();
-      if (r && r.ok) flash('✅ Client installer saved to: ' + r.path, true);
-      else flash((r && r.error) || 'Client installer not found in dist/. Rebuild the client first.', false);
-    } else {
-      // Running in browser — offer direct download via API
-      try {
-        const res = await fetch('/api/admin/client-installer-path', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const j = await res.json();
-        if (j.url) {
-          const a = document.createElement('a');
-          a.href = j.url; a.download = j.filename || 'PanicAlarmClient-Setup.exe';
-          document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        } else {
-          flash(j.error || 'Installer not available. Open the desktop Panic Alarm Server app to use this button.', false);
-        }
-      } catch {
-        flash('Cannot reach server.', false);
-      }
-    }
   });
 }
 
