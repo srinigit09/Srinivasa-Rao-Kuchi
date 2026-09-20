@@ -347,8 +347,14 @@ function createSettingsWindow() {
 function createTray(config) {
   // Destroy any existing tray first — prevents duplicate icons on re-launch
   if (tray) { try { tray.destroy(); } catch { /* already gone */ } tray = null; }
-  tray = new Tray(nativeImage.createEmpty());
-  tray.setTitle('🏥');
+  if (process.platform === 'win32') {
+    // Windows: use .ico — teal circle, visible in system tray
+    tray = new Tray(path.join(__dirname, 'assets', 'icon.ico'));
+  } else {
+    // macOS: empty image + emoji label — single clean entry in menu bar
+    tray = new Tray(nativeImage.createEmpty());
+    tray.setTitle('🏥');
+  }
   rebuildTrayMenu(config, false);
 }
 

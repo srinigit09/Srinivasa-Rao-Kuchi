@@ -154,8 +154,14 @@ function buildAppMenu() {
 
 // ── Tray ──────────────────────────────────────────────────────────────────────
 function createTray() {
-  tray = new Tray(nativeImage.createEmpty());
-  tray.setTitle('🖥️');
+  if (process.platform === 'win32') {
+    // Windows: use .ico — blue circle, visible in system tray
+    tray = new Tray(path.join(__dirname, 'assets', 'server-icon.ico'));
+  } else {
+    // macOS: empty image + emoji label — single clean entry in menu bar
+    tray = new Tray(nativeImage.createEmpty());
+    tray.setTitle('🖥️');
+  }
   rebuildTrayMenu(false);
   tray.on('click', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
