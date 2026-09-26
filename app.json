@@ -1,25 +1,47 @@
 {
   "expo": {
     "name": "RentEase",
-    "slug": "RentEase",
+    "slug": "rentease",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#2563EB"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.rentease.app",
+      "infoPlist": {
+        "NSContactsUsageDescription": "Used to pick emergency contact",
+        "NSPhotoLibraryUsageDescription": "Used to save receipts"
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#2563EB"
       },
-      "predictiveBackGestureEnabled": false
+      "package": "com.rentease.app",
+      "permissions": [
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-sharing"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "ccecf1b3-6c44-423c-95b5-3ca702f86b3f"
+      }
+    },
+    "owner": "sriniexpo_app"
   }
 }
