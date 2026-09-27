@@ -2,6 +2,7 @@ import React, { useState, useCallback, useLayoutEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +33,7 @@ interface BuildingItem {
 
 export default function AddTenantStep1Screen({ navigation }: Props) {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const [buildings, setBuildings] = useState<BuildingItem[]>([]);
   const [selected, setSelected] = useState<{ buildingId: string; unitId: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -194,7 +196,7 @@ export default function AddTenantStep1Screen({ navigation }: Props) {
           </View>
         )}
       />
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
         <TouchableOpacity style={styles.nextBtn} onPress={proceed}>
           <Text style={styles.nextText}>Next: Tenant Details →</Text>
         </TouchableOpacity>

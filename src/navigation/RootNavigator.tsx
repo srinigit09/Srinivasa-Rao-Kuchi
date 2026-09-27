@@ -27,6 +27,8 @@ import RecordPaymentScreen from '../screens/payments/RecordPaymentScreen';
 import PaymentHistoryScreen from '../screens/payments/PaymentHistoryScreen';
 import ReceiptScreen from '../screens/payments/ReceiptScreen';
 import VacantUnitsScreen from '../screens/dashboard/VacantUnitsScreen';
+import AllUnitsScreen from '../screens/units/AllUnitsScreen';
+import OccupiedTenantsScreen from '../screens/tenants/OccupiedTenantsScreen';
 import CollectedPaymentsScreen from '../screens/payments/CollectedPaymentsScreen';
 import OutstandingScreen from '../screens/payments/OutstandingScreen';
 import ReportsScreen from '../screens/reports/ReportsScreen';
@@ -67,6 +69,8 @@ export type AppStackParamList = {
   PaymentHistory: { tenantId: string };
   Receipt: { paymentId: string };
   VacantUnits: undefined;
+  AllUnits: undefined;
+  OccupiedTenants: undefined;
   CollectedPayments: undefined;
   Outstanding: undefined;
   MoveOut: { tenantId: string };
@@ -140,6 +144,8 @@ const AppNavigator = () => (
     <AppStack.Screen name="PaymentHistory" component={PaymentHistoryScreen} options={{ title: 'Payment History' }} />
     <AppStack.Screen name="Receipt" component={ReceiptScreen} options={{ title: 'Receipt' }} />
     <AppStack.Screen name="VacantUnits" component={VacantUnitsScreen} options={{ title: 'Vacant Units' }} />
+    <AppStack.Screen name="AllUnits" component={AllUnitsScreen} options={{ title: 'All Units', headerShown: false }} />
+    <AppStack.Screen name="OccupiedTenants" component={OccupiedTenantsScreen} options={{ title: 'Occupied Units', headerShown: false }} />
     <AppStack.Screen name="CollectedPayments" component={CollectedPaymentsScreen} options={{ title: 'Collected This Month' }} />
     <AppStack.Screen name="Outstanding" component={OutstandingScreen} options={{ title: 'Outstanding Payments' }} />
     <AppStack.Screen name="MoveOut" component={MoveOutScreen} options={{ title: 'Move Out' }} />

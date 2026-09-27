@@ -34,13 +34,12 @@ export default function VacantUnitsScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {units.length > 0 && (
-        <View style={styles.summaryBanner}>
-          <Text style={styles.summaryText}>
-            {units.length} vacant unit{units.length > 1 ? 's' : ''}
-          </Text>
-        </View>
-      )}
+      <View style={styles.banner}>
+        <Text style={styles.bannerTitle}>Vacant Units</Text>
+        <Text style={styles.bannerSub}>
+          {units.length} unit{units.length !== 1 ? 's' : ''} available
+        </Text>
+      </View>
       <FlatList
         data={units}
         keyExtractor={u => u.id}
@@ -81,10 +80,13 @@ export default function VacantUnitsScreen({ navigation }: Props) {
   );
 }
 
+const HEADER_BLUE = '#1D4ED8';
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  summaryBanner: { backgroundColor: COLORS.warningLight, padding: 12, paddingHorizontal: 16 },
-  summaryText: { color: COLORS.warning, fontWeight: '600', fontSize: 14 },
+  banner: { backgroundColor: HEADER_BLUE, paddingHorizontal: 20, paddingVertical: 16 },
+  bannerTitle: { fontSize: 20, fontWeight: '800', color: '#fff' },
+  bannerSub: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
   list: { padding: 16, gap: 10, paddingBottom: 32 },
   card: {
     backgroundColor: COLORS.white, borderRadius: 12, padding: 14,

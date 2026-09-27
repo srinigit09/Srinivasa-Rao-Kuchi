@@ -167,14 +167,14 @@ export default function DashboardScreen({ navigation }: Props) {
             value={data?.totalUnits ?? 0}
             icon="home"
             color={COLORS.primary}
-            onPress={() => navigation.navigate('Buildings' as any)}
+            onPress={() => navigation.navigate('AllUnits' as any)}
           />
           <StatCard
             label="Occupied"
             value={data?.occupiedUnits ?? 0}
             icon="person"
             color={COLORS.success}
-            onPress={() => navigation.navigate('Tenants' as any)}
+            onPress={() => navigation.navigate('OccupiedTenants' as any)}
           />
           <StatCard
             label="Vacant"

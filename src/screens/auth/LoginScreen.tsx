@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, KeyboardAvoidingView, Platform,
-  ScrollView, TouchableOpacity, TextInput,
+  ScrollView, TouchableOpacity, TextInput, StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,6 +15,8 @@ import FormField from '../../components/common/FormField';
 import { COLORS } from '../../constants';
 import { showAlert } from '../../utils';
 
+const HEADER_BLUE = '#1D4ED8';
+
 type Props = { navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'> };
 
 const ADMIN_EMAIL = 'srinivas06in@gmail.com';
@@ -21,6 +24,7 @@ const BIOMETRIC_KEY = 'rentease_biometric_enabled';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -249,15 +253,19 @@ export default function LoginScreen({ navigation }: Props) {
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <StatusBar barStyle="light-content" backgroundColor={HEADER_BLUE} />
 
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.logo}>🏠</Text>
-          <Text style={styles.appName}>RentEase</Text>
-          <Text style={styles.tagline}>Property & Tenant Management</Text>
-        </View>
+      {/* Blue banner header */}
+      <View style={[styles.banner, { paddingTop: insets.top + 20 }]}>
+        <Text style={styles.bannerLogo}>🏠</Text>
+        <Text style={styles.bannerAppName}>RentEase</Text>
+        <Text style={styles.bannerTagline}>Property & Tenant Management</Text>
+      </View>
 
+      <ScrollView
+        contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + 32 }]}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Error */}
         {error ? (
           <View style={styles.errorBox}>
@@ -356,11 +364,16 @@ export default function LoginScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
-  container: { flexGrow: 1, paddingHorizontal: 28, justifyContent: 'center', paddingVertical: 40 },
-  header: { alignItems: 'center', marginBottom: 32 },
-  logo: { fontSize: 56, marginBottom: 8 },
-  appName: { fontSize: 30, fontWeight: '700', color: COLORS.primary, letterSpacing: 0.5 },
-  tagline: { fontSize: 14, color: COLORS.muted, marginTop: 6 },
+  banner: {
+    backgroundColor: HEADER_BLUE,
+    alignItems: 'center',
+    paddingBottom: 28,
+    paddingHorizontal: 24,
+  },
+  bannerLogo: { fontSize: 48, marginBottom: 8 },
+  bannerAppName: { fontSize: 32, fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.5 },
+  bannerTagline: { fontSize: 14, color: 'rgba(255,255,255,0.78)', marginTop: 4 },
+  container: { paddingHorizontal: 24, paddingTop: 28 },
   errorBox: {
     backgroundColor: COLORS.dangerLight,
     padding: 12,
