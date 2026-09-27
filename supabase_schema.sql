@@ -156,10 +156,12 @@ create table if not exists public.payments (
   receipt_number  text unique,
   created_at      timestamptz default now()
 );
--- Safe migration: add advance_paid to existing tables
--- (generated columns outstanding/status must be dropped and recreated to include advance_paid)
+-- Safe migration: add advance_paid + regenerate computed columns
+-- Step 1: drop the view that depends on outstanding (recreated at the bottom of this file)
+drop view if exists public.v_monthly_summary;
+-- Step 2: add advance_paid (no-op if already present)
 alter table public.payments add column if not exists advance_paid numeric(10,2) not null default 0;
--- Recreate generated columns to include advance_paid
+-- Step 3: drop old generated columns and recreate with advance_paid included
 alter table public.payments drop column if exists outstanding;
 alter table public.payments drop column if exists status;
 alter table public.payments
