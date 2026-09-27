@@ -11,6 +11,7 @@ import { COLORS } from '../../constants';
 import { VacantUnit } from '../../types';
 import { formatCurrency } from '../../utils';
 import { AppStackParamList } from '../../navigation/RootNavigator';
+import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
 type Props = { navigation: NativeStackNavigationProp<AppStackParamList, 'VacantUnits'> };
 
@@ -34,12 +35,11 @@ export default function VacantUnitsScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.banner}>
-        <Text style={styles.bannerTitle}>Vacant Units</Text>
-        <Text style={styles.bannerSub}>
-          {units.length} unit{units.length !== 1 ? 's' : ''} available
-        </Text>
-      </View>
+      <BlueBannerHeader
+        title="Vacant Units"
+        subtitle={`${units.length} unit${units.length !== 1 ? 's' : ''} available`}
+        onBack={() => navigation.goBack()}
+      />
       <FlatList
         data={units}
         keyExtractor={u => u.id}
@@ -58,21 +58,21 @@ export default function VacantUnitsScreen({ navigation }: Props) {
             ? `${formatCurrency(item.rent_per_bed)} / unit`
             : `${formatCurrency(item.rent_per_bed)} / bed · ${item.total_beds} bed${item.total_beds > 1 ? 's' : ''}`;
           return (
-          <View style={styles.card}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.unitNum}>{item.unit_number}</Text>
-              <Text style={styles.unitType}>{item.unit_type}</Text>
-              <Text style={styles.building}>{item.building_name}</Text>
-              <Text style={styles.rent}>{rentLabel}</Text>
+            <View style={styles.card}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.unitNum}>{item.unit_number}</Text>
+                <Text style={styles.unitType}>{item.unit_type}</Text>
+                <Text style={styles.building}>{item.building_name}</Text>
+                <Text style={styles.rent}>{rentLabel}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.addTenantBtn}
+                onPress={() => navigation.navigate('AddTenantStep1')}
+              >
+                <Ionicons name="person-add-outline" size={16} color={COLORS.primary} />
+                <Text style={styles.addTenantText}>Add Tenant</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.addTenantBtn}
-              onPress={() => navigation.navigate('AddTenantStep1')}
-            >
-              <Ionicons name="person-add-outline" size={16} color={COLORS.primary} />
-              <Text style={styles.addTenantText}>Add Tenant</Text>
-            </TouchableOpacity>
-          </View>
           );
         }}
       />
@@ -80,13 +80,8 @@ export default function VacantUnitsScreen({ navigation }: Props) {
   );
 }
 
-const HEADER_BLUE = '#1D4ED8';
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  banner: { backgroundColor: HEADER_BLUE, paddingHorizontal: 20, paddingVertical: 16 },
-  bannerTitle: { fontSize: 20, fontWeight: '800', color: '#fff' },
-  bannerSub: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
   list: { padding: 16, gap: 10, paddingBottom: 32 },
   card: {
     backgroundColor: COLORS.white, borderRadius: 12, padding: 14,

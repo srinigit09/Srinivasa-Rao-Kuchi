@@ -137,7 +137,7 @@ export default function LoginScreen({ navigation }: Props) {
     setLoading(false);
   };
 
-  // ── Client: "Get OTP" pressed ──────────────────────────────
+  // ── Client: "Get OTP" pressed — navigate to OTP screen ────
   const handleGetOtp = async () => {
     setError(null);
     const cleanEmail = email.trim().toLowerCase();
@@ -146,7 +146,6 @@ export default function LoginScreen({ navigation }: Props) {
     setLoading(true);
 
     if (useSupabaseOtp) {
-      // Send real Supabase OTP
       const { error: otpErr } = await supabase.auth.signInWithOtp({
         email: cleanEmail,
         options: { shouldCreateUser: true },
@@ -157,98 +156,7 @@ export default function LoginScreen({ navigation }: Props) {
       setLoading(false);
     }
 
-    // Show OTP boxes — pre-fill with default OTP if not using Supabase OTP
-    const prefill = useSupabaseOtp ? ['', '', '', '', '', ''] : (defaultOtp ?? '123456').split('').slice(0, 6);
-    setOtp(prefill);
-    setOtpVisible(true);
-    setTimeout(() => inputs.current[0]?.focus(), 100);
-  };
-
-  // ── Client: OTP digit change ───────────────────────────────
-  const handleOtpChange = (text: string, index: number) => {
-    setError(null);
-    const next = [...otp];
-    next[index] = text;
-    setOtp(next);
-    if (text && index < 5) inputs.current[index + 1]?.focus();
-  };
-
-  // ── Client: Verify OTP ────────────────────────────────────
-  const handleVerifyOtp = async () => {
-    const token = otp.join('');
-    if (token.length < 6) { setError('Please enter all 6 digits.'); return; }
-
-    setOtpLoading(true);
-    setError(null);
-    const cleanEmail = email.trim().toLowerCase();
-
-    try {
-      let authUser = null;
-
-      if (useSupabaseOtp) {
-        // Verify real Supabase OTP
-        const { data, error: verifyErr } = await supabase.auth.verifyOtp({
-          email: cleanEmail,
-          token,
-          type: 'email',
-        });
-        if (verifyErr || !data?.user) {
-          setOtpLoading(false);
-          setError(verifyErr?.message ?? 'Invalid OTP. Please try again.');
-          return;
-        }
-        authUser = data.user;
-      } else {
-        // Default OTP mode — verify against the stored default
-        if (token !== (defaultOtp ?? '123456')) {
-          setOtpLoading(false);
-          setError(`Invalid OTP. Use the default OTP shown below.`);
-          return;
-        }
-        // Sign up (creates if new) then sign in with deterministic password
-        const pwd = `Pass#${cleanEmail.replace(/[^a-zA-Z0-9]/g, '')}!2026`;
-        await supabase.auth.signUp({ email: cleanEmail, password: pwd });
-        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password: pwd,
-        });
-        if (signInErr || !signInData?.user) {
-          setOtpLoading(false);
-          setError(signInErr?.message ?? 'Login failed. Please try again.');
-          return;
-        }
-        authUser = signInData.user;
-      }
-
-      // Check profile status
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id, full_name, is_active, valid_until')
-        .eq('id', authUser.id)
-        .single();
-
-      setOtpLoading(false);
-
-      if (profile?.is_active === false) {
-        await supabase.auth.signOut();
-        showAlert('Account Inactive', 'Your account has been deactivated. Please contact the administrator.');
-        return;
-      }
-      if (profile?.valid_until && new Date(profile.valid_until) < new Date()) {
-        await supabase.auth.signOut();
-        showAlert('Subscription Expired', 'Your validity period has expired. Please contact admin.');
-        return;
-      }
-
-      if (!profile?.full_name) {
-        navigation.navigate('ProfileSetup', { email: cleanEmail });
-      }
-      // If profile is complete, RootNavigator will switch to AppNavigator automatically
-      // once the session is set by the sign-in above.
-    } catch (e: any) {
-      setOtpLoading(false);
-      setError(e.message || 'Verification failed.');
-    }
+    navigation.navigate('OTP', { email: cleanEmail });
   };
 
   return (
@@ -300,57 +208,12 @@ export default function LoginScreen({ navigation }: Props) {
           </View>
         ) : (
           <View>
-            {/* Get OTP button */}
-            {!otpVisible && (
-              <Button title="Get OTP" onPress={handleGetOtp} loading={loading} style={{ marginTop: 4 }} />
-            )}
-
-            {/* Inline OTP entry — shown after Get OTP */}
-            {otpVisible && (
-              <View style={styles.otpSection}>
-                <View style={styles.otpHeader}>
-                  <Text style={styles.otpLabel}>Enter OTP sent to {email.trim().toLowerCase()}</Text>
-                  {!useSupabaseOtp && defaultOtp ? (
-                    <Text style={styles.otpHint}>Default OTP: <Text style={styles.otpHintBold}>{defaultOtp}</Text></Text>
-                  ) : null}
-                </View>
-
-                <View style={styles.otpRow}>
-                  {otp.map((digit, i) => (
-                    <TextInput
-                      key={i}
-                      ref={(r) => { inputs.current[i] = r; }}
-                      style={styles.otpBox}
-                      maxLength={1}
-                      keyboardType="number-pad"
-                      value={digit}
-                      onChangeText={(t) => handleOtpChange(t, i)}
-                      onKeyPress={({ nativeEvent }) => {
-                        if (nativeEvent.key === 'Backspace' && !digit && i > 0) {
-                          inputs.current[i - 1]?.focus();
-                        }
-                      }}
-                    />
-                  ))}
-                </View>
-
-                <Button
-                  title="Verify & Continue"
-                  onPress={handleVerifyOtp}
-                  loading={otpLoading}
-                  style={{ marginTop: 16 }}
-                />
-
-                <TouchableOpacity onPress={handleGetOtp} style={styles.resendBtn}>
-                  <Text style={styles.resendText}>Resend OTP</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            <Button title="Get OTP →" onPress={handleGetOtp} loading={loading} style={{ marginTop: 4 }} />
           </View>
         )}
 
         {/* Biometric login */}
-        {hasBiometrics && !otpVisible && (
+        {hasBiometrics && (
           <TouchableOpacity style={styles.biometricBtn} onPress={handleBiometricAuth}>
             <Ionicons name="finger-print" size={24} color={COLORS.primary} />
             <Text style={styles.biometricText}>Login with Fingerprint / FaceID</Text>

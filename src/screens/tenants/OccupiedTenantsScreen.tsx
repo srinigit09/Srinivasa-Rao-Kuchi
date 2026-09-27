@@ -10,6 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import { COLORS } from '../../constants';
 import { formatDate } from '../../utils';
 import { AppStackParamList } from '../../navigation/RootNavigator';
+import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
 type Props = { navigation: NativeStackNavigationProp<AppStackParamList> };
 
@@ -22,8 +23,6 @@ interface OccupiedRow {
   building_name: string;
   building_type: 'residential' | 'pg';
 }
-
-const HEADER_BLUE = '#1D4ED8';
 
 export default function OccupiedTenantsScreen({ navigation }: Props) {
   const { user } = useAuth();
@@ -57,13 +56,11 @@ export default function OccupiedTenantsScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {/* Blue banner */}
-      <View style={styles.banner}>
-        <Text style={styles.bannerTitle}>Occupied Units</Text>
-        <Text style={styles.bannerSub}>
-          {tenants.length} active tenant{tenants.length !== 1 ? 's' : ''}
-        </Text>
-      </View>
+      <BlueBannerHeader
+        title="Occupied Units"
+        subtitle={`${tenants.length} active tenant${tenants.length !== 1 ? 's' : ''}`}
+        onBack={() => navigation.goBack()}
+      />
 
       <FlatList
         data={tenants}
@@ -103,13 +100,6 @@ export default function OccupiedTenantsScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  banner: {
-    backgroundColor: HEADER_BLUE,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  bannerTitle: { fontSize: 20, fontWeight: '800', color: '#fff' },
-  bannerSub: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
   list: { padding: 16, gap: 10, paddingBottom: 32 },
   card: {
     backgroundColor: COLORS.white, borderRadius: 12, padding: 14,

@@ -10,6 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import { COLORS } from '../../constants';
 import { formatCurrency } from '../../utils';
 import { AppStackParamList } from '../../navigation/RootNavigator';
+import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
 type Props = { navigation: NativeStackNavigationProp<AppStackParamList> };
 
@@ -76,13 +77,11 @@ export default function AllUnitsScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {/* Blue banner */}
-      <View style={styles.banner}>
-        <Text style={styles.bannerTitle}>All Units</Text>
-        <Text style={styles.bannerSub}>
-          {totalUnits} units · {occupiedCount} occupied · {vacantCount} vacant
-        </Text>
-      </View>
+      <BlueBannerHeader
+        title="All Units"
+        subtitle={`${totalUnits} units · ${occupiedCount} occupied · ${vacantCount} vacant`}
+        onBack={() => navigation.goBack()}
+      />
 
       <FlatList
         data={units}
@@ -161,13 +160,6 @@ export default function AllUnitsScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  banner: {
-    backgroundColor: HEADER_BLUE,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  bannerTitle: { fontSize: 20, fontWeight: '800', color: '#fff' },
-  bannerSub: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
   list: { padding: 16, gap: 10, paddingBottom: 32 },
   card: {
     backgroundColor: COLORS.white, borderRadius: 12, padding: 14,

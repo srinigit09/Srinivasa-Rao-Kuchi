@@ -143,9 +143,9 @@ const AppNavigator = () => (
     <AppStack.Screen name="RecordPayment" component={RecordPaymentScreen} options={{ title: 'Record Payment' }} />
     <AppStack.Screen name="PaymentHistory" component={PaymentHistoryScreen} options={{ title: 'Payment History' }} />
     <AppStack.Screen name="Receipt" component={ReceiptScreen} options={{ title: 'Receipt' }} />
-    <AppStack.Screen name="VacantUnits" component={VacantUnitsScreen} options={{ title: 'Vacant Units' }} />
-    <AppStack.Screen name="AllUnits" component={AllUnitsScreen} options={{ title: 'All Units', headerShown: false }} />
-    <AppStack.Screen name="OccupiedTenants" component={OccupiedTenantsScreen} options={{ title: 'Occupied Units', headerShown: false }} />
+    <AppStack.Screen name="VacantUnits" component={VacantUnitsScreen} options={{ headerShown: false }} />
+    <AppStack.Screen name="AllUnits" component={AllUnitsScreen} options={{ headerShown: false }} />
+    <AppStack.Screen name="OccupiedTenants" component={OccupiedTenantsScreen} options={{ headerShown: false }} />
     <AppStack.Screen name="CollectedPayments" component={CollectedPaymentsScreen} options={{ title: 'Collected This Month' }} />
     <AppStack.Screen name="Outstanding" component={OutstandingScreen} options={{ title: 'Outstanding Payments' }} />
     <AppStack.Screen name="MoveOut" component={MoveOutScreen} options={{ title: 'Move Out' }} />
