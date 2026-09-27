@@ -21,70 +21,91 @@ type Props = {
   route: RouteProp<AppStackParamList, 'Receipt'>;
 };
 
-const buildReceiptHTML = (payment: Payment & { tenant_name: string; building_name: string; unit_number: string; landlord_name: string; landlord_phone: string }) => `
+const buildReceiptHTML = (payment: Payment & { tenant_name: string; building_name: string; unit_number: string }) => {
+  const totalBilled = payment.amount_due + payment.electricity + payment.water + payment.other_charges;
+  return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 24px; color: #111827; }
-    .header { text-align: center; border-bottom: 2px solid #2563EB; padding-bottom: 16px; margin-bottom: 16px; }
-    .app-name { font-size: 24px; font-weight: 700; color: #2563EB; }
-    .receipt-title { font-size: 16px; color: #6B7280; margin-top: 4px; }
-    .receipt-no { font-size: 14px; font-weight: 600; color: #374151; margin-top: 8px; }
-    .section { margin-bottom: 16px; }
-    .section-title { font-size: 13px; color: #6B7280; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #F3F4F6; }
-    .row-label { color: #6B7280; font-size: 13px; }
-    .row-value { color: #111827; font-size: 13px; font-weight: 500; }
-    .total-row { display: flex; justify-content: space-between; padding: 12px 0; border-top: 2px solid #2563EB; margin-top: 8px; }
-    .total-label { font-size: 15px; font-weight: 700; color: #111827; }
-    .total-value { font-size: 18px; font-weight: 700; color: #2563EB; }
-    .status { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-top: 12px; }
+    body { font-family: Arial, sans-serif; margin: 0; padding: 28px; color: #111827; font-size: 15px; }
+    .header { text-align: center; border-bottom: 2px solid #2563EB; padding-bottom: 20px; margin-bottom: 20px; }
+    .app-name { font-size: 26px; font-weight: 800; color: #2563EB; }
+    .building-name { font-size: 17px; font-weight: 700; color: #111827; margin-top: 6px; }
+    .receipt-title { font-size: 15px; color: #6B7280; margin-top: 4px; }
+    .receipt-no { display: inline-block; font-size: 14px; font-weight: 700; color: #fff; margin-top: 10px;
+                  background: #2563EB; padding: 4px 16px; border-radius: 20px; }
+    .section { margin-bottom: 20px; }
+    .section-title { font-size: 13px; color: #6B7280; font-weight: 700; margin-bottom: 10px;
+                     text-transform: uppercase; letter-spacing: 0.8px; }
+    .row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #F3F4F6; }
+    .row-label { color: #6B7280; font-size: 14px; }
+    .row-value { color: #111827; font-size: 14px; font-weight: 600; text-align: right; }
+    .paid-box { background: #F0FDF4; border: 2px solid #16A34A; border-radius: 10px;
+                display: flex; justify-content: space-between; align-items: center;
+                padding: 14px 16px; margin: 16px 0; }
+    .paid-label { font-size: 16px; font-weight: 700; color: #111827; }
+    .paid-value { font-size: 24px; font-weight: 800; color: #16A34A; }
+    .summary-row { display: flex; justify-content: space-between; padding: 5px 0; }
+    .summary-label { font-size: 13px; color: #6B7280; }
+    .summary-value { font-size: 13px; font-weight: 600; color: #374151; }
+    .outstanding-value { color: #DC2626; }
+    .status { display: inline-block; padding: 5px 16px; border-radius: 20px; font-size: 14px; font-weight: 700; margin-top: 4px; }
     .status-Paid { background: #DCFCE7; color: #16A34A; }
     .status-Partial { background: #FEF3C7; color: #D97706; }
     .status-Pending { background: #FEE2E2; color: #DC2626; }
-    .footer { text-align: center; margin-top: 32px; color: #9CA3AF; font-size: 11px; border-top: 1px solid #E5E7EB; padding-top: 12px; }
+    .footer { text-align: center; margin-top: 32px; color: #9CA3AF; font-size: 12px;
+              border-top: 1px solid #E5E7EB; padding-top: 14px; }
   </style>
 </head>
 <body>
   <div class="header">
     <div class="app-name">🏠 RentEase</div>
+    <div class="building-name">${payment.building_name}</div>
     <div class="receipt-title">Rent Receipt</div>
     <div class="receipt-no">${payment.receipt_number}</div>
   </div>
   <div class="section">
-    <div class="section-title">Landlord</div>
-    <div class="row"><span class="row-label">Name</span><span class="row-value">${payment.landlord_name}</span></div>
-    <div class="row"><span class="row-label">Phone</span><span class="row-value">${payment.landlord_phone}</span></div>
-  </div>
-  <div class="section">
-    <div class="section-title">Tenant</div>
-    <div class="row"><span class="row-label">Name</span><span class="row-value">${payment.tenant_name}</span></div>
-    <div class="row"><span class="row-label">Property</span><span class="row-value">${payment.building_name} - ${payment.unit_number}</span></div>
-  </div>
-  <div class="section">
-    <div class="section-title">Payment Details</div>
+    <div class="section-title">Tenant Details</div>
+    <div class="row"><span class="row-label">Tenant Name</span><span class="row-value">${payment.tenant_name}</span></div>
+    <div class="row"><span class="row-label">Building</span><span class="row-value">${payment.building_name}</span></div>
+    <div class="row"><span class="row-label">Unit / Flat</span><span class="row-value">${payment.unit_number}</span></div>
     <div class="row"><span class="row-label">Period</span><span class="row-value">${formatMonth(payment.payment_month)}</span></div>
+  </div>
+  <div class="section">
+    <div class="section-title">Charges</div>
     <div class="row"><span class="row-label">Rent</span><span class="row-value">${formatCurrency(payment.amount_due)}</span></div>
     ${payment.electricity > 0 ? `<div class="row"><span class="row-label">Electricity</span><span class="row-value">${formatCurrency(payment.electricity)}</span></div>` : ''}
     ${payment.water > 0 ? `<div class="row"><span class="row-label">Water</span><span class="row-value">${formatCurrency(payment.water)}</span></div>` : ''}
     ${payment.other_charges > 0 ? `<div class="row"><span class="row-label">${payment.other_label || 'Other'}</span><span class="row-value">${formatCurrency(payment.other_charges)}</span></div>` : ''}
-    <div class="row"><span class="row-label">Amount Paid</span><span class="row-value">${formatCurrency(payment.amount_paid)}</span></div>
-    ${payment.outstanding > 0 ? `<div class="row"><span class="row-label">Outstanding</span><span class="row-value" style="color:#DC2626">${formatCurrency(payment.outstanding)}</span></div>` : ''}
-    <div class="row"><span class="row-label">Payment Mode</span><span class="row-value">${payment.payment_mode ?? '—'}</span></div>
-    <div class="row"><span class="row-label">Payment Date</span><span class="row-value">${formatDate(payment.payment_date)}</span></div>
+    <div class="row"><span class="row-label">Total Billed</span><span class="row-value">${formatCurrency(totalBilled)}</span></div>
   </div>
-  <div class="total-row">
-    <span class="total-label">Total Billed</span>
-    <span class="total-value">${formatCurrency(payment.amount_due + payment.electricity + payment.water + payment.other_charges)}</span>
+  <div class="paid-box">
+    <span class="paid-label">Amount Paid</span>
+    <span class="paid-value">${formatCurrency(payment.amount_paid)}</span>
   </div>
-  <div class="status status-${payment.status}">${payment.status}</div>
-  ${payment.notes ? `<p style="margin-top:16px;font-size:13px;color:#6B7280;">Note: ${payment.notes}</p>` : ''}
+  <div class="summary-row">
+    <span class="summary-label">Payment Mode</span>
+    <span class="summary-value">${payment.payment_mode ?? '—'}</span>
+  </div>
+  <div class="summary-row">
+    <span class="summary-label">Payment Date</span>
+    <span class="summary-value">${formatDate(payment.payment_date)}</span>
+  </div>
+  ${payment.outstanding > 0 ? `
+  <div class="summary-row" style="margin-top:8px;">
+    <span class="summary-label">Outstanding Balance</span>
+    <span class="summary-value outstanding-value">${formatCurrency(payment.outstanding)}</span>
+  </div>` : ''}
+  <div style="margin-top:14px;">
+    <div class="status status-${payment.status}">${payment.status}</div>
+  </div>
+  ${payment.notes ? `<p style="margin-top:16px;font-size:14px;color:#6B7280;line-height:1.5;">Note: ${payment.notes}</p>` : ''}
   <div class="footer">Generated by RentEase · ${new Date().toLocaleDateString('en-IN')}</div>
 </body>
 </html>
-`;
+`};
 
 export default function ReceiptScreen({ navigation, route }: Props) {
   const { profile } = useAuth();
@@ -119,7 +140,9 @@ export default function ReceiptScreen({ navigation, route }: Props) {
       const html = buildReceiptHTML(payment);
       const { uri } = await Print.printToFileAsync({ html });
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: `Receipt ${payment.receipt_number}` });
+        const fileName = `Receipt_${payment.building_name}_${payment.tenant_name}_${payment.unit_number}_${payment.receipt_number}`
+          .replace(/[^a-zA-Z0-9_]/g, '_');
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: fileName });
       } else {
         Alert.alert('Sharing not available on this device.');
       }
@@ -142,7 +165,7 @@ export default function ReceiptScreen({ navigation, route }: Props) {
 
   if (!payment) return <View style={styles.loading}><Text>Loading...</Text></View>;
 
-  const total = payment.amount_due + payment.electricity + payment.water + payment.other_charges;
+  const totalBilled = payment.amount_due + payment.electricity + payment.water + payment.other_charges;
 
   return (
     <ScrollView
@@ -151,35 +174,42 @@ export default function ReceiptScreen({ navigation, route }: Props) {
     >
       {/* Receipt Card */}
       <View style={styles.receiptCard}>
+        {/* Header */}
         <View style={styles.rcpHeader}>
           <Text style={styles.rcpTitle}>🏠 RentEase</Text>
+          <Text style={styles.rcpBuilding}>{payment.building_name}</Text>
           <Text style={styles.rcpSub}>Rent Receipt</Text>
           <Text style={styles.rcpNo}>{payment.receipt_number}</Text>
         </View>
 
-        <Section title="TENANT">
-          <Row label="Name" value={payment.tenant_name} />
-          <Row label="Property" value={`${payment.building_name} · ${payment.unit_number}`} />
+        {/* Tenant */}
+        <Section title="TENANT DETAILS">
+          <Row label="Tenant Name" value={payment.tenant_name} />
+          <Row label="Building" value={payment.building_name} />
+          <Row label="Unit / Flat" value={payment.unit_number} />
+          <Row label="Period" value={formatMonth(payment.payment_month)} />
         </Section>
 
-        <Section title="PAYMENT">
-          <Row label="Period" value={formatMonth(payment.payment_month)} />
+        {/* Charges */}
+        <Section title="CHARGES">
           <Row label="Rent" value={formatCurrency(payment.amount_due)} />
           {payment.electricity > 0 && <Row label="Electricity" value={formatCurrency(payment.electricity)} />}
           {payment.water > 0 && <Row label="Water" value={formatCurrency(payment.water)} />}
           {payment.other_charges > 0 && <Row label={payment.other_label || 'Other'} value={formatCurrency(payment.other_charges)} />}
+          <Row label="Total Billed" value={formatCurrency(totalBilled)} isBold />
         </Section>
 
-        <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Total Billed</Text>
-          <Text style={styles.totalValue}>{formatCurrency(total)}</Text>
+        {/* Amount Paid — prominent */}
+        <View style={styles.paidBox}>
+          <Text style={styles.paidLabel}>Amount Paid</Text>
+          <Text style={styles.paidValue}>{formatCurrency(payment.amount_paid)}</Text>
         </View>
 
-        <Section title="RECEIVED">
-          <Row label="Amount Paid" value={formatCurrency(payment.amount_paid)} />
-          {payment.outstanding > 0 && <Row label="Outstanding" value={formatCurrency(payment.outstanding)} isRed />}
+        {/* Payment info */}
+        <Section title="PAYMENT INFO">
           <Row label="Mode" value={payment.payment_mode ?? '—'} />
           <Row label="Date" value={formatDate(payment.payment_date)} />
+          {payment.outstanding > 0 && <Row label="Outstanding Balance" value={formatCurrency(payment.outstanding)} isRed />}
         </Section>
 
         <View style={styles.statusRow}>
@@ -207,10 +237,10 @@ const Section = ({ title, children }: any) => (
   </View>
 );
 
-const Row = ({ label, value, isRed }: any) => (
+const Row = ({ label, value, isRed, isBold }: any) => (
   <View style={styles.row}>
     <Text style={styles.rowLabel}>{label}</Text>
-    <Text style={[styles.rowValue, isRed && { color: COLORS.danger }]}>{value}</Text>
+    <Text style={[styles.rowValue, isRed && { color: COLORS.danger }, isBold && { color: COLORS.text, fontWeight: '700' }]}>{value}</Text>
   </View>
 );
 
@@ -230,26 +260,32 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white, borderRadius: 16, margin: 16,
     shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, elevation: 4, overflow: 'hidden',
   },
-  rcpHeader: { backgroundColor: COLORS.primary, padding: 20, alignItems: 'center' },
-  rcpTitle: { fontSize: 20, fontWeight: '700', color: '#fff' },
-  rcpSub: { fontSize: 13, color: '#BFDBFE', marginTop: 2 },
-  rcpNo: { fontSize: 14, fontWeight: '600', color: '#fff', marginTop: 6, backgroundColor: '#1D4ED8', paddingHorizontal: 12, paddingVertical: 3, borderRadius: 10 },
-  section: { padding: 16, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  sectionTitle: { fontSize: 10, fontWeight: '700', color: COLORS.muted, letterSpacing: 1, marginBottom: 8 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
-  rowLabel: { fontSize: 13, color: COLORS.muted },
-  rowValue: { fontSize: 13, color: COLORS.text, fontWeight: '500' },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 16, borderTopWidth: 2, borderTopColor: COLORS.primary, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  totalLabel: { fontSize: 15, fontWeight: '700', color: COLORS.text },
-  totalValue: { fontSize: 18, fontWeight: '700', color: COLORS.primary },
-  statusRow: { padding: 16 },
-  notes: { paddingHorizontal: 16, paddingBottom: 16, fontSize: 13, color: COLORS.muted },
+  rcpHeader: { backgroundColor: COLORS.primary, paddingVertical: 28, paddingHorizontal: 24, alignItems: 'center' },
+  rcpTitle: { fontSize: 26, fontWeight: '800', color: '#fff' },
+  rcpBuilding: { fontSize: 17, fontWeight: '700', color: '#BFDBFE', marginTop: 6 },
+  rcpSub: { fontSize: 14, color: 'rgba(255,255,255,0.7)', marginTop: 4 },
+  rcpNo: { fontSize: 14, fontWeight: '700', color: '#fff', marginTop: 10, backgroundColor: '#1D4ED8', paddingHorizontal: 16, paddingVertical: 5, borderRadius: 10 },
+  section: { paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  sectionTitle: { fontSize: 12, fontWeight: '700', color: COLORS.muted, letterSpacing: 1.2, marginBottom: 10 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 7 },
+  rowLabel: { fontSize: 15, color: COLORS.muted },
+  rowValue: { fontSize: 15, color: COLORS.text, fontWeight: '600', flexShrink: 1, textAlign: 'right', marginLeft: 12 },
+  paidBox: {
+    marginHorizontal: 20, marginVertical: 4,
+    backgroundColor: COLORS.successLight, borderWidth: 2, borderColor: COLORS.success,
+    borderRadius: 12, paddingHorizontal: 20, paddingVertical: 16,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+  },
+  paidLabel: { fontSize: 16, fontWeight: '700', color: COLORS.text },
+  paidValue: { fontSize: 26, fontWeight: '800', color: COLORS.success },
+  statusRow: { paddingHorizontal: 20, paddingVertical: 16 },
+  notes: { paddingHorizontal: 20, paddingBottom: 18, fontSize: 14, color: COLORS.muted, lineHeight: 20 },
   actions: {
     flexDirection: 'row', justifyContent: 'space-around',
-    backgroundColor: COLORS.white, borderRadius: 16, margin: 16, padding: 16,
+    backgroundColor: COLORS.white, borderRadius: 16, margin: 16, padding: 20,
     shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
   },
   actionBtn: { alignItems: 'center', gap: 8 },
-  actionIcon: { width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  actionLabel: { fontSize: 12, fontWeight: '500' },
+  actionIcon: { width: 56, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  actionLabel: { fontSize: 13, fontWeight: '600' },
 });

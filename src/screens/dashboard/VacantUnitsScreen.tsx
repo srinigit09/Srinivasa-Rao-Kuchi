@@ -53,13 +53,18 @@ export default function VacantUnitsScreen({ navigation }: Props) {
             <Text style={styles.emptyText}>You have no vacant units right now.</Text>
           </View>
         }
-        renderItem={({ item }) => (
+        renderItem={({ item }) => {
+          const isResidential = item.building_type === 'residential';
+          const rentLabel = isResidential
+            ? `${formatCurrency(item.rent_per_bed)} / unit`
+            : `${formatCurrency(item.rent_per_bed)} / bed · ${item.total_beds} bed${item.total_beds > 1 ? 's' : ''}`;
+          return (
           <View style={styles.card}>
             <View style={{ flex: 1 }}>
               <Text style={styles.unitNum}>{item.unit_number}</Text>
               <Text style={styles.unitType}>{item.unit_type}</Text>
               <Text style={styles.building}>{item.building_name}</Text>
-              <Text style={styles.rent}>{formatCurrency(item.rent_per_bed)} / bed · {item.total_beds} bed{item.total_beds > 1 ? 's' : ''}</Text>
+              <Text style={styles.rent}>{rentLabel}</Text>
             </View>
             <TouchableOpacity
               style={styles.addTenantBtn}
@@ -69,7 +74,8 @@ export default function VacantUnitsScreen({ navigation }: Props) {
               <Text style={styles.addTenantText}>Add Tenant</Text>
             </TouchableOpacity>
           </View>
-        )}
+          );
+        }}
       />
     </View>
   );
