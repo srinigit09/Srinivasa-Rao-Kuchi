@@ -10,6 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import { COLORS } from '../../constants';
 import { Building } from '../../types';
 import { AppStackParamList } from '../../navigation/RootNavigator';
+import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
 type Props = { navigation: NativeStackNavigationProp<AppStackParamList> };
 
@@ -52,22 +53,30 @@ export default function BuildingsScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      <BlueBannerHeader
+        title="All Buildings"
+        subtitle={`${buildings.length} building${buildings.length !== 1 ? 's' : ''}`}
+      />
+
       <FlatList
         data={buildings}
         keyExtractor={b => b.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
-          <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('AddEditBuilding', {})}>
-            <Ionicons name="add-circle" size={20} color={COLORS.primary} />
-            <Text style={styles.addText}>Add New Building</Text>
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={() => navigation.navigate('AddEditBuilding', {})}
+          >
+            <Ionicons name="add-circle" size={22} color={COLORS.primary} />
+            <Text style={styles.addText}>Add Building</Text>
           </TouchableOpacity>
         }
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>🏢</Text>
             <Text style={styles.emptyTitle}>No buildings yet</Text>
-            <Text style={styles.emptyText}>Tap "Add New Building" to get started.</Text>
+            <Text style={styles.emptyText}>Tap "Add Building" to get started.</Text>
           </View>
         }
         renderItem={({ item }) => (
@@ -111,10 +120,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   list: { padding: 16, gap: 10, paddingBottom: 32 },
   addBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: COLORS.primaryLight, padding: 14, borderRadius: 10, marginBottom: 4,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: COLORS.primaryLight, padding: 15, borderRadius: 12, marginBottom: 6,
   },
-  addText: { color: COLORS.primary, fontWeight: '600', fontSize: 15 },
+  addText: { color: COLORS.primary, fontWeight: '700', fontSize: 15 },
   card: {
     backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
     flexDirection: 'row', alignItems: 'center',
@@ -125,7 +134,7 @@ const styles = StyleSheet.create({
   cardAddress: { fontSize: 13, color: COLORS.muted, marginTop: 2 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   tag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  tagText: { fontSize: 11, fontWeight: '600' },
+  tagText: { fontSize: 12, fontWeight: '600' },
   cardRight: { gap: 8 },
   iconBtn: { padding: 6 },
   empty: { alignItems: 'center', paddingTop: 80, gap: 8 },

@@ -27,7 +27,7 @@ interface DashboardData {
   overduePayments: { tenant_name: string; unit_number: string; building_name: string; amount: number; month: string }[];
 }
 
-const HEADER_BLUE = '#1D4ED8'; // slightly deeper blue matching the RentEase icon
+const HEADER_BLUE = '#1D4ED8';
 
 export default function DashboardScreen({ navigation }: Props) {
   const { user, profile, signOut } = useAuth();
@@ -82,8 +82,8 @@ export default function DashboardScreen({ navigation }: Props) {
     <View style={{ flex: 1, backgroundColor: HEADER_BLUE }}>
       <StatusBar barStyle="light-content" backgroundColor={HEADER_BLUE} />
 
-      {/* Blue Header Panel */}
-      <View style={[styles.headerPanel, { paddingTop: insets.top + 10 }]}>
+      {/* Blue Header Panel — safe area aware */}
+      <View style={[styles.headerPanel, { paddingTop: insets.top + 8 }]}>
         {/* App name row */}
         <View style={styles.appNameRow}>
           <View style={styles.appIconCircle}>
@@ -110,30 +110,30 @@ export default function DashboardScreen({ navigation }: Props) {
           {greeting()}, {profile?.full_name?.split(' ')[0] ?? 'there'} 👋
         </Text>
         <Text style={styles.subGreeting}>Here's your property summary</Text>
+      </View>
 
-        {/* Quick Actions inside header */}
-        <View style={styles.quickActionsRow}>
-          <QuickActionBtn
-            label="Add Building"
-            icon="add-circle-outline"
-            onPress={() => navigation.navigate('AddEditBuilding', {})}
-          />
-          <QuickActionBtn
-            label="Add Tenant"
-            icon="person-add-outline"
-            onPress={() => navigation.navigate('AddTenantStep1')}
-          />
-          <QuickActionBtn
-            label="Record Payment"
-            icon="cash-outline"
-            onPress={() => navigation.navigate('Tenants' as any)}
-          />
-          <QuickActionBtn
-            label="Vacant Units"
-            icon="key-outline"
-            onPress={() => navigation.navigate('VacantUnits')}
-          />
-        </View>
+      {/* Quick Actions — just below blue panel, outside the scroll */}
+      <View style={styles.quickActionsPanel}>
+        <QuickActionBtn
+          label="Add Tenant"
+          icon="person-add-outline"
+          onPress={() => navigation.navigate('AddTenantStep1')}
+        />
+        <QuickActionBtn
+          label="Record Payment"
+          icon="cash-outline"
+          onPress={() => navigation.navigate('Tenants' as any)}
+        />
+        <QuickActionBtn
+          label="Add Building"
+          icon="add-circle-outline"
+          onPress={() => navigation.navigate('AddEditBuilding', {})}
+        />
+        <QuickActionBtn
+          label="Vacant Units"
+          icon="key-outline"
+          onPress={() => navigation.navigate('VacantUnits')}
+        />
       </View>
 
       {/* White/Grey body */}
@@ -144,7 +144,7 @@ export default function DashboardScreen({ navigation }: Props) {
       >
         {/* Overdue Alert Banner */}
         {data && data.overduePayments.length > 0 && (
-          <TouchableOpacity style={styles.alertBanner} onPress={() => navigation.navigate('Reports' as any)}>
+          <TouchableOpacity style={styles.alertBanner} onPress={() => navigation.navigate('Outstanding' as any)}>
             <Ionicons name="alert-circle" size={18} color={COLORS.danger} />
             <Text style={styles.alertText}>
               {data.overduePayments.length} overdue payment{data.overduePayments.length > 1 ? 's' : ''} need attention
@@ -153,7 +153,7 @@ export default function DashboardScreen({ navigation }: Props) {
           </TouchableOpacity>
         )}
 
-        {/* Summary Cards */}
+        {/* Summary Cards — label on top, value below */}
         <View style={styles.grid}>
           <StatCard
             label="Buildings"
@@ -163,7 +163,7 @@ export default function DashboardScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('Buildings' as any)}
           />
           <StatCard
-            label="Units"
+            label="Total Units"
             value={data?.totalUnits ?? 0}
             icon="home"
             color={COLORS.primary}
@@ -186,13 +186,13 @@ export default function DashboardScreen({ navigation }: Props) {
         </View>
 
         {/* Monthly Payment Summary */}
-        <Card title="This Month's Payment Summary">
+        <Card title="This Month's Collection">
           <View style={styles.row}>
             <TouchableOpacity
               style={styles.colHalf}
-              onPress={() => navigation.navigate('Reports' as any)}
+              onPress={() => navigation.navigate('CollectedPayments')}
             >
-              <Text style={styles.amtLabel}>Received</Text>
+              <Text style={styles.amtLabel}>Collected</Text>
               <Text style={[styles.amtValue, { color: COLORS.success }]}>
                 {formatCurrency(data?.collectedThisMonth ?? 0)}
               </Text>
@@ -200,7 +200,7 @@ export default function DashboardScreen({ navigation }: Props) {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.colHalf, styles.borderLeft]}
-              onPress={() => navigation.navigate('Reports' as any)}
+              onPress={() => navigation.navigate('Outstanding')}
             >
               <Text style={styles.amtLabel}>Outstanding</Text>
               <Text style={[styles.amtValue, { color: '#D97706' }]}>
@@ -230,11 +230,16 @@ export default function DashboardScreen({ navigation }: Props) {
   );
 }
 
+// Label on top (bold, coloured), value below (large), icon at bottom-right
 const StatCard = ({ label, value, icon, color, onPress }: any) => (
   <TouchableOpacity style={styles.statCard} onPress={onPress} activeOpacity={0.75}>
-    <Ionicons name={icon} size={22} color={color} />
+    <View style={styles.statTop}>
+      <Text style={[styles.statLabel, { color }]}>{label}</Text>
+      <View style={[styles.statIconCircle, { backgroundColor: color + '18' }]}>
+        <Ionicons name={icon} size={16} color={color} />
+      </View>
+    </View>
     <Text style={styles.statValue}>{value}</Text>
-    <Text style={styles.statLabel}>{label}</Text>
   </TouchableOpacity>
 );
 
@@ -251,12 +256,12 @@ const styles = StyleSheet.create({
   headerPanel: {
     backgroundColor: HEADER_BLUE,
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 16,
   },
   appNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   appIconCircle: {
     width: 32,
@@ -269,7 +274,7 @@ const styles = StyleSheet.create({
   },
   appName: {
     flex: 1,
-    fontSize: 20,
+    fontSize: 21,
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: 0.5,
@@ -297,14 +302,13 @@ const styles = StyleSheet.create({
   subGreeting: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.75)',
-    marginBottom: 16,
   },
-  quickActionsRow: {
+  // Quick actions strip — sits between blue header and scrollview
+  quickActionsPanel: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 14,
-    paddingVertical: 12,
+    justifyContent: 'space-around',
+    backgroundColor: '#1640B8', // slightly darker blue strip
+    paddingVertical: 14,
     paddingHorizontal: 8,
   },
   qaBtn: {
@@ -313,26 +317,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   qaIconWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
+    width: 48,
+    height: 48,
+    borderRadius: 13,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   qaLabel: {
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.9)',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.93)',
     textAlign: 'center',
-    fontWeight: '500',
-    maxWidth: 60,
+    fontWeight: '600',
+    maxWidth: 64,
   },
   body: {
     flex: 1,
     backgroundColor: COLORS.bg,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    marginTop: -4,
   },
   alertBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -342,18 +343,35 @@ const styles = StyleSheet.create({
   alertText: { flex: 1, color: COLORS.danger, fontSize: 13, fontWeight: '500' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, marginTop: 14 },
   statCard: {
-    width: '44%', margin: '3%', backgroundColor: COLORS.white, borderRadius: 12,
-    padding: 16, alignItems: 'center', gap: 4,
-    shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+    width: '44%', margin: '3%', backgroundColor: COLORS.white, borderRadius: 14,
+    padding: 16,
+    shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 5, elevation: 3,
   },
-  statValue: { fontSize: 28, fontWeight: '700', color: COLORS.text },
-  statLabel: { fontSize: 12, color: COLORS.muted },
+  statTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  statLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  statIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statValue: { fontSize: 32, fontWeight: '800', color: COLORS.text },
   row: { flexDirection: 'row' },
-  colHalf: { flex: 1, alignItems: 'center', paddingVertical: 10 },
+  colHalf: { flex: 1, alignItems: 'center', paddingVertical: 12 },
   borderLeft: { borderLeftWidth: 1, borderLeftColor: COLORS.border },
-  amtLabel: { fontSize: 12, color: COLORS.muted, marginBottom: 4 },
-  amtValue: { fontSize: 22, fontWeight: '700' },
-  tapHint: { fontSize: 10, color: COLORS.primary, marginTop: 4 },
+  amtLabel: { fontSize: 13, color: COLORS.muted, marginBottom: 5, fontWeight: '500' },
+  amtValue: { fontSize: 24, fontWeight: '700' },
+  tapHint: { fontSize: 11, color: COLORS.primary, marginTop: 5 },
   overdueRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 12 },
   topBorder: { borderTopWidth: 1, borderTopColor: COLORS.border },
   overdueName: { fontSize: 14, fontWeight: '600', color: COLORS.text },

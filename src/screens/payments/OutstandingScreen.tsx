@@ -12,9 +12,12 @@ import { Payment } from '../../types';
 import { formatCurrency, formatMonth } from '../../utils';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import StatusBadge from '../../components/common/StatusBadge';
+import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
 type Tab = 'thisMonth' | 'allTime';
 type Props = { navigation: NativeStackNavigationProp<AppStackParamList> };
+
+const ORANGE = '#D97706';
 
 export default function OutstandingScreen({ navigation }: Props) {
   const { user } = useAuth();
@@ -64,16 +67,11 @@ export default function OutstandingScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {/* Summary banner */}
-      <View style={styles.summaryBanner}>
-        <Text style={styles.summaryLabel}>
-          {activeTab === 'thisMonth' ? 'Outstanding This Month' : 'All-Time Outstanding'}
-        </Text>
-        <Text style={styles.summaryValue}>{formatCurrency(totalOutstanding)}</Text>
-        <Text style={styles.summaryCount}>
-          {payments.length} unpaid record{payments.length !== 1 ? 's' : ''}
-        </Text>
-      </View>
+      <BlueBannerHeader
+        title="Outstanding Payments"
+        subtitle={`${formatCurrency(totalOutstanding)} unpaid · ${payments.length} record${payments.length !== 1 ? 's' : ''}`}
+        onBack={() => navigation.goBack()}
+      />
 
       {/* Tab Bar */}
       <View style={styles.tabBar}>
@@ -143,20 +141,8 @@ export default function OutstandingScreen({ navigation }: Props) {
   );
 }
 
-const ORANGE = '#D97706';
-const ORANGE_LIGHT = '#FEF3C7';
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  summaryBanner: {
-    backgroundColor: ORANGE,
-    padding: 16,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-  },
-  summaryLabel: { fontSize: 12, color: 'rgba(255,255,255,0.85)', marginBottom: 4 },
-  summaryValue: { fontSize: 28, fontWeight: '800', color: '#FFFFFF' },
-  summaryCount: { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 4 },
   tabBar: {
     flexDirection: 'row',
     backgroundColor: COLORS.white,
@@ -168,7 +154,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 13,
     gap: 6,
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',

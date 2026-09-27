@@ -146,8 +146,8 @@ const AppNavigator = () => (
     <AppStack.Screen name="VacantUnits" component={VacantUnitsScreen} options={{ headerShown: false }} />
     <AppStack.Screen name="AllUnits" component={AllUnitsScreen} options={{ headerShown: false }} />
     <AppStack.Screen name="OccupiedTenants" component={OccupiedTenantsScreen} options={{ headerShown: false }} />
-    <AppStack.Screen name="CollectedPayments" component={CollectedPaymentsScreen} options={{ title: 'Collected This Month' }} />
-    <AppStack.Screen name="Outstanding" component={OutstandingScreen} options={{ title: 'Outstanding Payments' }} />
+    <AppStack.Screen name="CollectedPayments" component={CollectedPaymentsScreen} options={{ headerShown: false }} />
+    <AppStack.Screen name="Outstanding" component={OutstandingScreen} options={{ headerShown: false }} />
     <AppStack.Screen name="MoveOut" component={MoveOutScreen} options={{ title: 'Move Out' }} />
     <AppStack.Screen name="AdminClients" component={AdminClientsScreen} options={{ title: 'Admin Clients' }} />
   </AppStack.Navigator>

@@ -88,6 +88,15 @@ export default function AllUnitsScreen({ navigation }: Props) {
         keyExtractor={u => u.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
         contentContainerStyle={styles.list}
+        ListHeaderComponent={
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={() => navigation.navigate('AddEditBuilding', {})}
+          >
+            <Ionicons name="add-circle" size={22} color={COLORS.primary} />
+            <Text style={styles.addText}>Add Unit / Building</Text>
+          </TouchableOpacity>
+        }
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="home-outline" size={48} color={COLORS.border} />
@@ -98,6 +107,7 @@ export default function AllUnitsScreen({ navigation }: Props) {
         renderItem={({ item }) => {
           const isPG = item.building_type === 'pg';
           const isVacant = item.is_vacant;
+          // Residential: flat/unit rent; PG: per-bed cost shown
           const rentLabel = isPG
             ? `${formatCurrency(item.rent_per_bed)} / bed · ${item.total_beds} beds`
             : `${formatCurrency(item.rent_per_bed)} / month`;
@@ -161,6 +171,11 @@ export default function AllUnitsScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   list: { padding: 16, gap: 10, paddingBottom: 32 },
+  addBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: COLORS.primaryLight, padding: 15, borderRadius: 12, marginBottom: 6,
+  },
+  addText: { color: COLORS.primary, fontWeight: '700', fontSize: 15 },
   card: {
     backgroundColor: COLORS.white, borderRadius: 12, padding: 14,
     flexDirection: 'row', alignItems: 'flex-start',

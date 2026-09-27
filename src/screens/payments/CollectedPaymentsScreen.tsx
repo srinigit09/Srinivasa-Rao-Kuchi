@@ -12,6 +12,7 @@ import { Payment } from '../../types';
 import { formatCurrency, formatDate, formatMonth } from '../../utils';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import StatusBadge from '../../components/common/StatusBadge';
+import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
 type Props = { navigation: NativeStackNavigationProp<AppStackParamList> };
 
@@ -50,12 +51,11 @@ export default function CollectedPaymentsScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {/* Summary banner */}
-      <View style={styles.summaryBanner}>
-        <Text style={styles.summaryLabel}>Total Collected This Month</Text>
-        <Text style={styles.summaryValue}>{formatCurrency(totalCollected)}</Text>
-        <Text style={styles.summaryCount}>{payments.length} payment{payments.length !== 1 ? 's' : ''}</Text>
-      </View>
+      <BlueBannerHeader
+        title="Collected This Month"
+        subtitle={`${formatCurrency(totalCollected)} · ${payments.length} payment${payments.length !== 1 ? 's' : ''}`}
+        onBack={() => navigation.goBack()}
+      />
 
       <FlatList
         data={payments}
@@ -100,15 +100,6 @@ export default function CollectedPaymentsScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  summaryBanner: {
-    backgroundColor: COLORS.success,
-    padding: 16,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-  },
-  summaryLabel: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginBottom: 4 },
-  summaryValue: { fontSize: 28, fontWeight: '800', color: '#FFFFFF' },
-  summaryCount: { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 4 },
   list: { padding: 16, gap: 10, paddingBottom: 32 },
   card: {
     backgroundColor: COLORS.white, borderRadius: 12, padding: 14,
