@@ -185,28 +185,28 @@ export default function DashboardScreen({ navigation }: Props) {
           />
         </View>
 
-        {/* Monthly Collection */}
-        <Card title="This Month's Collection">
+        {/* Monthly Payment Summary */}
+        <Card title="This Month's Payment Summary">
           <View style={styles.row}>
             <TouchableOpacity
               style={styles.colHalf}
-              onPress={() => navigation.navigate('CollectedPayments' as any)}
+              onPress={() => navigation.navigate('Reports' as any)}
             >
-              <Text style={styles.amtLabel}>Collected</Text>
+              <Text style={styles.amtLabel}>Received</Text>
               <Text style={[styles.amtValue, { color: COLORS.success }]}>
                 {formatCurrency(data?.collectedThisMonth ?? 0)}
               </Text>
-              <Text style={styles.tapHint}>tap to view ›</Text>
+              <Text style={styles.tapHint}>tap for details ›</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.colHalf, styles.borderLeft]}
-              onPress={() => navigation.navigate('Outstanding' as any)}
+              onPress={() => navigation.navigate('Reports' as any)}
             >
               <Text style={styles.amtLabel}>Outstanding</Text>
-              <Text style={[styles.amtValue, { color: COLORS.danger }]}>
+              <Text style={[styles.amtValue, { color: '#D97706' }]}>
                 {formatCurrency(data?.pendingThisMonth ?? 0)}
               </Text>
-              <Text style={styles.tapHint}>tap to view ›</Text>
+              <Text style={styles.tapHint}>tap for details ›</Text>
             </TouchableOpacity>
           </View>
         </Card>
