@@ -38,11 +38,11 @@
       "expo-sharing",
       "expo-font"
     ],
+    "owner": "sriniexpo09",
     "extra": {
       "eas": {
-        "projectId": "ccecf1b3-6c44-423c-95b5-3ca702f86b3f"
+        "projectId": "993c3327-cf22-4baa-a118-41b79e18aa1c"
       }
-    },
-    "owner": "sriniexpo_app"
+    }
   }
 }
