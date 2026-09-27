@@ -106,7 +106,7 @@ export default function TenantsScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  list: { padding: 16, gap: 10 },
+  list: { padding: 16, gap: 10, paddingBottom: 32 },
   searchRow: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white,
     borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, marginBottom: 10,

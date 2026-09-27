@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   summaryBanner: { backgroundColor: COLORS.warningLight, padding: 12, paddingHorizontal: 16 },
   summaryText: { color: COLORS.warning, fontWeight: '600', fontSize: 14 },
-  list: { padding: 16, gap: 10 },
+  list: { padding: 16, gap: 10, paddingBottom: 32 },
   card: {
     backgroundColor: COLORS.white, borderRadius: 12, padding: 14,
     flexDirection: 'row', alignItems: 'center',

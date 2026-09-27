@@ -117,8 +117,17 @@ const MainTabs = () => {
   );
 };
 
+const HEADER_BLUE = '#1D4ED8';
+
 const AppNavigator = () => (
-  <AppStack.Navigator screenOptions={{ headerTintColor: COLORS.primary }}>
+  <AppStack.Navigator
+    screenOptions={{
+      headerStyle: { backgroundColor: HEADER_BLUE },
+      headerTintColor: '#FFFFFF',
+      headerTitleStyle: { fontWeight: '700', fontSize: 17 },
+      contentStyle: { backgroundColor: COLORS.bg },
+    }}
+  >
     <AppStack.Screen name="Tabs" component={MainTabs} options={{ headerShown: false }} />
     <AppStack.Screen name="AddEditBuilding" component={AddEditBuildingScreen} options={{ title: 'Building' }} />
     <AppStack.Screen name="BuildingDetail" component={BuildingDetailScreen} options={{ title: 'Building Details' }} />

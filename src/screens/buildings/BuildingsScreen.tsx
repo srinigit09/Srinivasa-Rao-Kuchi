@@ -109,7 +109,7 @@ const Tag = ({ label, color = COLORS.primary }: { label: string; color?: string 
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  list: { padding: 16, gap: 10 },
+  list: { padding: 16, gap: 10, paddingBottom: 32 },
   addBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: COLORS.primaryLight, padding: 14, borderRadius: 10, marginBottom: 4,

@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginBottom: 4 },
   summaryValue: { fontSize: 28, fontWeight: '800', color: '#FFFFFF' },
   summaryCount: { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 4 },
-  list: { padding: 16, gap: 10 },
+  list: { padding: 16, gap: 10, paddingBottom: 32 },
   card: {
     backgroundColor: COLORS.white, borderRadius: 12, padding: 14,
     flexDirection: 'row', alignItems: 'center', gap: 12,

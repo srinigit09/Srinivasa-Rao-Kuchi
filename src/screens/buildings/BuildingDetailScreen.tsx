@@ -60,6 +60,13 @@ export default function BuildingDetailScreen({ navigation, route }: Props) {
     });
   };
 
+  const isPG = building?.building_type === 'pg';
+  const totalBeds = units.reduce((s, u) => s + (u.total_beds ?? 0), 0);
+  const occupiedBeds = units.reduce((s, u) => {
+    const active = u.tenants?.filter(t => t.is_active).length ?? 0;
+    return s + active;
+  }, 0);
+
   return (
     <View style={styles.container}>
       <FlatList
@@ -71,10 +78,56 @@ export default function BuildingDetailScreen({ navigation, route }: Props) {
           <View>
             {building && (
               <View style={styles.buildingCard}>
-                <Text style={styles.buildingType}>
-                  {building.building_type === 'residential' ? '🏠 Residential' : '🏨 PG/Hostel'}
-                </Text>
+                <View style={styles.buildingCardRow}>
+                  <Text style={styles.buildingType}>
+                    {isPG ? '🏨 PG/Hostel' : '🏠 Residential'}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.editBuildingBtn}
+                    onPress={() => navigation.navigate('AddEditBuilding', { buildingId })}
+                  >
+                    <Ionicons name="pencil-outline" size={15} color={COLORS.primary} />
+                  </TouchableOpacity>
+                </View>
                 {building.address && <Text style={styles.address}>{building.address}</Text>}
+                <View style={styles.statsRow}>
+                  <View style={styles.statChip}>
+                    <Text style={styles.statChipValue}>{units.length}</Text>
+                    <Text style={styles.statChipLabel}>{isPG ? 'Units' : 'Total Units'}</Text>
+                  </View>
+                  {isPG && (
+                    <>
+                      <View style={styles.statChip}>
+                        <Text style={styles.statChipValue}>{totalBeds}</Text>
+                        <Text style={styles.statChipLabel}>Total Beds</Text>
+                      </View>
+                      <View style={styles.statChip}>
+                        <Text style={[styles.statChipValue, { color: COLORS.success }]}>{occupiedBeds}</Text>
+                        <Text style={styles.statChipLabel}>Occupied</Text>
+                      </View>
+                      <View style={styles.statChip}>
+                        <Text style={[styles.statChipValue, { color: COLORS.warning }]}>{totalBeds - occupiedBeds}</Text>
+                        <Text style={styles.statChipLabel}>Vacant Beds</Text>
+                      </View>
+                    </>
+                  )}
+                  {!isPG && (
+                    <>
+                      <View style={styles.statChip}>
+                        <Text style={[styles.statChipValue, { color: COLORS.success }]}>
+                          {units.filter(u => !u.is_vacant).length}
+                        </Text>
+                        <Text style={styles.statChipLabel}>Occupied</Text>
+                      </View>
+                      <View style={styles.statChip}>
+                        <Text style={[styles.statChipValue, { color: COLORS.warning }]}>
+                          {units.filter(u => u.is_vacant).length}
+                        </Text>
+                        <Text style={styles.statChipLabel}>Vacant</Text>
+                      </View>
+                    </>
+                  )}
+                </View>
               </View>
             )}
             <TouchableOpacity
@@ -172,10 +225,25 @@ export default function BuildingDetailScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  list: { padding: 16, gap: 10 },
-  buildingCard: { backgroundColor: COLORS.white, borderRadius: 10, padding: 14, marginBottom: 8 },
-  buildingType: { fontSize: 14, fontWeight: '600', color: COLORS.text },
+  list: { padding: 16, gap: 10, paddingBottom: 32 },
+  buildingCard: {
+    backgroundColor: COLORS.white, borderRadius: 12, padding: 16, marginBottom: 8,
+    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+  },
+  buildingCardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  buildingType: { fontSize: 14, fontWeight: '700', color: COLORS.text },
+  editBuildingBtn: {
+    width: 30, height: 30, borderRadius: 8, backgroundColor: COLORS.primaryLight,
+    alignItems: 'center', justifyContent: 'center',
+  },
   address: { fontSize: 13, color: COLORS.muted, marginTop: 4 },
+  statsRow: { flexDirection: 'row', gap: 10, marginTop: 12, flexWrap: 'wrap' },
+  statChip: {
+    backgroundColor: COLORS.bg, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6,
+    alignItems: 'center', minWidth: 64,
+  },
+  statChipValue: { fontSize: 18, fontWeight: '800', color: COLORS.text },
+  statChipLabel: { fontSize: 10, color: COLORS.muted, marginTop: 2 },
   addBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: COLORS.primaryLight, padding: 14, borderRadius: 10, marginBottom: 4,

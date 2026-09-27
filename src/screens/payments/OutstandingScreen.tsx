@@ -143,15 +143,18 @@ export default function OutstandingScreen({ navigation }: Props) {
   );
 }
 
+const ORANGE = '#D97706';
+const ORANGE_LIGHT = '#FEF3C7';
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   summaryBanner: {
-    backgroundColor: COLORS.danger,
+    backgroundColor: ORANGE,
     padding: 16,
     paddingHorizontal: 20,
     alignItems: 'center',
   },
-  summaryLabel: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginBottom: 4 },
+  summaryLabel: { fontSize: 12, color: 'rgba(255,255,255,0.85)', marginBottom: 4 },
   summaryValue: { fontSize: 28, fontWeight: '800', color: '#FFFFFF' },
   summaryCount: { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 4 },
   tabBar: {
@@ -171,12 +174,12 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabActive: {
-    borderBottomColor: COLORS.primary,
+    borderBottomColor: ORANGE,
   },
   tabText: { fontSize: 14, fontWeight: '600', color: COLORS.muted },
-  tabTextActive: { color: COLORS.primary },
+  tabTextActive: { color: ORANGE },
   badge: {
-    backgroundColor: COLORS.danger,
+    backgroundColor: ORANGE,
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -185,18 +188,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
   },
   badgeText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
-  list: { padding: 16, gap: 10 },
+  list: { padding: 16, gap: 10, paddingBottom: 32 },
   card: {
     backgroundColor: COLORS.white, borderRadius: 12, padding: 14,
     flexDirection: 'row', alignItems: 'center', gap: 12,
     shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
-    borderLeftWidth: 3, borderLeftColor: COLORS.danger,
+    borderLeftWidth: 3, borderLeftColor: ORANGE,
   },
   tenantName: { fontSize: 15, fontWeight: '700', color: COLORS.text },
   meta: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
   period: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
   dueRow: { fontSize: 11, color: COLORS.muted, marginTop: 3 },
-  outstanding: { fontSize: 17, fontWeight: '700', color: COLORS.danger },
+  outstanding: { fontSize: 17, fontWeight: '700', color: ORANGE },
   empty: { alignItems: 'center', paddingTop: 80, gap: 8 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
   emptyText: { fontSize: 14, color: COLORS.muted },

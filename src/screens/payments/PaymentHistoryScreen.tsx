@@ -98,7 +98,7 @@ export default function PaymentHistoryScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  list: { padding: 16, gap: 10 },
+  list: { padding: 16, gap: 10, paddingBottom: 32 },
   header: { marginBottom: 12 },
   name: { fontSize: 17, fontWeight: '700', color: COLORS.text },
   meta: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
