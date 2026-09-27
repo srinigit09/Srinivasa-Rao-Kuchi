@@ -137,17 +137,18 @@ create table if not exists public.payments (
   payment_month   date not null,  -- always 1st of the month e.g. 2024-06-01
   amount_due      numeric(10,2) not null,
   amount_paid     numeric(10,2) not null default 0,
+  advance_paid    numeric(10,2) not null default 0,
   payment_date    date,
   payment_mode    text check (payment_mode in ('Cash','UPI','Bank Transfer','Cheque')),
   electricity     numeric(10,2) default 0,
   water           numeric(10,2) default 0,
   other_charges   numeric(10,2) default 0,
   other_label     text,
-  outstanding     numeric(10,2) generated always as (amount_due + coalesce(electricity,0) + coalesce(water,0) + coalesce(other_charges,0) - amount_paid) stored,
+  outstanding     numeric(10,2) generated always as (amount_due + coalesce(electricity,0) + coalesce(water,0) + coalesce(other_charges,0) - amount_paid - coalesce(advance_paid,0)) stored,
   status          text generated always as (
     case
-      when amount_paid = 0 then 'Pending'
-      when amount_paid >= (amount_due + coalesce(electricity,0) + coalesce(water,0) + coalesce(other_charges,0)) then 'Paid'
+      when amount_paid = 0 and coalesce(advance_paid,0) = 0 then 'Pending'
+      when (amount_paid + coalesce(advance_paid,0)) >= (amount_due + coalesce(electricity,0) + coalesce(water,0) + coalesce(other_charges,0)) then 'Paid'
       else 'Partial'
     end
   ) stored,
@@ -155,6 +156,23 @@ create table if not exists public.payments (
   receipt_number  text unique,
   created_at      timestamptz default now()
 );
+-- Safe migration: add advance_paid to existing tables
+-- (generated columns outstanding/status must be dropped and recreated to include advance_paid)
+alter table public.payments add column if not exists advance_paid numeric(10,2) not null default 0;
+-- Recreate generated columns to include advance_paid
+alter table public.payments drop column if exists outstanding;
+alter table public.payments drop column if exists status;
+alter table public.payments
+  add column outstanding numeric(10,2) generated always as (
+    amount_due + coalesce(electricity,0) + coalesce(water,0) + coalesce(other_charges,0) - amount_paid - coalesce(advance_paid,0)
+  ) stored,
+  add column status text generated always as (
+    case
+      when amount_paid = 0 and coalesce(advance_paid,0) = 0 then 'Pending'
+      when (amount_paid + coalesce(advance_paid,0)) >= (amount_due + coalesce(electricity,0) + coalesce(water,0) + coalesce(other_charges,0)) then 'Paid'
+      else 'Partial'
+    end
+  ) stored;
 alter table public.payments enable row level security;
 drop policy if exists "Owner only" on public.payments;
 create policy "Owner only" on public.payments using (auth.uid() = owner_id);

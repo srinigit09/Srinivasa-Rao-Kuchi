@@ -47,7 +47,7 @@ export default function CollectedPaymentsScreen({ navigation }: Props) {
   useFocusEffect(useCallback(() => { load(); }, [load]));
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
-  const totalCollected = payments.reduce((s, p) => s + p.amount_paid, 0);
+  const totalCollected = payments.reduce((s, p) => s + p.amount_paid + (p.advance_paid ?? 0), 0);
 
   return (
     <View style={styles.container}>
@@ -83,12 +83,20 @@ export default function CollectedPaymentsScreen({ navigation }: Props) {
                   {item.payment_mode} · {formatDate(item.payment_date)}
                 </Text>
               )}
+              {(item.advance_paid ?? 0) > 0 && (
+                <Text style={styles.advanceTag}>
+                  + {formatCurrency(item.advance_paid)} advance
+                </Text>
+              )}
               {item.receipt_number && (
                 <Text style={styles.rcpNo}>{item.receipt_number}</Text>
               )}
             </View>
             <View style={{ alignItems: 'flex-end', gap: 6 }}>
-              <Text style={styles.amount}>{formatCurrency(item.amount_paid)}</Text>
+              <Text style={styles.amount}>{formatCurrency(item.amount_paid + (item.advance_paid ?? 0))}</Text>
+              {(item.advance_paid ?? 0) > 0 && (
+                <Text style={styles.amountBreak}>rent {formatCurrency(item.amount_paid)}</Text>
+              )}
               <StatusBadge status={item.status} />
             </View>
           </TouchableOpacity>
@@ -113,6 +121,8 @@ const styles = StyleSheet.create({
   date: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
   rcpNo: { fontSize: 11, color: COLORS.primary, marginTop: 2 },
   amount: { fontSize: 17, fontWeight: '700', color: COLORS.success },
+  amountBreak: { fontSize: 10, color: COLORS.muted },
+  advanceTag: { fontSize: 11, color: '#7C3AED', fontWeight: '600', marginTop: 2 },
   empty: { alignItems: 'center', paddingTop: 80, gap: 8 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
   emptyText: { fontSize: 14, color: COLORS.muted },

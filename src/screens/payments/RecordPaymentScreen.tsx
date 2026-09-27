@@ -27,6 +27,7 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
   const [paymentMonth, setPaymentMonth] = useState(currentMonthDate());
   const [amountDue, setAmountDue] = useState('');
   const [amountPaid, setAmountPaid] = useState('');
+  const [advancePaid, setAdvancePaid] = useState('');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentMode, setPaymentMode] = useState('Cash');
   const [electricity, setElectricity] = useState('');
@@ -53,6 +54,7 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
           setPaymentMonth(data.payment_month);
           setAmountDue(String(data.amount_due));
           setAmountPaid(String(data.amount_paid));
+          setAdvancePaid(String(data.advance_paid ?? ''));
           setPaymentDate(data.payment_date ?? '');
           setPaymentMode(data.payment_mode ?? 'Cash');
           setElectricity(String(data.electricity ?? ''));
@@ -65,13 +67,19 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
     }
   }, [tenantId, paymentId]);
 
-  const totalBill = (parseFloat(amountDue) || 0)
+  const rentTotal = (parseFloat(amountDue) || 0)
     + (parseFloat(electricity) || 0)
     + (parseFloat(water) || 0)
     + (parseFloat(otherCharges) || 0);
 
+  const totalPaying = (parseFloat(amountPaid) || 0) + (parseFloat(advancePaid) || 0);
+  const balance = rentTotal - totalPaying;
+
   const save = async () => {
-    if (!amountPaid) { Alert.alert('Required', 'Please enter amount paid.'); return; }
+    if (!amountPaid && !advancePaid) {
+      Alert.alert('Required', 'Please enter at least an amount paid or advance paid.');
+      return;
+    }
     setLoading(true);
 
     // Generate receipt number via RPC
@@ -83,6 +91,7 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
       payment_month: paymentMonth,
       amount_due: parseFloat(amountDue) || 0,
       amount_paid: parseFloat(amountPaid) || 0,
+      advance_paid: parseFloat(advancePaid) || 0,
       payment_date: paymentDate || null,
       payment_mode: paymentMode,
       electricity: parseFloat(electricity) || 0,
@@ -133,12 +142,49 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
           <FormField label="Other Charges Label" placeholder="e.g. Parking, Internet" value={otherLabel} onChangeText={setOtherLabel} />
         )}
 
+        {/* Total bill summary */}
         <Card>
-          <Text style={styles.totalLabel}>Total Bill</Text>
-          <Text style={styles.totalValue}>{formatCurrency(totalBill)}</Text>
+          <View style={styles.billRow}>
+            <Text style={styles.billLabel}>Total Bill</Text>
+            <Text style={styles.billValue}>{formatCurrency(rentTotal)}</Text>
+          </View>
         </Card>
 
-        <FormField label="Amount Paid (₹)" required placeholder="Amount paid" keyboardType="decimal-pad" value={amountPaid} onChangeText={setAmountPaid} />
+        {/* Divider */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>💰 Payment Received</Text>
+        </View>
+
+        <FormField
+          label="Rent Paid (₹)"
+          required
+          placeholder="Amount paid against rent"
+          keyboardType="decimal-pad"
+          value={amountPaid}
+          onChangeText={setAmountPaid}
+        />
+        <FormField
+          label="Advance / Deposit Paid (₹)"
+          placeholder="0  — extra amount collected as advance"
+          keyboardType="decimal-pad"
+          value={advancePaid}
+          onChangeText={setAdvancePaid}
+        />
+
+        {/* Running balance */}
+        <Card>
+          <View style={styles.billRow}>
+            <Text style={styles.billLabel}>Total Received</Text>
+            <Text style={[styles.billValue, { color: COLORS.success }]}>{formatCurrency(totalPaying)}</Text>
+          </View>
+          <View style={[styles.billRow, { marginTop: 6 }]}>
+            <Text style={styles.billLabel}>Balance Outstanding</Text>
+            <Text style={[styles.billValue, { color: balance > 0 ? '#D97706' : COLORS.success }]}>
+              {balance > 0 ? formatCurrency(balance) : '✓ Fully Paid'}
+            </Text>
+          </View>
+        </Card>
+
         <SelectField label="Payment Mode" options={[...PAYMENT_MODES]} value={paymentMode} onChange={setPaymentMode} />
         <FormField label="Payment Date" placeholder="YYYY-MM-DD" value={paymentDate} onChangeText={setPaymentDate} keyboardType="numeric" />
         <FormField label="Notes" placeholder="Optional notes" multiline numberOfLines={2} value={notes} onChangeText={setNotes} />
@@ -163,6 +209,15 @@ const styles = StyleSheet.create({
   tenantInfo: { flex: 1 },
   tenantName: { fontSize: 15, fontWeight: '700', color: COLORS.primary },
   tenantMeta: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
-  totalLabel: { fontSize: 12, color: COLORS.muted },
-  totalValue: { fontSize: 22, fontWeight: '700', color: COLORS.text, marginTop: 4 },
+  sectionHeader: {
+    backgroundColor: COLORS.bg,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: COLORS.text },
+  billRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  billLabel: { fontSize: 13, color: COLORS.muted },
+  billValue: { fontSize: 20, fontWeight: '700', color: COLORS.text },
 });

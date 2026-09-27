@@ -23,6 +23,8 @@ type Props = {
 
 const buildReceiptHTML = (payment: Payment & { tenant_name: string; building_name: string; unit_number: string }) => {
   const totalBilled = payment.amount_due + payment.electricity + payment.water + payment.other_charges;
+  const advancePaid = payment.advance_paid ?? 0;
+  const totalReceived = payment.amount_paid + advancePaid;
   return `
 <!DOCTYPE html>
 <html>
@@ -82,9 +84,18 @@ const buildReceiptHTML = (payment: Payment & { tenant_name: string; building_nam
     <div class="row"><span class="row-label">Total Billed</span><span class="row-value">${formatCurrency(totalBilled)}</span></div>
   </div>
   <div class="paid-box">
-    <span class="paid-label">Amount Paid</span>
+    <span class="paid-label">${advancePaid > 0 ? 'Rent Paid' : 'Amount Paid'}</span>
     <span class="paid-value">${formatCurrency(payment.amount_paid)}</span>
   </div>
+  ${advancePaid > 0 ? `
+  <div class="paid-box" style="background:#F5F3FF;border-color:#7C3AED;margin-top:8px;">
+    <span class="paid-label" style="color:#5B21B6;">Advance / Deposit</span>
+    <span class="paid-value" style="color:#7C3AED;">${formatCurrency(advancePaid)}</span>
+  </div>
+  <div class="summary-row" style="margin-top:4px;">
+    <span class="summary-label">Total Received</span>
+    <span class="summary-value">${formatCurrency(totalReceived)}</span>
+  </div>` : ''}
   <div class="summary-row">
     <span class="summary-label">Payment Mode</span>
     <span class="summary-value">${payment.payment_mode ?? '—'}</span>
@@ -201,9 +212,15 @@ export default function ReceiptScreen({ navigation, route }: Props) {
 
         {/* Amount Paid — prominent */}
         <View style={styles.paidBox}>
-          <Text style={styles.paidLabel}>Amount Paid</Text>
+          <Text style={styles.paidLabel}>{(payment.advance_paid ?? 0) > 0 ? 'Rent Paid' : 'Amount Paid'}</Text>
           <Text style={styles.paidValue}>{formatCurrency(payment.amount_paid)}</Text>
         </View>
+        {(payment.advance_paid ?? 0) > 0 && (
+          <View style={[styles.paidBox, styles.advanceBox]}>
+            <Text style={[styles.paidLabel, { color: '#5B21B6' }]}>Advance / Deposit</Text>
+            <Text style={[styles.paidValue, { color: '#7C3AED' }]}>{formatCurrency(payment.advance_paid)}</Text>
+          </View>
+        )}
 
         {/* Payment info */}
         <Section title="PAYMENT INFO">
@@ -278,6 +295,7 @@ const styles = StyleSheet.create({
   },
   paidLabel: { fontSize: 16, fontWeight: '700', color: COLORS.text },
   paidValue: { fontSize: 26, fontWeight: '800', color: COLORS.success },
+  advanceBox: { backgroundColor: '#F5F3FF', borderColor: '#7C3AED', marginTop: 8 },
   statusRow: { paddingHorizontal: 20, paddingVertical: 16 },
   notes: { paddingHorizontal: 20, paddingBottom: 18, fontSize: 14, color: COLORS.muted, lineHeight: 20 },
   actions: {

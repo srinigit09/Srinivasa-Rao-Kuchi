@@ -85,6 +85,7 @@ export interface Payment {
   payment_month: string;
   amount_due: number;
   amount_paid: number;
+  advance_paid: number;
   payment_date: string | null;
   payment_mode: PaymentMode | null;
   electricity: number;

@@ -63,6 +63,7 @@ export default function OutstandingScreen({ navigation }: Props) {
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const payments = activeTab === 'thisMonth' ? thisMonthPayments : allTimePayments;
+  // outstanding is already net of advance_paid (computed by DB generated column)
   const totalOutstanding = payments.reduce((s, p) => s + (p.outstanding ?? 0), 0);
 
   return (
@@ -125,8 +126,13 @@ export default function OutstandingScreen({ navigation }: Props) {
               <Text style={styles.meta}>{item.building_name} · {item.unit_number}</Text>
               <Text style={styles.period}>{formatMonth(item.payment_month)}</Text>
               <Text style={styles.dueRow}>
-                Due: {formatCurrency(item.amount_due)} · Paid: {formatCurrency(item.amount_paid)}
+                Due: {formatCurrency(item.amount_due)} · Rent Paid: {formatCurrency(item.amount_paid)}
               </Text>
+              {(item.advance_paid ?? 0) > 0 && (
+                <Text style={styles.advanceRow}>
+                  Advance: {formatCurrency(item.advance_paid)} applied
+                </Text>
+              )}
             </View>
             <View style={{ alignItems: 'flex-end', gap: 6 }}>
               {item.outstanding > 0 && (
@@ -185,6 +191,7 @@ const styles = StyleSheet.create({
   meta: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
   period: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
   dueRow: { fontSize: 11, color: COLORS.muted, marginTop: 3 },
+  advanceRow: { fontSize: 11, color: '#7C3AED', fontWeight: '600', marginTop: 2 },
   outstanding: { fontSize: 17, fontWeight: '700', color: ORANGE },
   empty: { alignItems: 'center', paddingTop: 80, gap: 8 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },

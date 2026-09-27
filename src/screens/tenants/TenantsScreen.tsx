@@ -11,6 +11,7 @@ import { COLORS } from '../../constants';
 import { Tenant } from '../../types';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import { formatDate } from '../../utils';
+import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
 type Props = { navigation: NativeStackNavigationProp<AppStackParamList> };
 
@@ -56,6 +57,11 @@ export default function TenantsScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      <BlueBannerHeader
+        title="All Tenants"
+        subtitle={`${tenants.length} active tenant${tenants.length !== 1 ? 's' : ''}`}
+      />
+
       <FlatList
         data={filtered}
         keyExtractor={t => t.id}
@@ -117,7 +123,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: COLORS.primaryLight, padding: 14, borderRadius: 10, marginBottom: 4,
   },
-  addText: { color: COLORS.primary, fontWeight: '600', fontSize: 15 },
+  addText: { color: COLORS.primary, fontWeight: '700', fontSize: 15 },
   card: {
     backgroundColor: COLORS.white, borderRadius: 12, padding: 14,
     flexDirection: 'row', alignItems: 'center', gap: 12,

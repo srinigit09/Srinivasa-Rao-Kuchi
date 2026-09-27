@@ -36,7 +36,7 @@ export default function PaymentHistoryScreen({ navigation, route }: Props) {
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const totalDue = payments.reduce((s, p) => s + (p.amount_due + p.electricity + p.water + p.other_charges), 0);
-  const totalPaid = payments.reduce((s, p) => s + p.amount_paid, 0);
+  const totalPaid = payments.reduce((s, p) => s + p.amount_paid + (p.advance_paid ?? 0), 0);
 
   return (
     <View style={styles.container}>
@@ -83,7 +83,10 @@ export default function PaymentHistoryScreen({ navigation, route }: Props) {
           >
             <View style={{ flex: 1 }}>
               <Text style={styles.month}>{formatMonth(item.payment_month)}</Text>
-              <Text style={styles.amtRow}>Paid: {formatCurrency(item.amount_paid)} / Due: {formatCurrency(item.amount_due)}</Text>
+              <Text style={styles.amtRow}>Rent Paid: {formatCurrency(item.amount_paid)} / Due: {formatCurrency(item.amount_due)}</Text>
+              {(item.advance_paid ?? 0) > 0 && (
+                <Text style={styles.advance}>Advance: {formatCurrency(item.advance_paid)}</Text>
+              )}
               {item.outstanding > 0 && <Text style={styles.outstanding}>Outstanding: {formatCurrency(item.outstanding)}</Text>}
               {item.payment_date && <Text style={styles.date}>{item.payment_mode} · {formatDate(item.payment_date)}</Text>}
               {item.receipt_number && <Text style={styles.rcpNo}>{item.receipt_number}</Text>}
@@ -122,6 +125,7 @@ const styles = StyleSheet.create({
   },
   month: { fontSize: 15, fontWeight: '700', color: COLORS.text },
   amtRow: { fontSize: 13, color: COLORS.muted, marginTop: 3 },
+  advance: { fontSize: 11, color: '#7C3AED', fontWeight: '600', marginTop: 2 },
   outstanding: { fontSize: 12, color: COLORS.danger, marginTop: 2 },
   date: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
   rcpNo: { fontSize: 11, color: COLORS.primary, marginTop: 2 },
