@@ -11,6 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
     steps:
       # ── 1. Checkout ────────────────────────────────────────────────────────
       - name: Checkout repository
@@ -38,16 +43,14 @@ jobs:
       - name: Install EAS CLI
         run: npm install -g eas-cli@latest
 
-      # ── 6. Write .env so Supabase constants are available at build time ─────
-      - name: Write environment variables
+      # ── 6. Write .env so Supabase constants are baked into the bundle ───────
+      - name: Write .env file
         run: |
-          echo "EXPO_PUBLIC_SUPABASE_URL=${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}" >> .env
-          echo "EXPO_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}" >> .env
+          echo "EXPO_PUBLIC_SUPABASE_URL=${EXPO_PUBLIC_SUPABASE_URL}" > .env
+          echo "EXPO_PUBLIC_SUPABASE_ANON_KEY=${EXPO_PUBLIC_SUPABASE_ANON_KEY}" >> .env
 
       # ── 7. Build APK locally (no EAS server quota used) ────────────────────
       - name: Build APK (local)
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: eas build --platform android --profile preview --local --non-interactive --output ./propease-preview.apk
 
       # ── 8. Upload APK as a downloadable artifact ────────────────────────────
