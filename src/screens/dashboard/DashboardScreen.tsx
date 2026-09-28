@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl,
-  StatusBar, Modal, FlatList,
+  StatusBar,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -36,52 +36,32 @@ interface PaymentRow {
 }
 
 interface DashboardData {
-  buildings: BuildingSummary[];
-  totalBuildings: number;
-  allUnits: { id: string; is_vacant: boolean; building_id: string }[];
+  allUnits: { id: string; is_vacant: boolean }[];
   allPayments: PaymentRow[];
 }
 
 const HEADER_BLUE = '#1D4ED8';
-const ALL_ID = '__all__';
 
 export default function DashboardScreen({ navigation }: Props) {
   const { user, signOut } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedBuildingId, setSelectedBuildingId] = useState<string>(ALL_ID);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const insets = useSafeAreaInsets();
 
   const load = useCallback(async () => {
     if (!user) return;
-    const [bldRes, unitRes, payRes] = await Promise.all([
-      supabase
-        .from('buildings')
-        .select('id, name, building_type, units(id, is_vacant)')
-        .eq('owner_id', user.id)
-        .order('name'),
+    const [unitRes, payRes] = await Promise.all([
       supabase
         .from('units')
-        .select('id, is_vacant, building_id')
+        .select('id, is_vacant')
         .eq('owner_id', user.id),
       supabase
         .from('payments')
-        .select('amount_paid, advance_paid, outstanding, status, payment_month, tenant_id, tenants(full_name, units(unit_number, building_id, buildings(name, id)))')
+        .select('amount_paid, advance_paid, outstanding, status, payment_month, tenant_id, tenants(full_name, units(unit_number, buildings(name)))')
         .eq('owner_id', user.id),
     ]);
 
-    const allBuildings: BuildingSummary[] = (bldRes.data ?? []).map((b: any) => ({
-      id: b.id,
-      name: b.name,
-      building_type: b.building_type,
-      total_units: b.units?.length ?? 0,
-      vacant_units: b.units?.filter((u: any) => u.is_vacant).length ?? 0,
-    }));
-
     setData({
-      buildings: allBuildings,
-      totalBuildings: allBuildings.length,
       allUnits: (unitRes.data ?? []) as any,
       allPayments: (payRes.data ?? []) as any,
     });
@@ -90,34 +70,21 @@ export default function DashboardScreen({ navigation }: Props) {
   useFocusEffect(useCallback(() => { load(); }, [load]));
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
-  // ── derived stats, all filtered by selectedBuildingId ────────────────────
-  const isFiltered = selectedBuildingId !== ALL_ID;
-  const selectedBuilding = data?.buildings.find(b => b.id === selectedBuildingId);
-
-  // Unit counts
-  const filteredUnits = isFiltered
-    ? (data?.allUnits ?? []).filter(u => u.building_id === selectedBuildingId)
-    : (data?.allUnits ?? []);
-  const displayUnits    = filteredUnits.length;
-  const displayVacant   = filteredUnits.filter(u => u.is_vacant).length;
+  // ── derived stats ─────────────────────────────────────────────────────────
+  const allUnits    = data?.allUnits ?? [];
+  const displayUnits    = allUnits.length;
+  const displayVacant   = allUnits.filter(u => u.is_vacant).length;
   const displayOccupied = displayUnits - displayVacant;
 
-  // Payments filtered by building
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
-  const filteredPayments = isFiltered
-    ? (data?.allPayments ?? []).filter(p => {
-        const bid = (p.tenants as any)?.units?.buildings?.id;
-        return bid === selectedBuildingId;
-      })
-    : (data?.allPayments ?? []);
-
-  const thisMonthPayments = filteredPayments.filter(p => p.payment_month === thisMonth);
+  const allPayments = data?.allPayments ?? [];
+  const thisMonthPayments = allPayments.filter(p => p.payment_month === thisMonth);
   const collectedThisMonth = thisMonthPayments.reduce((s, p) => s + (p.amount_paid ?? 0) + (p.advance_paid ?? 0), 0);
   const pendingThisMonth   = thisMonthPayments.reduce((s, p) => s + (p.outstanding ?? 0), 0);
 
-  const overduePayments = filteredPayments
+  const overduePayments = allPayments
     .filter(p => isOverdue(p.payment_month) && p.status !== 'Paid')
     .slice(0, 5)
     .map(p => ({
@@ -128,18 +95,10 @@ export default function DashboardScreen({ navigation }: Props) {
       month:  p.payment_month,
     }));
 
-  const dropdownLabel = isFiltered
-    ? selectedBuilding?.name ?? 'Select Building'
-    : `All Buildings${data ? ` (${data.totalBuildings})` : ''}`;
-
-  // Navigation helpers — pass building filter through params
-  const buildingParam = isFiltered
-    ? { buildingId: selectedBuildingId, buildingName: selectedBuilding?.name }
-    : {};
-  const navToBuildings = () => navigation.navigate('Buildings' as any);
-  const navToUnits     = () => navigation.navigate('AllUnits', buildingParam);
-  const navToOccupied  = () => navigation.navigate('OccupiedTenants', buildingParam);
-  const navToVacant    = () => navigation.navigate('VacantUnits', buildingParam);
+  // Navigation helpers
+  const navToUnits    = () => navigation.navigate('AllUnits', {});
+  const navToOccupied = () => navigation.navigate('OccupiedTenants', {});
+  const navToVacant   = () => navigation.navigate('VacantUnits', {});
 
   return (
     <View style={{ flex: 1, backgroundColor: HEADER_BLUE }}>
@@ -166,13 +125,6 @@ export default function DashboardScreen({ navigation }: Props) {
             <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
         </View>
-
-        {/* Building selector */}
-        <TouchableOpacity style={styles.dropdownBtn} onPress={() => setDropdownOpen(true)} activeOpacity={0.8}>
-          <Ionicons name="business-outline" size={16} color="#fff" />
-          <Text style={styles.dropdownLabel} numberOfLines={1}>{dropdownLabel}</Text>
-          <Ionicons name="chevron-down" size={16} color="rgba(255,255,255,0.8)" />
-        </TouchableOpacity>
       </View>
 
       {/* ── Quick Actions ── */}
@@ -198,9 +150,8 @@ export default function DashboardScreen({ navigation }: Props) {
           </TouchableOpacity>
         )}
 
-        {/* ── Stat cards: 3 cards, label on top (larger), count below ── */}
+        {/* ── Stat cards ── */}
         <View style={styles.grid}>
-          <StatCard label="Buildings"   value={data?.totalBuildings ?? 0} icon="business" color={COLORS.primary} onPress={navToBuildings} />
           <StatCard label="Total Units" value={displayUnits}    icon="home"   color="#7C3AED" onPress={navToUnits} />
           <StatCard label="Occupied"    value={displayOccupied} icon="person" color={COLORS.success} onPress={navToOccupied} />
           <StatCard label="Vacant"      value={displayVacant}   icon="key"    color="#D97706" onPress={navToVacant} />
@@ -209,12 +160,12 @@ export default function DashboardScreen({ navigation }: Props) {
         {/* ── This Month's Payment Summary ── */}
         <Card title="This Month's Payment Summary">
           <View style={styles.row}>
-            <TouchableOpacity style={styles.colHalf} onPress={() => navigation.navigate('CollectedPayments', buildingParam)}>
+            <TouchableOpacity style={styles.colHalf} onPress={() => navigation.navigate('CollectedPayments', {})}>
               <Text style={styles.amtLabel}>Received</Text>
               <Text style={[styles.amtValue, { color: COLORS.success }]}>{formatCurrency(collectedThisMonth)}</Text>
               <Text style={styles.tapHint}>tap for details ›</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.colHalf, styles.borderLeft]} onPress={() => navigation.navigate('Outstanding', buildingParam)}>
+            <TouchableOpacity style={[styles.colHalf, styles.borderLeft]} onPress={() => navigation.navigate('Outstanding', {})}>
               <Text style={styles.amtLabel}>Outstanding</Text>
               <Text style={[styles.amtValue, { color: '#D97706' }]}>{formatCurrency(pendingThisMonth)}</Text>
               <Text style={styles.tapHint}>tap for details ›</Text>
@@ -237,64 +188,6 @@ export default function DashboardScreen({ navigation }: Props) {
           </Card>
         )}
       </ScrollView>
-
-      {/* ── Building picker modal ── */}
-      <Modal visible={dropdownOpen} transparent animationType="fade" onRequestClose={() => setDropdownOpen(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDropdownOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet}>
-            <Text style={styles.dropdownTitle}>Filter by Building</Text>
-
-            {/* All buildings row */}
-            <TouchableOpacity
-              style={[styles.dropdownItem, selectedBuildingId === ALL_ID && styles.dropdownItemActive]}
-              onPress={() => { setSelectedBuildingId(ALL_ID); setDropdownOpen(false); }}
-            >
-              <Ionicons name="grid-outline" size={18} color={selectedBuildingId === ALL_ID ? COLORS.primary : COLORS.muted} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.dropdownItemText, selectedBuildingId === ALL_ID && { color: COLORS.primary }]}>All Buildings</Text>
-                <Text style={styles.dropdownItemSub}>{data?.totalBuildings ?? 0} buildings · {data?.allUnits.length ?? 0} total units</Text>
-              </View>
-              {selectedBuildingId === ALL_ID && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
-            </TouchableOpacity>
-
-            {/* Per-building rows */}
-            <FlatList
-              data={data?.buildings ?? []}
-              keyExtractor={b => b.id}
-              style={{ maxHeight: 320 }}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.dropdownItem, selectedBuildingId === item.id && styles.dropdownItemActive]}
-                  onPress={() => { setSelectedBuildingId(item.id); setDropdownOpen(false); }}
-                >
-                  <Ionicons
-                    name={item.building_type === 'pg' ? 'bed-outline' : 'business-outline'}
-                    size={18}
-                    color={selectedBuildingId === item.id ? COLORS.primary : COLORS.muted}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.dropdownItemText, selectedBuildingId === item.id && { color: COLORS.primary }]}>{item.name}</Text>
-                    <Text style={styles.dropdownItemSub}>
-                      {item.building_type === 'pg' ? 'PG/Hostel' : 'Residential'} · {item.total_units} units · {item.vacant_units} vacant
-                    </Text>
-                  </View>
-                  {selectedBuildingId === item.id && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
-                </TouchableOpacity>
-              )}
-            />
-
-            {/* Open building detail shortcut */}
-            {isFiltered && (
-              <TouchableOpacity
-                style={styles.viewBuildingBtn}
-                onPress={() => { setDropdownOpen(false); navigation.navigate('BuildingDetail', { buildingId: selectedBuildingId }); }}
-              >
-                <Text style={styles.viewBuildingText}>Open Building Detail →</Text>
-              </TouchableOpacity>
-            )}
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 }
@@ -331,7 +224,7 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
   appNameRow: {
-    flexDirection: 'row', alignItems: 'center', marginBottom: 10,
+    flexDirection: 'row', alignItems: 'center', marginBottom: 0,
   },
   appIconCircle: {
     width: 28, height: 28, borderRadius: 7,
@@ -344,14 +237,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 8,
   },
   logoutText: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.9)' },
-
-  dropdownBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
-  },
-  dropdownLabel: { flex: 1, fontSize: 15, fontWeight: '700', color: '#fff' },
 
   quickActionsPanel: {
     flexDirection: 'row', justifyContent: 'space-around',
@@ -370,7 +255,6 @@ const styles = StyleSheet.create({
   },
   alertText: { flex: 1, color: COLORS.danger, fontSize: 12, fontWeight: '500' },
 
-  // 3 cards in a row — label top (larger), count below, icon bottom
   grid: { flexDirection: 'row', paddingHorizontal: 10, marginTop: 12, gap: 8 },
   statCard: {
     flex: 1, backgroundColor: COLORS.white, borderRadius: 12,
@@ -393,26 +277,4 @@ const styles = StyleSheet.create({
   overdueName: { fontSize: 13, fontWeight: '600', color: COLORS.text },
   overdueSub: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
 
-  modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-start', paddingTop: 120, paddingHorizontal: 16,
-  },
-  dropdownSheet: {
-    backgroundColor: COLORS.white, borderRadius: 18,
-    paddingTop: 16, paddingBottom: 8,
-    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, elevation: 12,
-  },
-  dropdownTitle: {
-    fontSize: 13, fontWeight: '700', color: COLORS.muted,
-    paddingHorizontal: 18, marginBottom: 8, letterSpacing: 0.5, textTransform: 'uppercase',
-  },
-  dropdownItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 13 },
-  dropdownItemActive: { backgroundColor: COLORS.primaryLight },
-  dropdownItemText: { fontSize: 15, fontWeight: '600', color: COLORS.text },
-  dropdownItemSub: { fontSize: 11, color: COLORS.muted, marginTop: 1 },
-  viewBuildingBtn: {
-    margin: 14, marginTop: 6,
-    backgroundColor: COLORS.primaryLight, borderRadius: 10, padding: 12, alignItems: 'center',
-  },
-  viewBuildingText: { color: COLORS.primary, fontWeight: '700', fontSize: 14 },
 });

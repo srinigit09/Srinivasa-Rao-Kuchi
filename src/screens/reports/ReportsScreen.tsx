@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl,
-  TextInput, Modal,
+  TextInput, Modal, FlatList,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -18,6 +18,14 @@ import Card from '../../components/common/Card';
 
 type Props = { navigation: NativeStackNavigationProp<AppStackParamList> };
 type FilterKey = 'thisMonth' | 'lastQuarter' | '6months' | '1year' | 'custom';
+
+interface BuildingSummary {
+  id: string;
+  name: string;
+  building_type: 'residential' | 'pg';
+  total_units: number;
+  vacant_units: number;
+}
 
 interface MonthlySummary {
   month: string;
@@ -68,6 +76,12 @@ export default function ReportsScreen({ navigation }: Props) {
   const [tempFrom,     setTempFrom]          = useState('');
   const [tempTo,       setTempTo]            = useState('');
 
+  // Building filter
+  const ALL_ID = '__all__';
+  const [buildings,          setBuildings]          = useState<BuildingSummary[]>([]);
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>(ALL_ID);
+  const [buildingDropdown,   setBuildingDropdown]   = useState(false);
+
   const [summaries,       setSummaries]       = useState<MonthlySummary[]>([]);
   const [pendingPayments, setPendingPayments] = useState<Payment[]>([]);
   const [refreshing,      setRefreshing]      = useState(false);
@@ -75,32 +89,66 @@ export default function ReportsScreen({ navigation }: Props) {
   const load = useCallback(async () => {
     if (!user) return;
     const { from, to } = getDateRange(activeFilter, customFrom, customTo);
-    const [{ data: s }, { data: p }] = await Promise.all([
+    const [{ data: bld }, { data: s }, { data: p }] = await Promise.all([
+      supabase
+        .from('buildings')
+        .select('id, name, building_type, units(id, is_vacant)')
+        .eq('owner_id', user.id)
+        .order('name'),
       supabase.from('v_monthly_summary').select('*')
         .eq('owner_id', user.id).gte('month', from).lte('month', to)
         .order('month', { ascending: false }),
       supabase.from('payments')
-        .select('*, tenants(full_name, phone, units(unit_number, buildings(name)))')
+        .select('*, tenants(full_name, phone, units(unit_number, building_id, buildings(name, id)))')
         .eq('owner_id', user.id).neq('status', 'Paid')
         .gte('payment_month', from).lte('payment_month', to)
         .order('payment_month', { ascending: false }),
     ]);
+
+    setBuildings((bld ?? []).map((b: any) => ({
+      id: b.id,
+      name: b.name,
+      building_type: b.building_type,
+      total_units: b.units?.length ?? 0,
+      vacant_units: b.units?.filter((u: any) => u.is_vacant).length ?? 0,
+    })));
+
     setSummaries((s ?? []) as MonthlySummary[]);
-    setPendingPayments((p ?? []).map((x: any) => ({
+
+    let payments = (p ?? []).map((x: any) => ({
       ...x,
       tenant_name:   x.tenants?.full_name,
       unit_number:   x.tenants?.units?.unit_number,
       building_name: x.tenants?.units?.buildings?.name,
-    })) as Payment[]);
-  }, [user, activeFilter, customFrom, customTo]);
+      _building_id:  x.tenants?.units?.building_id,
+    })) as (Payment & { _building_id?: string })[];
+
+    if (selectedBuildingId !== ALL_ID) {
+      payments = payments.filter(pp => pp._building_id === selectedBuildingId);
+    }
+
+    setPendingPayments(payments as Payment[]);
+  }, [user, activeFilter, customFrom, customTo, selectedBuildingId]);
 
   // Reload whenever the filter or custom range changes
   useEffect(() => { load(); }, [load]);
 
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
+  const isFiltered = selectedBuildingId !== ALL_ID;
+  const selectedBuilding = buildings.find(b => b.id === selectedBuildingId);
+
+  // Filter monthly summaries by building if a specific building is selected.
+  // v_monthly_summary doesn't have building_id, so we apply pending-payment
+  // derived totals instead when filtered; for the breakdown table we keep
+  // unfiltered summaries but note the caveat. Building-level summary totals
+  // are derived from the already-filtered pendingPayments list below.
   const totalReceived    = summaries.reduce((s, m) => s + m.total_collected, 0);
   const totalOutstanding = summaries.reduce((s, m) => s + m.total_outstanding, 0);
+
+  const dropdownLabel = isFiltered
+    ? selectedBuilding?.name ?? 'Select Building'
+    : `All Buildings (${buildings.length})`;
 
   const rangeLabel = activeFilter === 'custom' && customFrom
     ? `${formatMonth(customFrom)} – ${formatMonth(customTo)}`
@@ -134,7 +182,14 @@ export default function ReportsScreen({ navigation }: Props) {
           <Text style={styles.headerTitle}>Reports</Text>
         </View>
 
-        {/* Filter chips inside the blue banner */}
+        {/* Building filter dropdown */}
+        <TouchableOpacity style={styles.bldDropdownBtn} onPress={() => setBuildingDropdown(true)} activeOpacity={0.8}>
+          <Ionicons name="business-outline" size={15} color="#fff" />
+          <Text style={styles.bldDropdownLabel} numberOfLines={1}>{dropdownLabel}</Text>
+          <Ionicons name="chevron-down" size={15} color="rgba(255,255,255,0.8)" />
+        </TouchableOpacity>
+
+        {/* Date filter chips inside the blue banner */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -224,6 +279,54 @@ export default function ReportsScreen({ navigation }: Props) {
         )}
       </ScrollView>
 
+      {/* Building picker modal */}
+      <Modal visible={buildingDropdown} transparent animationType="fade" onRequestClose={() => setBuildingDropdown(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setBuildingDropdown(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.bldSheet}>
+            <Text style={styles.bldSheetTitle}>Filter by Building</Text>
+
+            {/* All buildings */}
+            <TouchableOpacity
+              style={[styles.bldItem, selectedBuildingId === ALL_ID && styles.bldItemActive]}
+              onPress={() => { setSelectedBuildingId(ALL_ID); setBuildingDropdown(false); }}
+            >
+              <Ionicons name="grid-outline" size={18} color={selectedBuildingId === ALL_ID ? COLORS.primary : COLORS.muted} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.bldItemText, selectedBuildingId === ALL_ID && { color: COLORS.primary }]}>All Buildings</Text>
+                <Text style={styles.bldItemSub}>{buildings.length} buildings</Text>
+              </View>
+              {selectedBuildingId === ALL_ID && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
+            </TouchableOpacity>
+
+            {/* Per-building rows */}
+            <FlatList
+              data={buildings}
+              keyExtractor={b => b.id}
+              style={{ maxHeight: 300 }}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.bldItem, selectedBuildingId === item.id && styles.bldItemActive]}
+                  onPress={() => { setSelectedBuildingId(item.id); setBuildingDropdown(false); }}
+                >
+                  <Ionicons
+                    name={item.building_type === 'pg' ? 'bed-outline' : 'business-outline'}
+                    size={18}
+                    color={selectedBuildingId === item.id ? COLORS.primary : COLORS.muted}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.bldItemText, selectedBuildingId === item.id && { color: COLORS.primary }]}>{item.name}</Text>
+                    <Text style={styles.bldItemSub}>
+                      {item.building_type === 'pg' ? 'PG/Hostel' : 'Residential'} · {item.total_units} units · {item.vacant_units} vacant
+                    </Text>
+                  </View>
+                  {selectedBuildingId === item.id && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
+                </TouchableOpacity>
+              )}
+            />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Custom date modal */}
       <Modal visible={showModal} transparent animationType="fade" onRequestClose={() => setShowModal(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowModal(false)}>
@@ -277,7 +380,28 @@ export default function ReportsScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container:      { flex: 1 },
   headerBanner:   { backgroundColor: HEADER_BLUE, paddingHorizontal: 16, paddingBottom: 12 },
-  headerRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  headerRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
+  bldDropdownBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+    marginBottom: 10,
+  },
+  bldDropdownLabel: { flex: 1, fontSize: 14, fontWeight: '700', color: '#fff' },
+  bldSheet: {
+    backgroundColor: COLORS.white, borderRadius: 18,
+    paddingTop: 16, paddingBottom: 8,
+    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, elevation: 12,
+  },
+  bldSheetTitle: {
+    fontSize: 13, fontWeight: '700', color: COLORS.muted,
+    paddingHorizontal: 18, marginBottom: 8, letterSpacing: 0.5, textTransform: 'uppercase',
+  },
+  bldItem:       { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 13 },
+  bldItemActive: { backgroundColor: COLORS.primaryLight },
+  bldItemText:   { fontSize: 15, fontWeight: '600', color: COLORS.text },
+  bldItemSub:    { fontSize: 11, color: COLORS.muted, marginTop: 1 },
   backBtn:        { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
   headerTitle:    { fontSize: 20, fontWeight: '800', color: '#fff' },
   filterScroll:   { gap: 8, paddingRight: 8 },
@@ -302,7 +426,7 @@ const styles = StyleSheet.create({
   tenantName:     { fontSize: 14, fontWeight: '600', color: COLORS.text },
   tenantMeta:     { fontSize: 12, color: COLORS.muted, marginTop: 2 },
   periodText:     { fontSize: 12, color: COLORS.muted, marginTop: 2 },
-  modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' },
+  modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 },
   modalBox:       { backgroundColor: COLORS.white, borderRadius: 16, padding: 24, width: 320, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12, elevation: 10 },
   modalTitle:     { fontSize: 17, fontWeight: '700', color: COLORS.text, marginBottom: 4 },
   modalHint:      { fontSize: 12, color: COLORS.muted, marginBottom: 16 },

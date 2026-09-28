@@ -1,8 +1,8 @@
 /**
- * RentEase icon v3 — single modern apartment building
- * Design: deep blue gradient bg, one clean white building with two wings,
- *   "RentEase" label centred in the entrance gap between wings,
- *   subtle coloured windows, no multi-colour clutter.
+ * RentEase icon v4 — clean minimalist design
+ * Background: deep blue gradient
+ * Foreground: light semi-transparent building silhouette (outline style)
+ * Centre: "RentEase" app name bold white text in the middle
  * Run: node scripts/gen_icon.js
  */
 const sharp = require('sharp');
@@ -14,20 +14,10 @@ function buildSVG({ rounded }) {
   const R = rounded ? 220 : 0;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
 <defs>
-  <linearGradient id="bg" x1="0" y1="0" x2="0.2" y2="1">
-    <stop offset="0%"   stop-color="#172554"/>
-    <stop offset="40%"  stop-color="#1E3A8A"/>
+  <linearGradient id="bg" x1="0" y1="0" x2="0.15" y2="1">
+    <stop offset="0%"   stop-color="#0F1F6E"/>
+    <stop offset="50%"  stop-color="#1E3A8A"/>
     <stop offset="100%" stop-color="#1D4ED8"/>
-  </linearGradient>
-  <!-- Window glow — soft cyan -->
-  <linearGradient id="win" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0%"  stop-color="#BAE6FD"/>
-    <stop offset="100%" stop-color="#7DD3FC"/>
-  </linearGradient>
-  <!-- Lit window (warm) -->
-  <linearGradient id="winW" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0%"  stop-color="#FDE68A"/>
-    <stop offset="100%" stop-color="#FCD34D"/>
   </linearGradient>
   <clipPath id="clip"><rect width="${SIZE}" height="${SIZE}" rx="${R}" ry="${R}"/></clipPath>
 </defs>
@@ -35,139 +25,104 @@ function buildSVG({ rounded }) {
 <!-- Background -->
 <rect width="${SIZE}" height="${SIZE}" rx="${R}" ry="${R}" fill="url(#bg)"/>
 
-<!-- Very subtle ambient glow -->
-<ellipse cx="512" cy="460" rx="440" ry="320" fill="#2563EB" opacity="0.15"/>
+<g clip-path="url(#clip)" opacity="0.18">
 
-<g clip-path="url(#clip)">
+  <!-- ═══════════════════════════════════════
+       BUILDING SILHOUETTE — outline only,
+       very light so it reads as background
+       ═══════════════════════════════════════ -->
 
-<!-- ══════════════════════════════════════════
-     SINGLE APARTMENT BUILDING — two wings
-     with entrance gap in the middle
-     ══════════════════════════════════════════ -->
+  <!-- Main building body (tall centre tower) -->
+  <rect x="262" y="180" width="500" height="680" rx="6"
+        fill="none" stroke="white" stroke-width="10"/>
 
-<!-- ─── LEFT WING ─────────────────────────── -->
-<!-- Body -->
-<rect x="96" y="210" width="368" height="556" rx="6" fill="white"/>
-<!-- Floor lines -->
-<line x1="96"  y1="300" x2="464" y2="300" stroke="#E2E8F0" stroke-width="2"/>
-<line x1="96"  y1="390" x2="464" y2="390" stroke="#E2E8F0" stroke-width="2"/>
-<line x1="96"  y1="480" x2="464" y2="480" stroke="#E2E8F0" stroke-width="2"/>
-<line x1="96"  y1="570" x2="464" y2="570" stroke="#E2E8F0" stroke-width="2"/>
-<line x1="96"  y1="660" x2="464" y2="660" stroke="#E2E8F0" stroke-width="2"/>
-<!-- Windows — floor 1 (top) -->
-<rect x="120" y="228" width="72" height="56" rx="5" fill="url(#win)"/>
-<rect x="210" y="228" width="72" height="56" rx="5" fill="url(#winW)"/>
-<rect x="300" y="228" width="72" height="56" rx="5" fill="url(#win)"/>
-<rect x="390" y="228" width="60" height="56" rx="5" fill="url(#winW)"/>
-<!-- Floor 2 -->
-<rect x="120" y="316" width="72" height="56" rx="5" fill="url(#winW)"/>
-<rect x="210" y="316" width="72" height="56" rx="5" fill="url(#win)"/>
-<rect x="300" y="316" width="72" height="56" rx="5" fill="url(#winW)"/>
-<rect x="390" y="316" width="60" height="56" rx="5" fill="url(#win)"/>
-<!-- Floor 3 -->
-<rect x="120" y="406" width="72" height="56" rx="5" fill="url(#win)"/>
-<rect x="210" y="406" width="72" height="56" rx="5" fill="url(#winW)"/>
-<rect x="300" y="406" width="72" height="56" rx="5" fill="url(#win)"/>
-<rect x="390" y="406" width="60" height="56" rx="5" fill="url(#winW)"/>
-<!-- Floor 4 -->
-<rect x="120" y="496" width="72" height="56" rx="5" fill="url(#winW)"/>
-<rect x="210" y="496" width="72" height="56" rx="5" fill="url(#win)"/>
-<rect x="300" y="496" width="72" height="56" rx="5" fill="url(#winW)"/>
-<rect x="390" y="496" width="60" height="56" rx="5" fill="url(#win)"/>
-<!-- Floor 5 -->
-<rect x="120" y="586" width="72" height="56" rx="5" fill="url(#win)"/>
-<rect x="210" y="586" width="72" height="56" rx="5" fill="url(#winW)"/>
-<rect x="300" y="586" width="72" height="56" rx="5" fill="url(#win)"/>
-<rect x="390" y="586" width="60" height="56" rx="5" fill="url(#winW)"/>
-<!-- Roof parapet -->
-<rect x="96"  y="196" width="368" height="16" rx="4" fill="#BFDBFE" opacity="0.8"/>
-<!-- Rooftop details -->
-<rect x="140" y="158" width="70" height="40" rx="4" fill="white" opacity="0.5"/>
-<rect x="350" y="166" width="50" height="32" rx="4" fill="white" opacity="0.45"/>
+  <!-- Left wing (shorter) -->
+  <rect x="100" y="320" width="162" height="540" rx="6"
+        fill="none" stroke="white" stroke-width="8"/>
 
-<!-- ─── RIGHT WING ────────────────────────── -->
-<rect x="560" y="210" width="368" height="556" rx="6" fill="white"/>
-<line x1="560" y1="300" x2="928" y2="300" stroke="#E2E8F0" stroke-width="2"/>
-<line x1="560" y1="390" x2="928" y2="390" stroke="#E2E8F0" stroke-width="2"/>
-<line x1="560" y1="480" x2="928" y2="480" stroke="#E2E8F0" stroke-width="2"/>
-<line x1="560" y1="570" x2="928" y2="570" stroke="#E2E8F0" stroke-width="2"/>
-<line x1="560" y1="660" x2="928" y2="660" stroke="#E2E8F0" stroke-width="2"/>
-<!-- Windows right wing — mirrored colour pattern -->
-<rect x="574" y="228" width="60" height="56" rx="5" fill="url(#winW)"/>
-<rect x="652" y="228" width="72" height="56" rx="5" fill="url(#win)"/>
-<rect x="742" y="228" width="72" height="56" rx="5" fill="url(#winW)"/>
-<rect x="832" y="228" width="72" height="56" rx="5" fill="url(#win)"/>
-<rect x="574" y="316" width="60" height="56" rx="5" fill="url(#win)"/>
-<rect x="652" y="316" width="72" height="56" rx="5" fill="url(#winW)"/>
-<rect x="742" y="316" width="72" height="56" rx="5" fill="url(#win)"/>
-<rect x="832" y="316" width="72" height="56" rx="5" fill="url(#winW)"/>
-<rect x="574" y="406" width="60" height="56" rx="5" fill="url(#winW)"/>
-<rect x="652" y="406" width="72" height="56" rx="5" fill="url(#win)"/>
-<rect x="742" y="406" width="72" height="56" rx="5" fill="url(#winW)"/>
-<rect x="832" y="406" width="72" height="56" rx="5" fill="url(#win)"/>
-<rect x="574" y="496" width="60" height="56" rx="5" fill="url(#win)"/>
-<rect x="652" y="496" width="72" height="56" rx="5" fill="url(#winW)"/>
-<rect x="742" y="496" width="72" height="56" rx="5" fill="url(#win)"/>
-<rect x="832" y="496" width="72" height="56" rx="5" fill="url(#winW)"/>
-<rect x="574" y="586" width="60" height="56" rx="5" fill="url(#winW)"/>
-<rect x="652" y="586" width="72" height="56" rx="5" fill="url(#win)"/>
-<rect x="742" y="586" width="72" height="56" rx="5" fill="url(#winW)"/>
-<rect x="832" y="586" width="72" height="56" rx="5" fill="url(#win)"/>
-<rect x="560" y="196" width="368" height="16" rx="4" fill="#BFDBFE" opacity="0.8"/>
-<rect x="564" y="158" width="50" height="32" rx="4" fill="white" opacity="0.45"/>
-<rect x="814" y="166" width="70" height="40" rx="4" fill="white" opacity="0.5"/>
+  <!-- Right wing (shorter) -->
+  <rect x="762" y="320" width="162" height="540" rx="6"
+        fill="none" stroke="white" stroke-width="8"/>
 
-<!-- ─── ENTRANCE / LOBBY (centre gap) ──────── -->
-<!-- Canopy over entrance -->
-<rect x="430" y="618" width="164" height="18" rx="4" fill="#93C5FD" opacity="0.85"/>
-<!-- Lobby glass doors (2) -->
-<rect x="452" y="636" width="50" height="130" rx="4" fill="#BFDBFE" opacity="0.6"/>
-<rect x="522" y="636" width="50" height="130" rx="4" fill="#BFDBFE" opacity="0.6"/>
-<!-- Door handles -->
-<rect x="497" y="696" width="6" height="20" rx="3" fill="#1D4ED8" opacity="0.7"/>
-<rect x="521" y="696" width="6" height="20" rx="3" fill="#1D4ED8" opacity="0.7"/>
-<!-- Steps -->
-<rect x="420" y="762" width="184" height="10" rx="2" fill="white" opacity="0.35"/>
-<rect x="410" y="772" width="204" height="8"  rx="2" fill="white" opacity="0.25"/>
+  <!-- Rooftop parapet - centre -->
+  <rect x="262" y="158" width="500" height="24" rx="4"
+        fill="white"/>
 
-<!-- Ground shadow line -->
-<rect x="0" y="764" width="1024" height="12" fill="#172554" opacity="0.4"/>
+  <!-- Rooftop parapet - left wing -->
+  <rect x="100" y="302" width="162" height="18" rx="4"
+        fill="white"/>
 
-<!-- ══════════════════════════════════════════
-     "RentEase" LABEL — centred in entrance gap
-     between the two wings, mid-building height
-     ══════════════════════════════════════════ -->
+  <!-- Rooftop parapet - right wing -->
+  <rect x="762" y="302" width="162" height="18" rx="4"
+        fill="white"/>
 
-<!-- Pill backing for the label (sits in entrance gap) -->
-<rect x="418" y="500" width="188" height="76" rx="14" fill="#1D4ED8"/>
-<rect x="422" y="504" width="180" height="68" rx="11" fill="#2563EB" opacity="0.6"/>
+  <!-- Centre tower windows — 5 columns × 6 rows -->
+  <!-- col x positions: 292, 368, 450, 532, 614, 694 -->
+  <!-- row y positions: 218, 310, 402, 494, 586, 678 -->
+  ${[292,368,450,532,614,694].map(x =>
+    [218,310,402,494,586,678].map(y =>
+      `<rect x="${x}" y="${y}" width="52" height="66" rx="5" fill="white"/>`
+    ).join('\n  ')
+  ).join('\n  ')}
 
-<!-- "Rent" top line -->
+  <!-- Left wing windows — 2 cols × 4 rows -->
+  ${[118, 168].map(x =>
+    [356, 440, 524, 608].map(y =>
+      `<rect x="${x}" y="${y}" width="42" height="54" rx="4" fill="white"/>`
+    ).join('\n  ')
+  ).join('\n  ')}
+
+  <!-- Right wing windows — 2 cols × 4 rows -->
+  ${[776, 826].map(x =>
+    [356, 440, 524, 608].map(y =>
+      `<rect x="${x}" y="${y}" width="42" height="54" rx="4" fill="white"/>`
+    ).join('\n  ')
+  ).join('\n  ')}
+
+  <!-- Entrance door (centre bottom of main tower) -->
+  <rect x="462" y="736" width="100" height="124" rx="6"
+        fill="none" stroke="white" stroke-width="8"/>
+  <!-- Door centre line -->
+  <line x1="512" y1="736" x2="512" y2="860"
+        stroke="white" stroke-width="5"/>
+
+  <!-- Ground line -->
+  <line x1="60" y1="862" x2="964" y2="862"
+        stroke="white" stroke-width="8"/>
+
+</g>
+
+<!-- ═══════════════════════════════════════════════════
+     APP NAME — "RentEase" centred in the icon
+     Large, bold, white — clearly readable over the faint building
+     ═══════════════════════════════════════════════════ -->
+
+<!-- Subtle pill shadow so text pops over building lines -->
+<rect x="172" y="430" width="680" height="164" rx="24"
+      fill="#1D4ED8" opacity="0.55"/>
+
+<!-- "Rent" -->
 <text
-  x="512" y="541"
-  font-family="'Arial Black','Helvetica Neue',Arial,sans-serif"
-  font-size="36"
+  x="512" y="512"
+  font-family="'Arial Black','Impact','Helvetica Neue',Arial,sans-serif"
+  font-size="112"
   font-weight="900"
   fill="white"
   text-anchor="middle"
-  letter-spacing="3"
+  letter-spacing="-2"
 >Rent</text>
-<!-- "Ease" bottom line, slightly larger -->
+
+<!-- "Ease" — slightly smaller, accent blue-white -->
 <text
-  x="512" y="572"
-  font-family="'Arial Black','Helvetica Neue',Arial,sans-serif"
-  font-size="28"
+  x="512" y="584"
+  font-family="'Arial Black','Impact','Helvetica Neue',Arial,sans-serif"
+  font-size="72"
   font-weight="900"
   fill="#BAE6FD"
   text-anchor="middle"
-  letter-spacing="4"
->Ease</text>
+  letter-spacing="8"
+>EASE</text>
 
-<!-- Small key icon below label -->
-<text x="474" y="605" font-family="Arial" font-size="22" fill="white" opacity="0.55">🔑</text>
-<text x="528" y="605" font-family="Arial" font-size="22" fill="#FDE68A" opacity="0.7">₹</text>
-
-</g>
 </svg>`;
 }
 
