@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "RentEase",
-    "slug": "rentease",
-    "version": "1.0.0",
+    "name": "PropEase",
+    "slug": "propease",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.rentease.app",
+      "bundleIdentifier": "com.propease.app",
       "infoPlist": {
         "NSContactsUsageDescription": "Used to pick emergency contact",
         "NSPhotoLibraryUsageDescription": "Used to save receipts"
@@ -24,7 +24,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#2563EB"
       },
-      "package": "com.rentease.app",
+      "package": "com.propease.app",
       "permissions": [
         "android.permission.READ_CONTACTS",
         "android.permission.WRITE_EXTERNAL_STORAGE"

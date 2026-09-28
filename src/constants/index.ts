@@ -15,10 +15,16 @@ export const COLORS = {
   bg: '#F3F4F6',
 };
 
-export const RESIDENTIAL_UNIT_TYPES = ['1RK', '1BHK', '2BHK', '3BHK', 'Villa'] as const;
+export const RESIDENTIAL_UNIT_TYPES = [
+  'Room', '1RK', '1BHK', '2BHK', '3BHK', '4BHK',
+  'Villa', 'Shop', 'Office', 'Entire Building',
+] as const;
 export const PG_UNIT_TYPES = ['Single', '2-Sharing', '3-Sharing', '4-Sharing', '5-Sharing'] as const;
+export const RE_UNIT_TYPES_SUGGESTED = ['Open Plot', 'Flat', 'House', 'Villa', 'Farm Land'] as const;
 export const PAYMENT_MODES = ['Cash', 'UPI', 'Bank Transfer', 'Cheque'] as const;
 export const ID_TYPES = ['Aadhaar', 'PAN', 'Passport', 'Driving License'] as const;
+export const AREA_UNITS = ['sq.ft', 'sq.yd', 'acres'] as const;
+export const PLOT_FACINGS = ['N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW'] as const;
 
 export const STATUS_COLOR: Record<string, string> = {
   Paid: '#16A34A',

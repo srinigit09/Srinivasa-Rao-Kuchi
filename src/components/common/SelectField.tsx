@@ -9,9 +9,11 @@ interface Props {
   onChange: (val: string) => void;
   error?: string;
   required?: boolean;
+  /** Optional: custom display label for each option value */
+  displayValue?: (val: string) => string;
 }
 
-export default function SelectField({ label, options, value, onChange, error, required }: Props) {
+export default function SelectField({ label, options, value, onChange, error, required, displayValue }: Props) {
   return (
     <View style={styles.container}>
       <Text style={styles.label}>
@@ -26,7 +28,9 @@ export default function SelectField({ label, options, value, onChange, error, re
               style={[styles.chip, value === opt && styles.chipActive]}
               onPress={() => onChange(opt)}
             >
-              <Text style={[styles.chipText, value === opt && styles.chipTextActive]}>{opt}</Text>
+              <Text style={[styles.chipText, value === opt && styles.chipTextActive]}>
+                {displayValue ? displayValue(opt) : opt}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>

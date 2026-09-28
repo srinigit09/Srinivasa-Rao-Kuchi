@@ -9,9 +9,14 @@ interface Props {
   title: string;
   subtitle?: string;
   onBack?: () => void;
+  rightAction?: {
+    icon: string;
+    color?: string;
+    onPress: () => void;
+  };
 }
 
-export default function BlueBannerHeader({ title, subtitle, onBack }: Props) {
+export default function BlueBannerHeader({ title, subtitle, onBack, rightAction }: Props) {
   const insets = useSafeAreaInsets();
   return (
     <>
@@ -27,6 +32,11 @@ export default function BlueBannerHeader({ title, subtitle, onBack }: Props) {
             <Text style={styles.title}>{title}</Text>
             {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
           </View>
+          {rightAction ? (
+            <TouchableOpacity style={styles.backBtn} onPress={rightAction.onPress} activeOpacity={0.7}>
+              <Ionicons name={rightAction.icon as any} size={22} color={rightAction.color ?? '#fff'} />
+            </TouchableOpacity>
+          ) : <View style={styles.backPlaceholder} />}
         </View>
       </View>
     </>

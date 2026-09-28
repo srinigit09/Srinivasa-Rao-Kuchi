@@ -210,7 +210,7 @@ export default function SettingsScreen() {
         <Button title="Sign Out" onPress={handleSignOut} variant="ghost" />
       </View>
 
-      <Text style={styles.version}>RentEase v1.0.0 · All rights reserved</Text>
+      <Text style={styles.version}>PropEase v2.0.0 · Property Management Platform</Text>
     </ScrollView>
     </View>
   );

@@ -14,10 +14,15 @@ import ProfileSetupScreen from '../screens/auth/ProfileSetupScreen';
 
 // Main
 import DashboardScreen from '../screens/dashboard/DashboardScreen';
+import PropertiesScreen from '../screens/properties/PropertiesScreen';
+import AddPropertyTypeScreen from '../screens/properties/AddPropertyTypeScreen';
+import PlotsScreen from '../screens/properties/PlotsScreen';
+import ConstructionStagesScreen from '../screens/properties/ConstructionStagesScreen';
 import BuildingsScreen from '../screens/buildings/BuildingsScreen';
 import AddEditBuildingScreen from '../screens/buildings/AddEditBuildingScreen';
 import BuildingDetailScreen from '../screens/buildings/BuildingDetailScreen';
 import AddEditUnitScreen from '../screens/units/AddEditUnitScreen';
+import PeopleScreen from '../screens/people/PeopleScreen';
 import TenantsScreen from '../screens/tenants/TenantsScreen';
 import AddTenantStep1Screen from '../screens/tenants/AddTenantStep1Screen';
 import AddTenantStep2Screen from '../screens/tenants/AddTenantStep2Screen';
@@ -32,9 +37,15 @@ import OccupiedTenantsScreen from '../screens/tenants/OccupiedTenantsScreen';
 import CollectedPaymentsScreen from '../screens/payments/CollectedPaymentsScreen';
 import OutstandingScreen from '../screens/payments/OutstandingScreen';
 import ReportsScreen from '../screens/reports/ReportsScreen';
+import LandReportsScreen from '../screens/reports/LandReportsScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import MoveOutScreen from '../screens/tenants/MoveOutScreen';
 import AdminClientsScreen from '../screens/admin/AdminClientsScreen';
+import BuyersScreen from '../screens/buyers/BuyersScreen';
+import AddBuyerScreen from '../screens/buyers/AddBuyerScreen';
+import BuyerProfileScreen from '../screens/buyers/BuyerProfileScreen';
+import RecordSalePaymentScreen from '../screens/buyers/RecordSalePaymentScreen';
+import SaleReceiptScreen from '../screens/buyers/SaleReceiptScreen';
 
 export type RootStackParamList = {
   Auth: undefined;
@@ -49,18 +60,29 @@ export type AuthStackParamList = {
 
 export type MainTabParamList = {
   Dashboard: undefined;
-  Buildings: undefined;
+  Properties: undefined;
   Tenants: undefined;
   Reports: undefined;
   AdminClients?: undefined;
   Settings: undefined;
+  // standalone tab aliases used from PeopleScreen tiles
+  Buyers?: undefined;
 };
 
 export type AppStackParamList = {
   Tabs: undefined;
-  AddEditBuilding: { buildingId?: string };
+  AddPropertyType: undefined;
+  AddEditBuilding: { buildingId?: string; preselectedType?: string };
   BuildingDetail: { buildingId: string };
   AddEditUnit: { buildingId: string; unitId?: string };
+  Plots: { buildingId: string };
+  ConstructionStages: { unitId: string; unitNumber: string };
+  Buyers: undefined;
+  AddBuyer: { unitId: string };
+  BuyerProfile: { buyerId: string };
+  RecordSalePayment: { buyerId: string };
+  SaleReceipt: { paymentId: string };
+  LandReports: undefined;
   AddTenantStep1: undefined;
   AddTenantStep2: { buildingId: string; unitId: string; buildingType: 'residential' | 'pg' };
   AddTenantStep3: { buildingId: string; unitId: string; buildingType: 'residential' | 'pg'; tenantData: Record<string, unknown> };
@@ -75,6 +97,7 @@ export type AppStackParamList = {
   Outstanding: { buildingId?: string; buildingName?: string };
   MoveOut: { tenantId: string };
   AdminClients: undefined;
+  Tenants: undefined;
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -94,20 +117,20 @@ const MainTabs = () => {
         headerShown: false,
         tabBarIcon: ({ color, size }) => {
           const icons: Record<string, string> = {
-            Dashboard: 'grid-outline',
-            Buildings: 'business-outline',
-            Tenants: 'people-outline',
-            Reports: 'bar-chart-outline',
-            AdminClients: 'shield-checkmark-outline',
-            Settings: 'settings-outline',
-          };
+                Dashboard: 'grid-outline',
+                Properties: 'business-outline',
+                Tenants: 'people-outline',
+                Reports: 'bar-chart-outline',
+                AdminClients: 'shield-checkmark-outline',
+                Settings: 'settings-outline',
+              };
           return <Ionicons name={icons[route.name] as any} size={size} color={color} />;
         },
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
-      <Tab.Screen name="Buildings" component={BuildingsScreen} />
-      <Tab.Screen name="Tenants" component={TenantsScreen} />
+      <Tab.Screen name="Properties" component={PropertiesScreen} />
+      <Tab.Screen name="Tenants" component={PeopleScreen} />
       <Tab.Screen name="Reports" component={ReportsScreen} />
       {isAdmin && (
         <Tab.Screen
@@ -133,9 +156,19 @@ const AppNavigator = () => (
     }}
   >
     <AppStack.Screen name="Tabs" component={MainTabs} options={{ headerShown: false }} />
-    <AppStack.Screen name="AddEditBuilding" component={AddEditBuildingScreen} options={{ title: 'Building' }} />
+    <AppStack.Screen name="AddPropertyType" component={AddPropertyTypeScreen} options={{ headerShown: false }} />
+    <AppStack.Screen name="AddEditBuilding" component={AddEditBuildingScreen} options={{ title: 'Property' }} />
     <AppStack.Screen name="BuildingDetail" component={BuildingDetailScreen} options={{ title: 'Building Details' }} />
     <AppStack.Screen name="AddEditUnit" component={AddEditUnitScreen} options={{ title: 'Unit' }} />
+    <AppStack.Screen name="Plots" component={PlotsScreen} options={{ headerShown: false }} />
+    <AppStack.Screen name="ConstructionStages" component={ConstructionStagesScreen} options={{ headerShown: false }} />
+    <AppStack.Screen name="Buyers" component={BuyersScreen} options={{ headerShown: false }} />
+    <AppStack.Screen name="AddBuyer" component={AddBuyerScreen} options={{ headerShown: false }} />
+    <AppStack.Screen name="BuyerProfile" component={BuyerProfileScreen} options={{ headerShown: false }} />
+    <AppStack.Screen name="RecordSalePayment" component={RecordSalePaymentScreen} options={{ headerShown: false }} />
+    <AppStack.Screen name="SaleReceipt" component={SaleReceiptScreen} options={{ headerShown: false }} />
+    <AppStack.Screen name="LandReports" component={LandReportsScreen} options={{ headerShown: false }} />
+    <AppStack.Screen name="Tenants" component={TenantsScreen} options={{ headerShown: false }} />
     <AppStack.Screen name="AddTenantStep1" component={AddTenantStep1Screen} options={{ title: 'Add Tenant (1/3)' }} />
     <AppStack.Screen name="AddTenantStep2" component={AddTenantStep2Screen} options={{ title: 'Add Tenant (2/3)' }} />
     <AppStack.Screen name="AddTenantStep3" component={AddTenantStep3Screen} options={{ title: 'Add Tenant (3/3)' }} />
