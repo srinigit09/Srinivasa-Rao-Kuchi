@@ -25,25 +25,31 @@ interface BuildingSummary {
   vacant_units: number;
 }
 
+interface PaymentRow {
+  amount_paid: number;
+  advance_paid: number;
+  outstanding: number;
+  status: string;
+  payment_month: string;
+  tenant_id: string;
+  tenants: any;
+}
+
 interface DashboardData {
   buildings: BuildingSummary[];
   totalBuildings: number;
-  totalUnits: number;
-  vacantUnits: number;
-  occupiedUnits: number;
-  collectedThisMonth: number;
-  pendingThisMonth: number;
-  overduePayments: { tenant_name: string; unit_number: string; building_name: string; amount: number; month: string }[];
+  allUnits: { id: string; is_vacant: boolean; building_id: string }[];
+  allPayments: PaymentRow[];
 }
 
 const HEADER_BLUE = '#1D4ED8';
-const ALL_BUILDINGS_ID = '__all__';
+const ALL_ID = '__all__';
 
 export default function DashboardScreen({ navigation }: Props) {
-  const { user, profile, signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedBuildingId, setSelectedBuildingId] = useState<string>(ALL_BUILDINGS_ID);
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>(ALL_ID);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const insets = useSafeAreaInsets();
 
@@ -55,7 +61,10 @@ export default function DashboardScreen({ navigation }: Props) {
         .select('id, name, building_type, units(id, is_vacant)')
         .eq('owner_id', user.id)
         .order('name'),
-      supabase.from('units').select('id, is_vacant, building_id').eq('owner_id', user.id),
+      supabase
+        .from('units')
+        .select('id, is_vacant, building_id')
+        .eq('owner_id', user.id),
       supabase
         .from('payments')
         .select('amount_paid, advance_paid, outstanding, status, payment_month, tenant_id, tenants(full_name, units(unit_number, building_id, buildings(name, id)))')
@@ -70,47 +79,63 @@ export default function DashboardScreen({ navigation }: Props) {
       vacant_units: b.units?.filter((u: any) => u.is_vacant).length ?? 0,
     }));
 
-    const now = new Date();
-    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    const allPayments = payRes.data ?? [];
-    const overdue = allPayments.filter(p => isOverdue(p.payment_month) && p.status !== 'Paid');
-
     setData({
       buildings: allBuildings,
       totalBuildings: allBuildings.length,
-      totalUnits: unitRes.data?.length ?? 0,
-      vacantUnits: unitRes.data?.filter(u => u.is_vacant).length ?? 0,
-      occupiedUnits: unitRes.data?.filter(u => !u.is_vacant).length ?? 0,
-      collectedThisMonth: allPayments
-        .filter(p => p.payment_month === thisMonth)
-        .reduce((s, p) => s + (p.amount_paid ?? 0) + (p.advance_paid ?? 0), 0),
-      pendingThisMonth: allPayments
-        .filter(p => p.payment_month === thisMonth)
-        .reduce((s, p) => s + (p.outstanding ?? 0), 0),
-      overduePayments: overdue.slice(0, 5).map(p => ({
-        tenant_name: (p.tenants as any)?.full_name ?? '',
-        unit_number: (p.tenants as any)?.units?.unit_number ?? '',
-        building_name: (p.tenants as any)?.units?.buildings?.name ?? '',
-        amount: p.outstanding ?? 0,
-        month: p.payment_month,
-      })),
+      allUnits: (unitRes.data ?? []) as any,
+      allPayments: (payRes.data ?? []) as any,
     });
   }, [user]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
-  // Filtered stats for selected building
+  // ── derived stats, all filtered by selectedBuildingId ────────────────────
+  const isFiltered = selectedBuildingId !== ALL_ID;
   const selectedBuilding = data?.buildings.find(b => b.id === selectedBuildingId);
-  const isFiltered = selectedBuildingId !== ALL_BUILDINGS_ID;
 
-  const displayUnits    = isFiltered ? (selectedBuilding?.total_units ?? 0)  : (data?.totalUnits ?? 0);
-  const displayVacant   = isFiltered ? (selectedBuilding?.vacant_units ?? 0) : (data?.vacantUnits ?? 0);
-  const displayOccupied = isFiltered ? ((selectedBuilding?.total_units ?? 0) - (selectedBuilding?.vacant_units ?? 0)) : (data?.occupiedUnits ?? 0);
+  // Unit counts
+  const filteredUnits = isFiltered
+    ? (data?.allUnits ?? []).filter(u => u.building_id === selectedBuildingId)
+    : (data?.allUnits ?? []);
+  const displayUnits    = filteredUnits.length;
+  const displayVacant   = filteredUnits.filter(u => u.is_vacant).length;
+  const displayOccupied = displayUnits - displayVacant;
+
+  // Payments filtered by building
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+
+  const filteredPayments = isFiltered
+    ? (data?.allPayments ?? []).filter(p => {
+        const bid = (p.tenants as any)?.units?.buildings?.id;
+        return bid === selectedBuildingId;
+      })
+    : (data?.allPayments ?? []);
+
+  const thisMonthPayments = filteredPayments.filter(p => p.payment_month === thisMonth);
+  const collectedThisMonth = thisMonthPayments.reduce((s, p) => s + (p.amount_paid ?? 0) + (p.advance_paid ?? 0), 0);
+  const pendingThisMonth   = thisMonthPayments.reduce((s, p) => s + (p.outstanding ?? 0), 0);
+
+  const overduePayments = filteredPayments
+    .filter(p => isOverdue(p.payment_month) && p.status !== 'Paid')
+    .slice(0, 5)
+    .map(p => ({
+      tenant_name:   (p.tenants as any)?.full_name ?? '',
+      unit_number:   (p.tenants as any)?.units?.unit_number ?? '',
+      building_name: (p.tenants as any)?.units?.buildings?.name ?? '',
+      amount: p.outstanding ?? 0,
+      month:  p.payment_month,
+    }));
 
   const dropdownLabel = isFiltered
     ? selectedBuilding?.name ?? 'Select Building'
     : `All Buildings${data ? ` (${data.totalBuildings})` : ''}`;
+
+  // Navigation helpers — pass building filter through params where screens support it
+  const navToUnits     = () => navigation.navigate('AllUnits' as any);
+  const navToOccupied  = () => navigation.navigate('OccupiedTenants' as any);
+  const navToVacant    = () => navigation.navigate('VacantUnits');
 
   return (
     <View style={{ flex: 1, backgroundColor: HEADER_BLUE }}>
@@ -118,7 +143,6 @@ export default function DashboardScreen({ navigation }: Props) {
 
       {/* ── Blue Header ── */}
       <View style={[styles.headerPanel, { paddingTop: insets.top + 8 }]}>
-        {/* App name row */}
         <View style={styles.appNameRow}>
           <View style={styles.appIconCircle}>
             <Ionicons name="business" size={16} color={HEADER_BLUE} />
@@ -139,105 +163,64 @@ export default function DashboardScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
 
-        {/* Building selector dropdown */}
-        <TouchableOpacity
-          style={styles.dropdownBtn}
-          onPress={() => setDropdownOpen(true)}
-          activeOpacity={0.8}
-        >
+        {/* Building selector */}
+        <TouchableOpacity style={styles.dropdownBtn} onPress={() => setDropdownOpen(true)} activeOpacity={0.8}>
           <Ionicons name="business-outline" size={16} color="#fff" />
           <Text style={styles.dropdownLabel} numberOfLines={1}>{dropdownLabel}</Text>
           <Ionicons name="chevron-down" size={16} color="rgba(255,255,255,0.8)" />
         </TouchableOpacity>
       </View>
 
-      {/* ── Quick Actions strip ── */}
+      {/* ── Quick Actions ── */}
       <View style={styles.quickActionsPanel}>
-        <QuickActionBtn
-          label="Add Tenant"
-          icon="person-add-outline"
-          onPress={() => navigation.navigate('AddTenantStep1')}
-        />
-        <QuickActionBtn
-          label="Record Payment"
-          icon="cash-outline"
-          onPress={() => navigation.navigate('Tenants' as any)}
-        />
+        <QuickActionBtn label="Add Tenant"     icon="person-add-outline" onPress={() => navigation.navigate('AddTenantStep1')} />
+        <QuickActionBtn label="Record Payment" icon="cash-outline"       onPress={() => navigation.navigate('Tenants' as any)} />
       </View>
 
-      {/* ── Body ── */}
+      {/* ── Scrollable body ── */}
       <ScrollView
         style={styles.body}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
         contentContainerStyle={{ paddingBottom: 32 }}
       >
         {/* Overdue alert */}
-        {data && data.overduePayments.length > 0 && (
+        {overduePayments.length > 0 && (
           <TouchableOpacity style={styles.alertBanner} onPress={() => navigation.navigate('Outstanding' as any)}>
             <Ionicons name="alert-circle" size={16} color={COLORS.danger} />
             <Text style={styles.alertText}>
-              {data.overduePayments.length} overdue payment{data.overduePayments.length > 1 ? 's' : ''} — tap to view
+              {overduePayments.length} overdue payment{overduePayments.length > 1 ? 's' : ''} — tap to view
             </Text>
             <Ionicons name="chevron-forward" size={14} color={COLORS.danger} />
           </TouchableOpacity>
         )}
 
-        {/* Stat cards — smaller, 4 in a row */}
+        {/* ── Stat cards: 3 cards, label on top (larger), count below ── */}
         <View style={styles.grid}>
-          <StatCard
-            label="Buildings"
-            value={data?.totalBuildings ?? 0}
-            icon="business"
-            color="#2563EB"
-            onPress={() => navigation.navigate('Buildings' as any)}
-          />
-          <StatCard
-            label="Units"
-            value={displayUnits}
-            icon="home"
-            color="#7C3AED"
-            onPress={() => navigation.navigate('AllUnits' as any)}
-          />
-          <StatCard
-            label="Occupied"
-            value={displayOccupied}
-            icon="person"
-            color={COLORS.success}
-            onPress={() => navigation.navigate('OccupiedTenants' as any)}
-          />
-          <StatCard
-            label="Vacant"
-            value={displayVacant}
-            icon="key"
-            color="#D97706"
-            onPress={() => navigation.navigate('VacantUnits')}
-          />
+          <StatCard label="Total Units" value={displayUnits}    icon="home"   color="#7C3AED" onPress={navToUnits} />
+          <StatCard label="Occupied"    value={displayOccupied} icon="person" color={COLORS.success} onPress={navToOccupied} />
+          <StatCard label="Vacant"      value={displayVacant}   icon="key"    color="#D97706" onPress={navToVacant} />
         </View>
 
-        {/* Monthly collection */}
-        <Card title="This Month's Collection">
+        {/* ── This Month's Payment Summary ── */}
+        <Card title="This Month's Payment Summary">
           <View style={styles.row}>
             <TouchableOpacity style={styles.colHalf} onPress={() => navigation.navigate('CollectedPayments')}>
-              <Text style={styles.amtLabel}>Collected</Text>
-              <Text style={[styles.amtValue, { color: COLORS.success }]}>
-                {formatCurrency(data?.collectedThisMonth ?? 0)}
-              </Text>
+              <Text style={styles.amtLabel}>Received</Text>
+              <Text style={[styles.amtValue, { color: COLORS.success }]}>{formatCurrency(collectedThisMonth)}</Text>
               <Text style={styles.tapHint}>tap for details ›</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.colHalf, styles.borderLeft]} onPress={() => navigation.navigate('Outstanding')}>
               <Text style={styles.amtLabel}>Outstanding</Text>
-              <Text style={[styles.amtValue, { color: '#D97706' }]}>
-                {formatCurrency(data?.pendingThisMonth ?? 0)}
-              </Text>
+              <Text style={[styles.amtValue, { color: '#D97706' }]}>{formatCurrency(pendingThisMonth)}</Text>
               <Text style={styles.tapHint}>tap for details ›</Text>
             </TouchableOpacity>
           </View>
         </Card>
 
-        {/* Overdue list */}
-        {data && data.overduePayments.length > 0 && (
+        {/* ── Overdue list ── */}
+        {overduePayments.length > 0 && (
           <Card title="Overdue Payments">
-            {data.overduePayments.map((p, i) => (
+            {overduePayments.map((p, i) => (
               <View key={i} style={[styles.overdueRow, i > 0 && styles.topBorder]}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.overdueName}>{p.tenant_name}</Text>
@@ -250,40 +233,23 @@ export default function DashboardScreen({ navigation }: Props) {
         )}
       </ScrollView>
 
-      {/* ── Building dropdown modal ── */}
-      <Modal
-        visible={dropdownOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDropdownOpen(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setDropdownOpen(false)}
-        >
+      {/* ── Building picker modal ── */}
+      <Modal visible={dropdownOpen} transparent animationType="fade" onRequestClose={() => setDropdownOpen(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDropdownOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet}>
-            <Text style={styles.dropdownTitle}>Select Building</Text>
+            <Text style={styles.dropdownTitle}>Filter by Building</Text>
 
-            {/* All Buildings option */}
+            {/* All buildings row */}
             <TouchableOpacity
-              style={[styles.dropdownItem, selectedBuildingId === ALL_BUILDINGS_ID && styles.dropdownItemActive]}
-              onPress={() => { setSelectedBuildingId(ALL_BUILDINGS_ID); setDropdownOpen(false); }}
+              style={[styles.dropdownItem, selectedBuildingId === ALL_ID && styles.dropdownItemActive]}
+              onPress={() => { setSelectedBuildingId(ALL_ID); setDropdownOpen(false); }}
             >
-              <Ionicons
-                name="grid-outline"
-                size={18}
-                color={selectedBuildingId === ALL_BUILDINGS_ID ? COLORS.primary : COLORS.muted}
-              />
+              <Ionicons name="grid-outline" size={18} color={selectedBuildingId === ALL_ID ? COLORS.primary : COLORS.muted} />
               <View style={{ flex: 1 }}>
-                <Text style={[styles.dropdownItemText, selectedBuildingId === ALL_BUILDINGS_ID && { color: COLORS.primary }]}>
-                  All Buildings
-                </Text>
-                <Text style={styles.dropdownItemSub}>{data?.totalBuildings ?? 0} buildings · {data?.totalUnits ?? 0} units</Text>
+                <Text style={[styles.dropdownItemText, selectedBuildingId === ALL_ID && { color: COLORS.primary }]}>All Buildings</Text>
+                <Text style={styles.dropdownItemSub}>{data?.totalBuildings ?? 0} buildings · {data?.allUnits.length ?? 0} total units</Text>
               </View>
-              {selectedBuildingId === ALL_BUILDINGS_ID && (
-                <Ionicons name="checkmark" size={18} color={COLORS.primary} />
-              )}
+              {selectedBuildingId === ALL_ID && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
             </TouchableOpacity>
 
             {/* Per-building rows */}
@@ -294,10 +260,7 @@ export default function DashboardScreen({ navigation }: Props) {
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={[styles.dropdownItem, selectedBuildingId === item.id && styles.dropdownItemActive]}
-                  onPress={() => {
-                    setSelectedBuildingId(item.id);
-                    setDropdownOpen(false);
-                  }}
+                  onPress={() => { setSelectedBuildingId(item.id); setDropdownOpen(false); }}
                 >
                   <Ionicons
                     name={item.building_type === 'pg' ? 'bed-outline' : 'business-outline'}
@@ -305,28 +268,21 @@ export default function DashboardScreen({ navigation }: Props) {
                     color={selectedBuildingId === item.id ? COLORS.primary : COLORS.muted}
                   />
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.dropdownItemText, selectedBuildingId === item.id && { color: COLORS.primary }]}>
-                      {item.name}
-                    </Text>
+                    <Text style={[styles.dropdownItemText, selectedBuildingId === item.id && { color: COLORS.primary }]}>{item.name}</Text>
                     <Text style={styles.dropdownItemSub}>
                       {item.building_type === 'pg' ? 'PG/Hostel' : 'Residential'} · {item.total_units} units · {item.vacant_units} vacant
                     </Text>
                   </View>
-                  {selectedBuildingId === item.id && (
-                    <Ionicons name="checkmark" size={18} color={COLORS.primary} />
-                  )}
+                  {selectedBuildingId === item.id && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
                 </TouchableOpacity>
               )}
             />
 
-            {/* Navigate to building detail */}
+            {/* Open building detail shortcut */}
             {isFiltered && (
               <TouchableOpacity
                 style={styles.viewBuildingBtn}
-                onPress={() => {
-                  setDropdownOpen(false);
-                  navigation.navigate('BuildingDetail', { buildingId: selectedBuildingId });
-                }}
+                onPress={() => { setDropdownOpen(false); navigation.navigate('BuildingDetail', { buildingId: selectedBuildingId }); }}
               >
                 <Text style={styles.viewBuildingText}>Open Building Detail →</Text>
               </TouchableOpacity>
@@ -338,15 +294,17 @@ export default function DashboardScreen({ navigation }: Props) {
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Sub-components ───────────────────────────────────────────────────────────
 
 const StatCard = ({ label, value, icon, color, onPress }: any) => (
   <TouchableOpacity style={styles.statCard} onPress={onPress} activeOpacity={0.75}>
-    <View style={[styles.statIconWrap, { backgroundColor: color + '18' }]}>
-      <Ionicons name={icon} size={15} color={color} />
-    </View>
-    <Text style={styles.statValue}>{value}</Text>
+    {/* Label on top — larger, bold, coloured */}
     <Text style={[styles.statLabel, { color }]}>{label}</Text>
+    {/* Count below */}
+    <Text style={styles.statValue}>{value}</Text>
+    <View style={[styles.statIconWrap, { backgroundColor: color + '18' }]}>
+      <Ionicons name={icon} size={14} color={color} />
+    </View>
   </TouchableOpacity>
 );
 
@@ -359,7 +317,7 @@ const QuickActionBtn = ({ label, icon, onPress }: any) => (
   </TouchableOpacity>
 );
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   headerPanel: {
@@ -368,19 +326,13 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
   appNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
+    flexDirection: 'row', alignItems: 'center', marginBottom: 10,
   },
   appIconCircle: {
     width: 28, height: 28, borderRadius: 7,
-    backgroundColor: '#fff',
-    alignItems: 'center', justifyContent: 'center',
-    marginRight: 8,
+    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', marginRight: 8,
   },
-  appName: {
-    flex: 1, fontSize: 20, fontWeight: '800', color: '#fff', letterSpacing: 0.4,
-  },
+  appName: { flex: 1, fontSize: 20, fontWeight: '800', color: '#fff', letterSpacing: 0.4 },
   logoutBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 9, paddingVertical: 5,
@@ -388,28 +340,20 @@ const styles = StyleSheet.create({
   },
   logoutText: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.9)' },
 
-  // Building dropdown trigger
   dropdownBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: 'rgba(255,255,255,0.18)',
     borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
   },
-  dropdownLabel: {
-    flex: 1, fontSize: 15, fontWeight: '700', color: '#fff',
-  },
+  dropdownLabel: { flex: 1, fontSize: 15, fontWeight: '700', color: '#fff' },
 
-  // Quick actions
   quickActionsPanel: {
     flexDirection: 'row', justifyContent: 'space-around',
-    backgroundColor: '#1640B8',
-    paddingVertical: 12, paddingHorizontal: 8,
+    backgroundColor: '#1640B8', paddingVertical: 12, paddingHorizontal: 8,
   },
   qaBtn: { alignItems: 'center', gap: 5, flex: 1 },
-  qaIconWrap: {
-    width: 44, height: 44, borderRadius: 12,
-    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
-  },
+  qaIconWrap: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   qaLabel: { fontSize: 11, color: 'rgba(255,255,255,0.93)', textAlign: 'center', fontWeight: '600' },
 
   body: { flex: 1, backgroundColor: COLORS.bg },
@@ -421,21 +365,16 @@ const styles = StyleSheet.create({
   },
   alertText: { flex: 1, color: COLORS.danger, fontSize: 12, fontWeight: '500' },
 
-  // Stat cards — 4 in a row, compact
-  grid: {
-    flexDirection: 'row', paddingHorizontal: 10, marginTop: 12, gap: 8,
-  },
+  // 3 cards in a row — label top (larger), count below, icon bottom
+  grid: { flexDirection: 'row', paddingHorizontal: 10, marginTop: 12, gap: 8 },
   statCard: {
     flex: 1, backgroundColor: COLORS.white, borderRadius: 12,
-    paddingVertical: 12, paddingHorizontal: 8, alignItems: 'center', gap: 4,
+    paddingVertical: 14, paddingHorizontal: 8, alignItems: 'center', gap: 3,
     shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 4, elevation: 2,
   },
-  statIconWrap: {
-    width: 30, height: 30, borderRadius: 8,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 2,
-  },
-  statValue: { fontSize: 22, fontWeight: '800', color: COLORS.text },
-  statLabel: { fontSize: 10, fontWeight: '700', textAlign: 'center', letterSpacing: 0.2 },
+  statLabel: { fontSize: 12, fontWeight: '800', textAlign: 'center', letterSpacing: 0.1 },
+  statValue: { fontSize: 28, fontWeight: '900', color: COLORS.text, lineHeight: 32 },
+  statIconWrap: { width: 26, height: 26, borderRadius: 7, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
 
   row: { flexDirection: 'row' },
   colHalf: { flex: 1, alignItems: 'center', paddingVertical: 12 },
@@ -449,11 +388,9 @@ const styles = StyleSheet.create({
   overdueName: { fontSize: 13, fontWeight: '600', color: COLORS.text },
   overdueSub: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
 
-  // Dropdown modal
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-start', paddingTop: 120,
-    paddingHorizontal: 16,
+    justifyContent: 'flex-start', paddingTop: 120, paddingHorizontal: 16,
   },
   dropdownSheet: {
     backgroundColor: COLORS.white, borderRadius: 18,
@@ -461,23 +398,16 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, elevation: 12,
   },
   dropdownTitle: {
-    fontSize: 14, fontWeight: '700', color: COLORS.muted,
-    paddingHorizontal: 18, marginBottom: 8, letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    fontSize: 13, fontWeight: '700', color: COLORS.muted,
+    paddingHorizontal: 18, marginBottom: 8, letterSpacing: 0.5, textTransform: 'uppercase',
   },
-  dropdownItem: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 18, paddingVertical: 13,
-  },
-  dropdownItemActive: {
-    backgroundColor: COLORS.primaryLight,
-  },
+  dropdownItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 13 },
+  dropdownItemActive: { backgroundColor: COLORS.primaryLight },
   dropdownItemText: { fontSize: 15, fontWeight: '600', color: COLORS.text },
   dropdownItemSub: { fontSize: 11, color: COLORS.muted, marginTop: 1 },
   viewBuildingBtn: {
     margin: 14, marginTop: 6,
-    backgroundColor: COLORS.primaryLight,
-    borderRadius: 10, padding: 12, alignItems: 'center',
+    backgroundColor: COLORS.primaryLight, borderRadius: 10, padding: 12, alignItems: 'center',
   },
   viewBuildingText: { color: COLORS.primary, fontWeight: '700', fontSize: 14 },
 });

@@ -94,7 +94,7 @@ export default function AllUnitsScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('Buildings' as any)}
           >
             <Ionicons name="add-circle" size={22} color={COLORS.primary} />
-            <Text style={styles.addText}>Add Unit</Text>
+            <Text style={styles.addText}>Add New Unit</Text>
           </TouchableOpacity>
         }
         ListEmptyComponent={

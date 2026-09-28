@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Switch, Platform,
+  View, Text, StyleSheet, ScrollView, Switch,
 } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import Button from '../../components/common/Button';
@@ -16,6 +17,7 @@ import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 const BIOMETRIC_KEY = 'rentease_biometric_enabled';
 
 export default function SettingsScreen() {
+  const navigation = useNavigation();
   const { profile, signOut, refreshProfile } = useAuth();
   const isAdmin = profile?.role === 'admin';
   const [name, setName] = useState('');
@@ -139,7 +141,11 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
-    <BlueBannerHeader title="Settings" subtitle="Profile & preferences" />
+    <BlueBannerHeader
+      title="Settings"
+      subtitle="Profile & preferences"
+      onBack={navigation.canGoBack() ? () => navigation.goBack() : undefined}
+    />
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Card title="Account Profile">
         <FormField label="Full Name" required value={name} onChangeText={setName} placeholder="Your name" />

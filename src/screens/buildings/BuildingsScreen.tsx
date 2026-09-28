@@ -51,11 +51,14 @@ export default function BuildingsScreen({ navigation }: Props) {
     ]);
   };
 
+  const totalUnits  = buildings.reduce((s, b) => s + (b.total_units  ?? 0), 0);
+  const totalVacant = buildings.reduce((s, b) => s + (b.vacant_units ?? 0), 0);
+
   return (
     <View style={styles.container}>
       <BlueBannerHeader
         title="All Buildings"
-        subtitle={`${buildings.length} building${buildings.length !== 1 ? 's' : ''}`}
+        subtitle={`${buildings.length} building${buildings.length !== 1 ? 's' : ''}  ·  ${totalUnits} units  ·  ${totalVacant} vacant`}
         onBack={navigation.canGoBack() ? () => navigation.goBack() : undefined}
       />
 
