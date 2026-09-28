@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform, TouchableOpacity,
+  View, Text, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -14,6 +13,7 @@ import SelectField from '../../components/common/SelectField';
 import { COLORS, PAYMENT_MODES } from '../../constants';
 import { formatCurrency, currentMonthDate } from '../../utils';
 import Card from '../../components/common/Card';
+import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
 type Props = {
   navigation: NativeStackNavigationProp<AppStackParamList, 'RecordPayment'>;
@@ -111,20 +111,18 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
     navigation.replace('Receipt', { paymentId: savedPayment.id });
   };
 
+  const subtitle = tenant
+    ? `${tenant.full_name}  ·  ${(tenant as any).units?.buildings?.name ?? ''} ${(tenant as any).units?.unit_number ?? ''}`
+    : 'Loading…';
+
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <BlueBannerHeader
+        title="Record Payment"
+        subtitle={subtitle}
+        onBack={() => navigation.goBack()}
+      />
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        {tenant && (
-          <View style={styles.tenantBanner}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-              <Ionicons name="arrow-back" size={20} color={COLORS.primary} />
-            </TouchableOpacity>
-            <View style={styles.tenantInfo}>
-              <Text style={styles.tenantName}>{tenant.full_name}</Text>
-              <Text style={styles.tenantMeta}>{(tenant as any).units?.buildings?.name} · {(tenant as any).units?.unit_number}</Text>
-            </View>
-          </View>
-        )}
 
         <FormField
           label="Payment Month (YYYY-MM-DD)"
@@ -198,17 +196,6 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
   container: { padding: 20, paddingBottom: 40 },
-  tenantBanner: {
-    backgroundColor: COLORS.primaryLight, borderRadius: 10, padding: 12,
-    marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 10,
-  },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
-  },
-  tenantInfo: { flex: 1 },
-  tenantName: { fontSize: 15, fontWeight: '700', color: COLORS.primary },
-  tenantMeta: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
   sectionHeader: {
     backgroundColor: COLORS.bg,
     borderRadius: 8,

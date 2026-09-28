@@ -56,6 +56,7 @@ export default function BuildingsScreen({ navigation }: Props) {
       <BlueBannerHeader
         title="All Buildings"
         subtitle={`${buildings.length} building${buildings.length !== 1 ? 's' : ''}`}
+        onBack={navigation.canGoBack() ? () => navigation.goBack() : undefined}
       />
 
       <FlatList

@@ -38,6 +38,7 @@
     "@babel/core": "^7.29.7",
     "@types/react": "~19.2.2",
     "babel-jest": "^30.5.0",
+    "sharp": "^0.35.5",
     "typescript": "~6.0.3"
   },
   "scripts": {

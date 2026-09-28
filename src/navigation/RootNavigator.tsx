@@ -140,7 +140,7 @@ const AppNavigator = () => (
     <AppStack.Screen name="AddTenantStep2" component={AddTenantStep2Screen} options={{ title: 'Add Tenant (2/3)' }} />
     <AppStack.Screen name="AddTenantStep3" component={AddTenantStep3Screen} options={{ title: 'Add Tenant (3/3)' }} />
     <AppStack.Screen name="TenantProfile" component={TenantProfileScreen} options={{ title: 'Tenant Profile' }} />
-    <AppStack.Screen name="RecordPayment" component={RecordPaymentScreen} options={{ title: 'Record Payment' }} />
+    <AppStack.Screen name="RecordPayment" component={RecordPaymentScreen} options={{ headerShown: false }} />
     <AppStack.Screen name="PaymentHistory" component={PaymentHistoryScreen} options={{ title: 'Payment History' }} />
     <AppStack.Screen name="Receipt" component={ReceiptScreen} options={{ title: 'Receipt' }} />
     <AppStack.Screen name="VacantUnits" component={VacantUnitsScreen} options={{ headerShown: false }} />

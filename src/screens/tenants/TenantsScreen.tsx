@@ -60,6 +60,7 @@ export default function TenantsScreen({ navigation }: Props) {
       <BlueBannerHeader
         title="All Tenants"
         subtitle={`${tenants.length} active tenant${tenants.length !== 1 ? 's' : ''}`}
+        onBack={navigation.canGoBack() ? () => navigation.goBack() : undefined}
       />
 
       <FlatList

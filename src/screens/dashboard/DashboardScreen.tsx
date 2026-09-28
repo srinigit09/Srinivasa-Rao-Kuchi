@@ -112,7 +112,7 @@ export default function DashboardScreen({ navigation }: Props) {
         <Text style={styles.subGreeting}>Here's your property summary</Text>
       </View>
 
-      {/* Quick Actions — just below blue panel, outside the scroll */}
+      {/* Quick Actions — 2 buttons only */}
       <View style={styles.quickActionsPanel}>
         <QuickActionBtn
           label="Add Tenant"
@@ -123,16 +123,6 @@ export default function DashboardScreen({ navigation }: Props) {
           label="Record Payment"
           icon="cash-outline"
           onPress={() => navigation.navigate('Tenants' as any)}
-        />
-        <QuickActionBtn
-          label="Add Building"
-          icon="add-circle-outline"
-          onPress={() => navigation.navigate('AddEditBuilding', {})}
-        />
-        <QuickActionBtn
-          label="Vacant Units"
-          icon="key-outline"
-          onPress={() => navigation.navigate('VacantUnits')}
         />
       </View>
 

@@ -91,10 +91,10 @@ export default function AllUnitsScreen({ navigation }: Props) {
         ListHeaderComponent={
           <TouchableOpacity
             style={styles.addBtn}
-            onPress={() => navigation.navigate('AddEditBuilding', {})}
+            onPress={() => navigation.navigate('Buildings' as any)}
           >
             <Ionicons name="add-circle" size={22} color={COLORS.primary} />
-            <Text style={styles.addText}>Add Unit / Building</Text>
+            <Text style={styles.addText}>Add Unit</Text>
           </TouchableOpacity>
         }
         ListEmptyComponent={

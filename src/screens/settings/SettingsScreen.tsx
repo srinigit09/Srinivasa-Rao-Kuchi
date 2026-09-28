@@ -11,6 +11,7 @@ import FormField from '../../components/common/FormField';
 import { COLORS } from '../../constants';
 import Card from '../../components/common/Card';
 import { formatDate, showAlert } from '../../utils';
+import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
 const BIOMETRIC_KEY = 'rentease_biometric_enabled';
 
@@ -137,6 +138,8 @@ export default function SettingsScreen() {
   };
 
   return (
+    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+    <BlueBannerHeader title="Settings" subtitle="Profile & preferences" />
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Card title="Account Profile">
         <FormField label="Full Name" required value={name} onChangeText={setName} placeholder="Your name" />
@@ -203,11 +206,12 @@ export default function SettingsScreen() {
 
       <Text style={styles.version}>RentEase v1.0.0 · All rights reserved</Text>
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { backgroundColor: COLORS.bg, paddingBottom: 40 },
+  container: { backgroundColor: COLORS.bg, paddingBottom: 40, flexGrow: 1 },
   badgeRow: { marginTop: 4, marginBottom: 8 },
   adminRoleText: {
     color: '#D97706',
