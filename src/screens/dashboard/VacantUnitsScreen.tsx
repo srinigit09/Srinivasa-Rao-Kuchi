@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -13,31 +13,38 @@ import { formatCurrency } from '../../utils';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
-type Props = { navigation: NativeStackNavigationProp<AppStackParamList, 'VacantUnits'> };
+type Props = NativeStackScreenProps<AppStackParamList, 'VacantUnits'>;
 
-export default function VacantUnitsScreen({ navigation }: Props) {
+export default function VacantUnitsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
+  const { buildingId, buildingName } = route.params ?? {};
   const [units, setUnits] = useState<VacantUnit[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase
+    let query = supabase
       .from('v_vacant_units')
       .select('*')
       .eq('owner_id', user.id)
       .order('building_name');
+    if (buildingId) query = query.eq('building_id', buildingId);
+    const { data } = await query;
     setUnits((data ?? []) as VacantUnit[]);
-  }, [user]);
+  }, [user, buildingId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
+
+  const bannerSubtitle = buildingName
+    ? `${buildingName}  ·  ${units.length} unit${units.length !== 1 ? 's' : ''} available`
+    : `${units.length} unit${units.length !== 1 ? 's' : ''} available`;
 
   return (
     <View style={styles.container}>
       <BlueBannerHeader
         title="Vacant Units"
-        subtitle={`${units.length} unit${units.length !== 1 ? 's' : ''} available`}
+        subtitle={bannerSubtitle}
         onBack={() => navigation.goBack()}
       />
       <FlatList

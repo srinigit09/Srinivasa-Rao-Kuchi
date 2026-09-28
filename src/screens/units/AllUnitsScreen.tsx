@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -12,7 +12,7 @@ import { formatCurrency } from '../../utils';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
-type Props = { navigation: NativeStackNavigationProp<AppStackParamList> };
+type Props = NativeStackScreenProps<AppStackParamList, 'AllUnits'>;
 
 interface UnitRow {
   id: string;
@@ -31,14 +31,15 @@ interface UnitRow {
 
 const HEADER_BLUE = '#1D4ED8';
 
-export default function AllUnitsScreen({ navigation }: Props) {
+export default function AllUnitsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
+  const { buildingId, buildingName } = route.params ?? {};
   const [units, setUnits] = useState<UnitRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase
+    let query = supabase
       .from('units')
       .select(`
         id, unit_number, unit_type, is_vacant, rent_per_bed, total_beds,
@@ -47,6 +48,8 @@ export default function AllUnitsScreen({ navigation }: Props) {
       `)
       .eq('owner_id', user.id)
       .order('unit_number');
+    if (buildingId) query = query.eq('building_id', buildingId);
+    const { data } = await query;
 
     const rows: UnitRow[] = (data ?? []).map((u: any) => {
       const activeTenants = (u.tenants ?? []).filter((t: any) => t.is_active);
@@ -66,7 +69,7 @@ export default function AllUnitsScreen({ navigation }: Props) {
       };
     });
     setUnits(rows);
-  }, [user]);
+  }, [user, buildingId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
@@ -75,11 +78,15 @@ export default function AllUnitsScreen({ navigation }: Props) {
   const vacantCount = units.filter(u => u.is_vacant).length;
   const occupiedCount = totalUnits - vacantCount;
 
+  const bannerSubtitle = buildingName
+    ? `${buildingName}  ·  ${totalUnits} units · ${occupiedCount} occupied · ${vacantCount} vacant`
+    : `${totalUnits} units · ${occupiedCount} occupied · ${vacantCount} vacant`;
+
   return (
     <View style={styles.container}>
       <BlueBannerHeader
         title="All Units"
-        subtitle={`${totalUnits} units · ${occupiedCount} occupied · ${vacantCount} vacant`}
+        subtitle={bannerSubtitle}
         onBack={() => navigation.goBack()}
       />
 
@@ -91,7 +98,13 @@ export default function AllUnitsScreen({ navigation }: Props) {
         ListHeaderComponent={
           <TouchableOpacity
             style={styles.addBtn}
-            onPress={() => navigation.navigate('Buildings' as any)}
+            onPress={() => {
+              if (buildingId) {
+                navigation.navigate('AddEditUnit', { buildingId });
+              } else {
+                navigation.navigate('Buildings' as any);
+              }
+            }}
           >
             <Ionicons name="add-circle" size={22} color={COLORS.primary} />
             <Text style={styles.addText}>Add New Unit</Text>

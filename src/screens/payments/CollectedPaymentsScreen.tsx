@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -14,10 +14,11 @@ import { AppStackParamList } from '../../navigation/RootNavigator';
 import StatusBadge from '../../components/common/StatusBadge';
 import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
-type Props = { navigation: NativeStackNavigationProp<AppStackParamList> };
+type Props = NativeStackScreenProps<AppStackParamList, 'CollectedPayments'>;
 
-export default function CollectedPaymentsScreen({ navigation }: Props) {
+export default function CollectedPaymentsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
+  const { buildingId, buildingName } = route.params ?? {};
   const [payments, setPayments] = useState<Payment[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -26,34 +27,43 @@ export default function CollectedPaymentsScreen({ navigation }: Props) {
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
-    const { data } = await supabase
+    let query = supabase
       .from('payments')
-      .select('*, tenants(full_name, units(unit_number, buildings(name)))')
+      .select('*, tenants(full_name, units(unit_number, building_id, buildings(name)))')
       .eq('owner_id', user.id)
       .eq('payment_month', thisMonth)
       .gt('amount_paid', 0)
       .order('payment_date', { ascending: false });
 
-    setPayments(
-      (data ?? []).map((x: any) => ({
-        ...x,
-        tenant_name: x.tenants?.full_name,
-        unit_number: x.tenants?.units?.unit_number,
-        building_name: x.tenants?.units?.buildings?.name,
-      })) as Payment[]
-    );
-  }, [user]);
+    const { data } = await query;
+
+    let rows = (data ?? []).map((x: any) => ({
+      ...x,
+      tenant_name: x.tenants?.full_name,
+      unit_number: x.tenants?.units?.unit_number,
+      building_name: x.tenants?.units?.buildings?.name,
+      _building_id: x.tenants?.units?.building_id,
+    })) as (Payment & { _building_id?: string })[];
+
+    if (buildingId) rows = rows.filter(r => r._building_id === buildingId);
+
+    setPayments(rows);
+  }, [user, buildingId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const totalCollected = payments.reduce((s, p) => s + p.amount_paid + (p.advance_paid ?? 0), 0);
 
+  const bannerSubtitle = buildingName
+    ? `${buildingName}  ·  ${formatCurrency(totalCollected)} · ${payments.length} payment${payments.length !== 1 ? 's' : ''}`
+    : `${formatCurrency(totalCollected)} · ${payments.length} payment${payments.length !== 1 ? 's' : ''}`;
+
   return (
     <View style={styles.container}>
       <BlueBannerHeader
         title="Collected This Month"
-        subtitle={`${formatCurrency(totalCollected)} · ${payments.length} payment${payments.length !== 1 ? 's' : ''}`}
+        subtitle={bannerSubtitle}
         onBack={() => navigation.goBack()}
       />
 

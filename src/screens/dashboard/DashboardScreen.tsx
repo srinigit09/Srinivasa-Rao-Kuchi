@@ -132,10 +132,14 @@ export default function DashboardScreen({ navigation }: Props) {
     ? selectedBuilding?.name ?? 'Select Building'
     : `All Buildings${data ? ` (${data.totalBuildings})` : ''}`;
 
-  // Navigation helpers — pass building filter through params where screens support it
-  const navToUnits     = () => navigation.navigate('AllUnits' as any);
-  const navToOccupied  = () => navigation.navigate('OccupiedTenants' as any);
-  const navToVacant    = () => navigation.navigate('VacantUnits');
+  // Navigation helpers — pass building filter through params
+  const buildingParam = isFiltered
+    ? { buildingId: selectedBuildingId, buildingName: selectedBuilding?.name }
+    : {};
+  const navToBuildings = () => navigation.navigate('Buildings' as any);
+  const navToUnits     = () => navigation.navigate('AllUnits', buildingParam);
+  const navToOccupied  = () => navigation.navigate('OccupiedTenants', buildingParam);
+  const navToVacant    = () => navigation.navigate('VacantUnits', buildingParam);
 
   return (
     <View style={{ flex: 1, backgroundColor: HEADER_BLUE }}>
@@ -185,7 +189,7 @@ export default function DashboardScreen({ navigation }: Props) {
       >
         {/* Overdue alert */}
         {overduePayments.length > 0 && (
-          <TouchableOpacity style={styles.alertBanner} onPress={() => navigation.navigate('Outstanding' as any)}>
+          <TouchableOpacity style={styles.alertBanner} onPress={() => navigation.navigate('Outstanding', buildingParam)}>
             <Ionicons name="alert-circle" size={16} color={COLORS.danger} />
             <Text style={styles.alertText}>
               {overduePayments.length} overdue payment{overduePayments.length > 1 ? 's' : ''} — tap to view
@@ -196,6 +200,7 @@ export default function DashboardScreen({ navigation }: Props) {
 
         {/* ── Stat cards: 3 cards, label on top (larger), count below ── */}
         <View style={styles.grid}>
+          <StatCard label="Buildings"   value={data?.totalBuildings ?? 0} icon="business" color={COLORS.primary} onPress={navToBuildings} />
           <StatCard label="Total Units" value={displayUnits}    icon="home"   color="#7C3AED" onPress={navToUnits} />
           <StatCard label="Occupied"    value={displayOccupied} icon="person" color={COLORS.success} onPress={navToOccupied} />
           <StatCard label="Vacant"      value={displayVacant}   icon="key"    color="#D97706" onPress={navToVacant} />
@@ -204,12 +209,12 @@ export default function DashboardScreen({ navigation }: Props) {
         {/* ── This Month's Payment Summary ── */}
         <Card title="This Month's Payment Summary">
           <View style={styles.row}>
-            <TouchableOpacity style={styles.colHalf} onPress={() => navigation.navigate('CollectedPayments')}>
+            <TouchableOpacity style={styles.colHalf} onPress={() => navigation.navigate('CollectedPayments', buildingParam)}>
               <Text style={styles.amtLabel}>Received</Text>
               <Text style={[styles.amtValue, { color: COLORS.success }]}>{formatCurrency(collectedThisMonth)}</Text>
               <Text style={styles.tapHint}>tap for details ›</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.colHalf, styles.borderLeft]} onPress={() => navigation.navigate('Outstanding')}>
+            <TouchableOpacity style={[styles.colHalf, styles.borderLeft]} onPress={() => navigation.navigate('Outstanding', buildingParam)}>
               <Text style={styles.amtLabel}>Outstanding</Text>
               <Text style={[styles.amtValue, { color: '#D97706' }]}>{formatCurrency(pendingThisMonth)}</Text>
               <Text style={styles.tapHint}>tap for details ›</Text>

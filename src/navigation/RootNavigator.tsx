@@ -68,11 +68,11 @@ export type AppStackParamList = {
   RecordPayment: { tenantId: string; paymentId?: string };
   PaymentHistory: { tenantId: string };
   Receipt: { paymentId: string };
-  VacantUnits: undefined;
-  AllUnits: undefined;
-  OccupiedTenants: undefined;
-  CollectedPayments: undefined;
-  Outstanding: undefined;
+  VacantUnits: { buildingId?: string; buildingName?: string };
+  AllUnits: { buildingId?: string; buildingName?: string };
+  OccupiedTenants: { buildingId?: string; buildingName?: string };
+  CollectedPayments: { buildingId?: string; buildingName?: string };
+  Outstanding: { buildingId?: string; buildingName?: string };
   MoveOut: { tenantId: string };
   AdminClients: undefined;
 };

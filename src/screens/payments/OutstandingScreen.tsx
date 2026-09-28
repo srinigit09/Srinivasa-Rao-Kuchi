@@ -3,27 +3,33 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { COLORS } from '../../constants';
 import { Payment } from '../../types';
-import { formatCurrency, formatMonth } from '../../utils';
+import { formatCurrency, formatMonth, openWhatsApp, buildReminderMessage } from '../../utils';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import StatusBadge from '../../components/common/StatusBadge';
 import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
 type Tab = 'thisMonth' | 'allTime';
-type Props = { navigation: NativeStackNavigationProp<AppStackParamList> };
+type Props = NativeStackScreenProps<AppStackParamList, 'Outstanding'>;
+
+interface OutstandingRow extends Payment {
+  phone?: string;
+  _building_id?: string;
+}
 
 const ORANGE = '#D97706';
 
-export default function OutstandingScreen({ navigation }: Props) {
+export default function OutstandingScreen({ navigation, route }: Props) {
   const { user } = useAuth();
+  const { buildingId, buildingName } = route.params ?? {};
   const [activeTab, setActiveTab] = useState<Tab>('thisMonth');
-  const [thisMonthPayments, setThisMonthPayments] = useState<Payment[]>([]);
-  const [allTimePayments, setAllTimePayments] = useState<Payment[]>([]);
+  const [thisMonthPayments, setThisMonthPayments] = useState<OutstandingRow[]>([]);
+  const [allTimePayments, setAllTimePayments] = useState<OutstandingRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
@@ -34,43 +40,68 @@ export default function OutstandingScreen({ navigation }: Props) {
     const [{ data: tm }, { data: at }] = await Promise.all([
       supabase
         .from('payments')
-        .select('*, tenants(full_name, units(unit_number, buildings(name)))')
+        .select('*, tenants(full_name, phone, units(unit_number, building_id, buildings(name)))')
         .eq('owner_id', user.id)
         .eq('payment_month', thisMonth)
         .neq('status', 'Paid')
         .order('payment_month', { ascending: false }),
       supabase
         .from('payments')
-        .select('*, tenants(full_name, units(unit_number, buildings(name)))')
+        .select('*, tenants(full_name, phone, units(unit_number, building_id, buildings(name)))')
         .eq('owner_id', user.id)
         .neq('status', 'Paid')
         .order('payment_month', { ascending: false }),
     ]);
 
-    const mapPayments = (arr: any[]): Payment[] =>
+    const mapPayments = (arr: any[]): OutstandingRow[] =>
       arr.map((x: any) => ({
         ...x,
         tenant_name: x.tenants?.full_name,
         unit_number: x.tenants?.units?.unit_number,
         building_name: x.tenants?.units?.buildings?.name,
+        phone: x.tenants?.phone,
+        _building_id: x.tenants?.units?.building_id,
       }));
 
-    setThisMonthPayments(mapPayments(tm ?? []));
-    setAllTimePayments(mapPayments(at ?? []));
-  }, [user]);
+    let tmRows = mapPayments(tm ?? []);
+    let atRows = mapPayments(at ?? []);
+
+    if (buildingId) {
+      tmRows = tmRows.filter(r => r._building_id === buildingId);
+      atRows = atRows.filter(r => r._building_id === buildingId);
+    }
+
+    setThisMonthPayments(tmRows);
+    setAllTimePayments(atRows);
+  }, [user, buildingId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const payments = activeTab === 'thisMonth' ? thisMonthPayments : allTimePayments;
-  // outstanding is already net of advance_paid (computed by DB generated column)
   const totalOutstanding = payments.reduce((s, p) => s + (p.outstanding ?? 0), 0);
+
+  const bannerSubtitle = buildingName
+    ? `${buildingName}  ·  ${formatCurrency(totalOutstanding)} unpaid · ${payments.length} record${payments.length !== 1 ? 's' : ''}`
+    : `${formatCurrency(totalOutstanding)} unpaid · ${payments.length} record${payments.length !== 1 ? 's' : ''}`;
+
+  const sendReminder = (item: OutstandingRow) => {
+    if (!item.phone) return;
+    const msg = buildReminderMessage({
+      tenantName: item.tenant_name ?? '',
+      buildingName: item.building_name ?? '',
+      unitNumber: item.unit_number ?? '',
+      month: formatMonth(item.payment_month),
+      amountDue: item.outstanding ?? 0,
+    });
+    openWhatsApp(item.phone, msg);
+  };
 
   return (
     <View style={styles.container}>
       <BlueBannerHeader
         title="Outstanding Payments"
-        subtitle={`${formatCurrency(totalOutstanding)} unpaid · ${payments.length} record${payments.length !== 1 ? 's' : ''}`}
+        subtitle={bannerSubtitle}
         onBack={() => navigation.goBack()}
       />
 
@@ -139,6 +170,15 @@ export default function OutstandingScreen({ navigation }: Props) {
                 <Text style={styles.outstanding}>{formatCurrency(item.outstanding)}</Text>
               )}
               <StatusBadge status={item.status} />
+              {item.phone && (
+                <TouchableOpacity
+                  style={styles.reminderBtn}
+                  onPress={() => sendReminder(item)}
+                >
+                  <Ionicons name="logo-whatsapp" size={13} color="#25D366" />
+                  <Text style={styles.reminderText}>Remind</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </TouchableOpacity>
         )}
@@ -193,6 +233,12 @@ const styles = StyleSheet.create({
   dueRow: { fontSize: 11, color: COLORS.muted, marginTop: 3 },
   advanceRow: { fontSize: 11, color: '#7C3AED', fontWeight: '600', marginTop: 2 },
   outstanding: { fontSize: 17, fontWeight: '700', color: ORANGE },
+  reminderBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#E8FFF0', paddingHorizontal: 8, paddingVertical: 5,
+    borderRadius: 7, borderWidth: 1, borderColor: '#25D366',
+  },
+  reminderText: { fontSize: 11, color: '#25D366', fontWeight: '700' },
   empty: { alignItems: 'center', paddingTop: 80, gap: 8 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
   emptyText: { fontSize: 14, color: COLORS.muted },
