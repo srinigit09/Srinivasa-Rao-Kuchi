@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 
-const PING_URL = 'https://www.gstatic.com/generate_204'; // Google's lightweight connectivity check
-const PING_INTERVAL = 10000; // check every 10 seconds
-const PING_TIMEOUT  = 5000;  // consider offline if no response in 5s
+const PING_URL      = 'https://www.gstatic.com/generate_204';
+const PING_INTERVAL = 15000;  // check every 15 seconds
+const PING_TIMEOUT  = 8000;   // wait up to 8s before declaring offline
+const INITIAL_DELAY = 6000;   // wait 6s after app start before first check
+                               // prevents false-offline on slow boot / cold start
 
 async function checkOnline(): Promise<boolean> {
   try {
@@ -22,26 +24,34 @@ async function checkOnline(): Promise<boolean> {
 
 /**
  * Returns { isOnline, isOffline }.
- * Checks connectivity every 10 seconds by pinging Google's 204 endpoint.
- * Starts optimistically as online — first real check happens immediately.
+ * Starts optimistically as online. Delays the first connectivity check by
+ * INITIAL_DELAY ms so a slow app boot / cold start never triggers a false
+ * offline flash. Subsequent checks run every PING_INTERVAL ms.
  */
 export function useNetworkStatus() {
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(true); // optimistic default
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const delayRef    = useRef<ReturnType<typeof setTimeout>  | null>(null);
 
   useEffect(() => {
     let mounted = true;
 
     const check = async () => {
       const online = await checkOnline();
+      // Only update if we got a definitive offline result — never flip to
+      // online from this hook (we already start as online).
       if (mounted) setIsOnline(online);
     };
 
-    check(); // immediate first check
-    intervalRef.current = setInterval(check, PING_INTERVAL);
+    // Delay the very first check so the app fully boots before we ping.
+    delayRef.current = setTimeout(() => {
+      check();
+      intervalRef.current = setInterval(check, PING_INTERVAL);
+    }, INITIAL_DELAY);
 
     return () => {
       mounted = false;
+      if (delayRef.current)    clearTimeout(delayRef.current);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
