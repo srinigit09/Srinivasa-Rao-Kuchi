@@ -1,231 +1,135 @@
 #!/usr/bin/env python3
 """
-Generate RentEase app icons using Pillow.
+Generate RentEase app icons using Pillow + numpy.
 Requires: pip3 install Pillow numpy
 
 Design:
-  - Deep navy vignette background
-  - Thin gold house outline: peaked roof + left/right walls (open bottom)
-  - Small chimney top-right
-  - Two outlined cross-windows inside the walls
-  - "Rent" large bold white + "EASE" sky-blue, centred below house
-  - Subtle blue glow behind text, thin gold rule below
+  - Deep royal-blue solid background
+  - Simple white house outline: roof (left+right slopes only, open bottom)
+    with two side walls — NO chimney, NO windows, NO fill
+  - "RentEase" single line, bold white, centred inside the house frame
 """
 
 import math, os
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont
 
 SIZE = 1024
 
 
 def find_font(bold=False):
-    """Return the best available system font path."""
-    candidates_bold = [
+    candidates = [
         "/System/Library/Fonts/Helvetica.ttc",
-        "/System/Library/Fonts/SFNSDisplay-Bold.otf",
-        "/System/Library/Fonts/SFPro.ttf",
-        "/Library/Fonts/Arial Bold.ttf",
+        "/Library/Fonts/Arial Bold.ttf" if bold else "/Library/Fonts/Arial.ttf",
+        "/System/Library/Fonts/SFCompactDisplay-Bold.otf",
+        "/System/Library/Fonts/SFCompactDisplay-Regular.otf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    ]
-    candidates_reg = [
-        "/System/Library/Fonts/Helvetica.ttc",
-        "/System/Library/Fonts/SFNSDisplay.otf",
-        "/Library/Fonts/Arial.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
     ]
-    for path in (candidates_bold if bold else candidates_reg):
-        if os.path.exists(path):
-            return path
+    for p in candidates:
+        if os.path.exists(p):
+            return p
     return None
 
 
 def make_background(W):
-    """Radial vignette: bright royal-blue centre, very dark navy edges."""
-    BG_CTR  = np.array([18, 58, 158], dtype=np.float32)
-    BG_EDGE = np.array([ 6, 15,  58], dtype=np.float32)
-    BG_BOT  = np.array([10, 28, 105], dtype=np.float32)
-    cx, cy = W // 2, int(W * 0.42)
-    max_r  = math.hypot(W * 0.72, W * 0.72)
-
-    ys, xs = np.mgrid[0:W, 0:W].astype(np.float32)
-    d    = np.clip(np.hypot(xs - cx, ys - cy) / max_r, 0.0, 1.0)
-    t1   = (d ** 1.4)[..., None]
-    vert = (ys / W * 0.35)[..., None]
-    c1   = BG_CTR * (1 - t1) + BG_EDGE * t1
-    c2   = c1 * (1 - vert) + BG_BOT * vert
-    rgb  = np.clip(c2, 0, 255).astype(np.uint8)
-    alpha = np.full((W, W, 1), 255, dtype=np.uint8)
-    return Image.fromarray(np.concatenate([rgb, alpha], axis=-1), 'RGBA')
+    # Solid deep blue — no gradient complexity, clean and bold
+    BG = (22, 60, 170)   # #163CAA — vivid royal blue
+    img = Image.new('RGBA', (W, W), BG + (255,))
+    return img
 
 
 def apply_rounded_corners(img, radius):
     W, H = img.size
     mask = Image.new('L', (W, H), 0)
-    d    = ImageDraw.Draw(mask)
-    d.rounded_rectangle([0, 0, W - 1, H - 1], radius=radius, fill=255)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, W-1, H-1], radius=radius, fill=255)
     result = img.copy()
     result.putalpha(mask)
     return result
 
 
-def draw_glow(img, cx, cy, rx, ry, color, strength=0.25):
-    """Soft elliptical glow blended onto img."""
-    W, H = img.size
-    ys, xs = np.mgrid[0:H, 0:W].astype(np.float32)
-    dx = (xs - cx) / rx
-    dy = (ys - cy) / ry
-    d  = np.sqrt(np.clip(dx * dx + dy * dy, 0, None))
-    a  = np.where(d < 1.0, (strength * (1.0 - d) ** 2.0 * 255).astype(np.float32), 0.0)
-    glow = Image.fromarray(
-        np.stack([
-            np.full((H, W), color[0], dtype=np.uint8),
-            np.full((H, W), color[1], dtype=np.uint8),
-            np.full((H, W), color[2], dtype=np.uint8),
-            np.clip(a, 0, 255).astype(np.uint8),
-        ], axis=-1), 'RGBA')
-    img.alpha_composite(glow)
-
-
 def make_icon(size=SIZE, adaptive=False):
     W = size
     img = make_background(W)
-    draw = ImageDraw.Draw(img)
 
     if not adaptive:
-        img = apply_rounded_corners(img, W // 5)
-        draw = ImageDraw.Draw(img)
+        img = apply_rounded_corners(img, int(W * 0.22))
 
-    # ── Colours ────────────────────────────────────────────────────────────
-    GOLD      = (255, 208,  80)
-    GOLD_DIM  = (185, 145,  45)
-    WHITE     = (235, 242, 255)
-    ACCENT    = (110, 180, 255)
-    GLOW_C    = ( 40, 100, 240)
-
-    LINE = max(7, int(W * 0.019))
-    THIN = max(4, int(W * 0.010))
-
-    cx = W // 2
-
-    # ── House geometry ──────────────────────────────────────────────────────
-    h_left   = int(W * 0.14)
-    h_right  = int(W * 0.86)
-    h_peak_y = int(W * 0.065)
-    h_wall_t = int(W * 0.355)
-    h_wall_b = int(W * 0.535)
-    overhang = int(W * 0.020)
-    roof_l   = h_left  - overhang
-    roof_r   = h_right + overhang
-
-    lw = LINE
-    tw = THIN
-
-    # Roof slopes
-    draw.line([(cx, h_peak_y), (roof_l, h_wall_t)], fill=GOLD, width=lw)
-    draw.line([(cx, h_peak_y), (roof_r, h_wall_t)], fill=GOLD, width=lw)
-    # Eave horizontals
-    draw.line([(roof_l, h_wall_t), (h_left, h_wall_t)],  fill=GOLD, width=tw)
-    draw.line([(h_right, h_wall_t), (roof_r, h_wall_t)], fill=GOLD, width=tw)
-    # Walls
-    draw.line([(h_left,  h_wall_t), (h_left,  h_wall_b)], fill=GOLD, width=lw)
-    draw.line([(h_right, h_wall_t), (h_right, h_wall_b)], fill=GOLD, width=lw)
-
-    # ── Chimney ─────────────────────────────────────────────────────────────
-    chim_cx  = int(W * 0.625)
-    chim_hw  = int(W * 0.022)
-    t_chim   = (chim_cx - cx) / (roof_r - cx)
-    chim_by  = int(h_peak_y + t_chim * (h_wall_t - h_peak_y))
-    chim_ty  = chim_by - int(W * 0.065)
-    # three sides (open bottom sits on roof)
-    draw.line([(chim_cx - chim_hw, chim_ty), (chim_cx + chim_hw, chim_ty)],  fill=GOLD_DIM, width=tw)
-    draw.line([(chim_cx - chim_hw, chim_ty), (chim_cx - chim_hw, chim_by)],  fill=GOLD_DIM, width=tw)
-    draw.line([(chim_cx + chim_hw, chim_ty), (chim_cx + chim_hw, chim_by)],  fill=GOLD_DIM, width=tw)
-
-    # ── Windows ─────────────────────────────────────────────────────────────
-    win_sz   = int(W * 0.075)
-    win_top  = h_wall_t + int(W * 0.030)
-    win_bot  = win_top + win_sz
-    # Left window: inset inside left wall
-    lw_x = h_left  + int(W * 0.030)
-    # Right window: inset inside right wall
-    rw_x = h_right - int(W * 0.030) - win_sz
-
-    for wx in (lw_x, rw_x):
-        # Outline
-        draw.rectangle([wx, win_top, wx + win_sz, win_bot], outline=GOLD_DIM, width=tw)
-        # Cross dividers
-        mid_x = wx + win_sz // 2
-        mid_y = win_top + win_sz // 2
-        draw.line([(mid_x, win_top), (mid_x, win_bot)],     fill=GOLD_DIM, width=max(2, tw // 2))
-        draw.line([(wx, mid_y),      (wx + win_sz, mid_y)], fill=GOLD_DIM, width=max(2, tw // 2))
-
-    # ── Text ─────────────────────────────────────────────────────────────────
-    # "Rent" sits between walls (horizontally), below the open wall base
-    text_area_w = h_right - h_left          # ~778 px at 1024
-    padding_top = int(W * 0.030)
-
-    # Load fonts
-    font_bold = find_font(bold=True)
-    font_reg  = find_font(bold=False)
-
-    rent_size = int(text_area_w * 0.30)     # sized to fit comfortably
-    ease_size = int(text_area_w * 0.20)
-
-    try:
-        fnt_rent = ImageFont.truetype(font_bold or font_reg, rent_size) if (font_bold or font_reg) else ImageFont.load_default()
-        fnt_ease = ImageFont.truetype(font_reg  or font_bold, ease_size) if (font_reg or font_bold) else ImageFont.load_default()
-    except Exception:
-        fnt_rent = ImageFont.load_default()
-        fnt_ease = ImageFont.load_default()
-
-    # Measure
-    bb_rent = draw.textbbox((0, 0), "Rent", font=fnt_rent)
-    bb_ease = draw.textbbox((0, 0), "EASE", font=fnt_ease)
-    rw = bb_rent[2] - bb_rent[0]
-    rh = bb_rent[3] - bb_rent[1]
-    ew = bb_ease[2] - bb_ease[0]
-    eh = bb_ease[3] - bb_ease[1]
-
-    gap_between = int(W * 0.014)
-    total_h     = rh + gap_between + eh
-    block_top   = h_wall_b + padding_top
-    block_bot   = W - int(W * 0.055)        # leave bottom margin
-
-    # Centre block vertically in available space
-    avail     = block_bot - block_top
-    block_top = block_top + max(0, (avail - total_h) // 2)
-
-    rent_x = cx - rw // 2 - bb_rent[0]
-    rent_y = block_top     - bb_rent[1]
-
-    ease_x = cx - ew // 2 - bb_ease[0]
-    ease_y = block_top + rh + gap_between - bb_ease[1]
-
-    # Glow
-    glow_cy = block_top + total_h // 2
-    draw_glow(img, cx, glow_cy, int(W * 0.30), int(total_h * 0.85), GLOW_C, strength=0.30)
     draw = ImageDraw.Draw(img)
 
-    # Shadow for depth
-    shadow_off = max(2, int(W * 0.004))
-    draw.text((rent_x + shadow_off, rent_y + shadow_off), "Rent", font=fnt_rent, fill=(0, 0, 0, 80))
-    draw.text((ease_x + shadow_off, ease_y + shadow_off), "EASE", font=fnt_ease, fill=(0, 0, 0, 80))
+    WHITE = (255, 255, 255)
+    cx = W // 2
 
-    # Text
-    draw.text((rent_x, rent_y), "Rent", font=fnt_rent, fill=WHITE)
-    draw.text((ease_x, ease_y), "EASE", font=fnt_ease, fill=ACCENT)
+    # ── Line weights ──────────────────────────────────────────────────────
+    ROOF_W = max(8, int(W * 0.021))   # roof & wall lines
+    WALL_W = max(8, int(W * 0.021))
 
-    # ── Thin gold rule below EASE ────────────────────────────────────────────
-    rule_y  = ease_y + bb_ease[1] + eh + int(W * 0.018)
-    rule_hw = int(W * 0.11)
-    draw.line([(cx - rule_hw, rule_y), (cx + rule_hw, rule_y)], fill=GOLD_DIM, width=max(2, int(W * 0.004)))
+    # ── House geometry ────────────────────────────────────────────────────
+    # House occupies top 56% of icon. Text sits in lower 35%.
+    peak_y  = int(W * 0.10)           # roof peak
+    eave_y  = int(W * 0.44)           # where roof meets walls
+    wall_b  = int(W * 0.62)           # bottom of walls (open)
+    wall_l  = int(W * 0.18)           # left wall X
+    wall_r  = int(W * 0.82)           # right wall X
+    # roof overhang slightly wider than walls
+    roof_l  = int(W * 0.14)
+    roof_r  = int(W * 0.86)
 
-    # ── Roof peak dot ────────────────────────────────────────────────────────
-    dot_r = int(W * 0.014)
-    draw.ellipse([cx - dot_r, h_peak_y - dot_r, cx + dot_r, h_peak_y + dot_r], fill=GOLD)
+    # Left roof slope: peak → roof_l
+    draw.line([(cx, peak_y), (roof_l, eave_y)], fill=WHITE, width=ROOF_W)
+    # Right roof slope: peak → roof_r
+    draw.line([(cx, peak_y), (roof_r, eave_y)], fill=WHITE, width=ROOF_W)
+    # Left eave (short horizontal overhang)
+    draw.line([(roof_l, eave_y), (wall_l, eave_y)], fill=WHITE, width=WALL_W)
+    # Right eave
+    draw.line([(wall_r, eave_y), (roof_r, eave_y)], fill=WHITE, width=WALL_W)
+    # Left wall (vertical, open bottom)
+    draw.line([(wall_l, eave_y), (wall_l, wall_b)], fill=WHITE, width=WALL_W)
+    # Right wall
+    draw.line([(wall_r, eave_y), (wall_r, wall_b)], fill=WHITE, width=WALL_W)
+
+    # ── "RentEase" — single line, bold white, centred inside house ────────
+    # Target: text fits between walls with comfortable padding
+    avail_w = wall_r - wall_l          # ~656 px at 1024
+    text    = "RentEase"
+
+    font_path = find_font(bold=True)
+    # Binary search for the largest font size that fits in avail_w * 0.78
+    target_w = int(avail_w * 0.78)
+    lo, hi   = 20, int(W * 0.16)
+    fnt      = None
+    for _ in range(18):
+        mid = (lo + hi) // 2
+        try:
+            f   = ImageFont.truetype(font_path, mid) if font_path else ImageFont.load_default()
+            bb  = draw.textbbox((0, 0), text, font=f)
+            tw  = bb[2] - bb[0]
+            if tw <= target_w:
+                fnt = f
+                lo  = mid + 1
+            else:
+                hi  = mid - 1
+        except Exception:
+            break
+
+    if fnt is None:
+        fnt = ImageFont.load_default()
+
+    bb  = draw.textbbox((0, 0), text, font=fnt)
+    tw  = bb[2] - bb[0]
+    th  = bb[3] - bb[1]
+
+    # Centre text vertically in the wall area (between eave_y and wall_b)
+    text_cy = (eave_y + wall_b) // 2
+    tx = cx - tw // 2 - bb[0]
+    ty = text_cy - th // 2 - bb[1]
+
+    # Subtle dark shadow for depth
+    draw.text((tx + 2, ty + 2), text, font=fnt, fill=(0, 0, 60, 90))
+    # White text
+    draw.text((tx, ty), text, font=fnt, fill=WHITE)
 
     return img
 
