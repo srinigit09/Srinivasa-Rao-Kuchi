@@ -30,15 +30,15 @@
         "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
       "enableProguardInReleaseBuilds": true,
-      "enableShrinkResourcesInReleaseBuilds": true
+      "enableShrinkResourcesInReleaseBuilds": true,
+      "abiFilters": ["arm64-v8a"]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-secure-store",
-      "expo-sharing",
-      "expo-font"
+      "expo-sharing"
     ],
     "owner": "sriniexpo09",
     "extra": {

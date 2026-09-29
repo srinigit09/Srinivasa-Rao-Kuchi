@@ -1,25 +1,51 @@
-import { format, startOfMonth, isThisMonth, isPast, parseISO } from 'date-fns';
+// ── Native date helpers (no date-fns dependency) ─────────────────────────────
+
+/** Parse an ISO date string — same as date-fns parseISO */
+const _parse = (dateStr: string): Date => new Date(dateStr);
+
+/** "d MMM yyyy"  e.g. "5 Jan 2025" */
+const _formatDate = (d: Date): string =>
+  d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+/** "MMMM yyyy"  e.g. "January 2025" */
+const _formatMonth = (d: Date): string =>
+  d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+/** "yyyy-MM-dd"  e.g. "2025-01-05" */
+const _formatYMD = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+// ── Exported utils ────────────────────────────────────────────────────────────
 
 export const formatCurrency = (amount: number): string =>
   `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
 export const formatDate = (dateStr: string | null): string => {
   if (!dateStr) return '—';
-  return format(parseISO(dateStr), 'd MMM yyyy');
+  return _formatDate(_parse(dateStr));
 };
 
 export const formatMonth = (dateStr: string): string =>
-  format(parseISO(dateStr), 'MMMM yyyy');
+  _formatMonth(_parse(dateStr));
 
 export const monthToDate = (year: number, month: number): string =>
   `${year}-${String(month).padStart(2, '0')}-01`;
 
-export const currentMonthDate = (): string =>
-  format(startOfMonth(new Date()), 'yyyy-MM-dd');
+export const currentMonthDate = (): string => {
+  const now = new Date();
+  return _formatYMD(new Date(now.getFullYear(), now.getMonth(), 1));
+};
 
 export const isOverdue = (paymentMonth: string): boolean => {
-  const d = parseISO(paymentMonth);
-  return isPast(d) && !isThisMonth(d);
+  const d = _parse(paymentMonth);
+  const now = new Date();
+  const isThisMonth = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  const isPast = d < now;
+  return isPast && !isThisMonth;
 };
 
 export const openWhatsApp = (phone: string, message: string) => {
