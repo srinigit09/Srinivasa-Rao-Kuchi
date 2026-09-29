@@ -35,9 +35,11 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
   const { buildingId, buildingName } = route.params ?? {};
   const [units, setUnits] = useState<UnitRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
     if (!user) return;
     let query = supabase
       .from('units')
@@ -69,6 +71,7 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
       };
     });
     setUnits(rows);
+    setLoading(false);
   }, [user, buildingId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -110,13 +113,13 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
             <Text style={styles.addText}>Add New Unit</Text>
           </TouchableOpacity>
         }
-        ListEmptyComponent={
+        ListEmptyComponent={loading ? null : (
           <View style={styles.empty}>
             <Ionicons name="home-outline" size={48} color={COLORS.border} />
             <Text style={styles.emptyTitle}>No units yet</Text>
             <Text style={styles.emptyText}>Add buildings and units first.</Text>
           </View>
-        }
+        )}
         renderItem={({ item }) => {
           const isPG = item.building_type === 'pg';
           const isVacant = item.is_vacant;

@@ -28,9 +28,11 @@ export default function OccupiedTenantsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
   const { buildingId, buildingName } = route.params ?? {};
   const [tenants, setTenants] = useState<OccupiedRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
     if (!user) return;
     let query = supabase
       .from('tenants')
@@ -54,6 +56,7 @@ export default function OccupiedTenantsScreen({ navigation, route }: Props) {
 
     if (buildingId) rows = rows.filter(r => r.building_id === buildingId);
     setTenants(rows);
+    setLoading(false);
   }, [user, buildingId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -76,13 +79,13 @@ export default function OccupiedTenantsScreen({ navigation, route }: Props) {
         keyExtractor={t => t.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
         contentContainerStyle={styles.list}
-        ListEmptyComponent={
+        ListEmptyComponent={loading ? null : (
           <View style={styles.empty}>
             <Ionicons name="people-outline" size={48} color={COLORS.border} />
             <Text style={styles.emptyTitle}>No active tenants</Text>
             <Text style={styles.emptyText}>Add tenants to occupied units.</Text>
           </View>
-        }
+        )}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.card}

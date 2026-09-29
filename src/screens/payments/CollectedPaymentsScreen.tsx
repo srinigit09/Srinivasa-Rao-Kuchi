@@ -20,9 +20,11 @@ export default function CollectedPaymentsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
   const { buildingId, buildingName } = route.params ?? {};
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
     if (!user) return;
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
@@ -48,6 +50,7 @@ export default function CollectedPaymentsScreen({ navigation, route }: Props) {
     if (buildingId) rows = rows.filter(r => r._building_id === buildingId);
 
     setPayments(rows);
+    setLoading(false);
   }, [user, buildingId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -72,13 +75,13 @@ export default function CollectedPaymentsScreen({ navigation, route }: Props) {
         keyExtractor={p => p.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
         contentContainerStyle={styles.list}
-        ListEmptyComponent={
+        ListEmptyComponent={loading ? null : (
           <View style={styles.empty}>
             <Ionicons name="cash-outline" size={48} color={COLORS.border} />
             <Text style={styles.emptyTitle}>No collections yet</Text>
             <Text style={styles.emptyText}>No payments recorded for this month.</Text>
           </View>
-        }
+        )}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.card}

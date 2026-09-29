@@ -19,9 +19,11 @@ export default function VacantUnitsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
   const { buildingId, buildingName } = route.params ?? {};
   const [units, setUnits] = useState<VacantUnit[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
     if (!user) return;
     let query = supabase
       .from('v_vacant_units')
@@ -31,6 +33,7 @@ export default function VacantUnitsScreen({ navigation, route }: Props) {
     if (buildingId) query = query.eq('building_id', buildingId);
     const { data } = await query;
     setUnits((data ?? []) as VacantUnit[]);
+    setLoading(false);
   }, [user, buildingId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -52,13 +55,13 @@ export default function VacantUnitsScreen({ navigation, route }: Props) {
         keyExtractor={u => u.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={styles.list}
-        ListEmptyComponent={
+        ListEmptyComponent={loading ? null : (
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>🎉</Text>
             <Text style={styles.emptyTitle}>All units occupied!</Text>
             <Text style={styles.emptyText}>You have no vacant units right now.</Text>
           </View>
-        }
+        )}
         renderItem={({ item }) => {
           const isResidential = item.building_type === 'residential';
           const rentLabel = isResidential
