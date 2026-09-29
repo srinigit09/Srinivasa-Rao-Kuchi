@@ -15,15 +15,23 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 export default function OfflineBanner() {
   const { isOffline } = useNetworkStatus();
   const insets = useSafeAreaInsets();
-  const slideAnim = useRef(new Animated.Value(-80)).current; // starts hidden above screen
+  const slideAnim = useRef(new Animated.Value(-80)).current;
+  // Track whether the banner has ever been shown — avoid rendering DOM at all
+  // until we know we're offline (eliminates the red-sliver-on-startup bug).
+  const [hasBeenOffline, setHasBeenOffline] = React.useState(false);
 
   useEffect(() => {
+    if (isOffline) setHasBeenOffline(true);
     Animated.timing(slideAnim, {
       toValue: isOffline ? 0 : -80,
       duration: 300,
       useNativeDriver: true,
     }).start();
   }, [isOffline, slideAnim]);
+
+  // Don't render anything until the device has actually gone offline at least once.
+  // This prevents the red background from painting at app start.
+  if (!hasBeenOffline) return null;
 
   return (
     <Animated.View

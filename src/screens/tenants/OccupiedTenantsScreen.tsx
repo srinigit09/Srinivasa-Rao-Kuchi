@@ -28,7 +28,7 @@ export default function OccupiedTenantsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
   const { buildingId, buildingName } = route.params ?? {};
   const [tenants, setTenants] = useState<OccupiedRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {

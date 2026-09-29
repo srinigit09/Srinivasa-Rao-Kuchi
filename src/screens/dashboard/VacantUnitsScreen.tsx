@@ -19,7 +19,7 @@ export default function VacantUnitsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
   const { buildingId, buildingName } = route.params ?? {};
   const [units, setUnits] = useState<VacantUnit[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {

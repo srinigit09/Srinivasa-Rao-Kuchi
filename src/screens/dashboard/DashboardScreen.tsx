@@ -48,7 +48,7 @@ const ALL_ID = '__all__';
 export default function DashboardScreen({ navigation }: Props) {
   const { user, signOut } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>(ALL_ID);
   const [dropdownOpen, setDropdownOpen] = useState(false);

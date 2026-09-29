@@ -30,7 +30,7 @@ export default function OutstandingScreen({ navigation, route }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('thisMonth');
   const [thisMonthPayments, setThisMonthPayments] = useState<OutstandingRow[]>([]);
   const [allTimePayments, setAllTimePayments] = useState<OutstandingRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {

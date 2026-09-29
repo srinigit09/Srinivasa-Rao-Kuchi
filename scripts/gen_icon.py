@@ -59,61 +59,72 @@ def make_icon(size=SIZE, adaptive=False):
 
     draw = ImageDraw.Draw(img)
 
-    WHITE = (255, 255, 255)
+    WHITE      = (255, 255, 255)
+    WHITE_DIM  = (200, 215, 255)      # slightly blue-tinted for label pill bg
+    GOLD       = (255, 213, 90)       # warm gold accent for label text
     cx = W // 2
 
     # ── Line weights ──────────────────────────────────────────────────────
-    ROOF_W = max(8, int(W * 0.021))   # roof & wall lines
-    WALL_W = max(8, int(W * 0.021))
+    LW = max(9, int(W * 0.023))       # all house lines same weight
 
     # ── House geometry ────────────────────────────────────────────────────
-    # House occupies top 56% of icon. Text sits in lower 35%.
-    peak_y  = int(W * 0.10)           # roof peak
-    eave_y  = int(W * 0.44)           # where roof meets walls
-    wall_b  = int(W * 0.62)           # bottom of walls (open)
-    wall_l  = int(W * 0.18)           # left wall X
-    wall_r  = int(W * 0.82)           # right wall X
-    # roof overhang slightly wider than walls
-    roof_l  = int(W * 0.14)
-    roof_r  = int(W * 0.86)
+    # Push peak DOWN so it isn't clipped by rounded corners.
+    # House occupies rows 14%–64% of icon height. Label sits 66%–88%.
+    peak_y  = int(W * 0.155)          # roof peak — well clear of corner clip
+    eave_y  = int(W * 0.455)          # where roof meets walls (eave line)
+    wall_b  = int(W * 0.645)          # open bottom of walls
+    wall_l  = int(W * 0.195)          # left wall X
+    wall_r  = int(W * 0.805)          # right wall X
+    overhang = int(W * 0.045)         # roof extends past walls on each side
+    roof_l  = wall_l - overhang
+    roof_r  = wall_r + overhang
 
-    # Left roof slope: peak → roof_l
-    draw.line([(cx, peak_y), (roof_l, eave_y)], fill=WHITE, width=ROOF_W)
-    # Right roof slope: peak → roof_r
-    draw.line([(cx, peak_y), (roof_r, eave_y)], fill=WHITE, width=ROOF_W)
-    # Left eave (short horizontal overhang)
-    draw.line([(roof_l, eave_y), (wall_l, eave_y)], fill=WHITE, width=WALL_W)
-    # Right eave
-    draw.line([(wall_r, eave_y), (roof_r, eave_y)], fill=WHITE, width=WALL_W)
-    # Left wall (vertical, open bottom)
-    draw.line([(wall_l, eave_y), (wall_l, wall_b)], fill=WHITE, width=WALL_W)
+    # Left roof slope
+    draw.line([(cx, peak_y), (roof_l, eave_y)], fill=WHITE, width=LW)
+    # Right roof slope
+    draw.line([(cx, peak_y), (roof_r, eave_y)], fill=WHITE, width=LW)
+    # Left eave cap (horizontal — makes it look like a real overhang)
+    draw.line([(roof_l, eave_y), (wall_l, eave_y)], fill=WHITE, width=LW)
+    # Right eave cap
+    draw.line([(wall_r, eave_y), (roof_r, eave_y)], fill=WHITE, width=LW)
+    # Left wall
+    draw.line([(wall_l, eave_y), (wall_l, wall_b)], fill=WHITE, width=LW)
     # Right wall
-    draw.line([(wall_r, eave_y), (wall_r, wall_b)], fill=WHITE, width=WALL_W)
+    draw.line([(wall_r, eave_y), (wall_r, wall_b)], fill=WHITE, width=LW)
 
-    # ── "RentEase" — single line, bold white, centred inside house ────────
-    # Target: text fits between walls with comfortable padding
-    avail_w = wall_r - wall_l          # ~656 px at 1024
-    text    = "RentEase"
+    # ── Centred arched door — sits flush at wall base ─────────────────────
+    door_w  = int(W * 0.130)          # wider so it reads clearly at small sizes
+    door_x  = cx - door_w // 2
+    door_r  = door_w // 2             # arch radius = half width (full semicircle)
+    arch_top = wall_b - door_r * 2    # top of the arch bounding box
+    # Arch (top semicircle)
+    draw.arc(
+        [door_x, arch_top, door_x + door_w, arch_top + door_w],
+        start=180, end=0, fill=WHITE, width=LW - 1,
+    )
+    # Left side of door down to wall base
+    draw.line([(door_x,            arch_top + door_r), (door_x,            wall_b)], fill=WHITE, width=LW - 1)
+    # Right side of door down to wall base
+    draw.line([(door_x + door_w,   arch_top + door_r), (door_x + door_w,   wall_b)], fill=WHITE, width=LW - 1)
 
+    # ── "RentEase" label — highlighted pill centred below house ──────────
+    text     = "RentEase"
     font_path = find_font(bold=True)
-    # Binary search for the largest font size that fits in avail_w * 0.78
-    target_w = int(avail_w * 0.78)
-    lo, hi   = 20, int(W * 0.16)
-    fnt      = None
-    for _ in range(18):
+
+    # Binary search: fit text to ~62% of wall width
+    target_w = int((wall_r - wall_l) * 0.68)
+    lo, hi, fnt = 20, int(W * 0.13), None
+    for _ in range(20):
         mid = (lo + hi) // 2
         try:
-            f   = ImageFont.truetype(font_path, mid) if font_path else ImageFont.load_default()
-            bb  = draw.textbbox((0, 0), text, font=f)
-            tw  = bb[2] - bb[0]
-            if tw <= target_w:
-                fnt = f
-                lo  = mid + 1
+            f  = ImageFont.truetype(font_path, mid) if font_path else ImageFont.load_default()
+            bb = draw.textbbox((0, 0), text, font=f)
+            if bb[2] - bb[0] <= target_w:
+                fnt = f; lo = mid + 1
             else:
-                hi  = mid - 1
+                hi = mid - 1
         except Exception:
             break
-
     if fnt is None:
         fnt = ImageFont.load_default()
 
@@ -121,15 +132,29 @@ def make_icon(size=SIZE, adaptive=False):
     tw  = bb[2] - bb[0]
     th  = bb[3] - bb[1]
 
-    # Centre text vertically in the wall area (between eave_y and wall_b)
-    text_cy = (eave_y + wall_b) // 2
-    tx = cx - tw // 2 - bb[0]
-    ty = text_cy - th // 2 - bb[1]
+    # Vertical centre: place label block in lower 28% of icon
+    label_cy = int(W * 0.775)
+    pad_x    = int(W * 0.045)
+    pad_y    = int(W * 0.022)
+    pill_x0  = cx - tw // 2 - pad_x - bb[0]
+    pill_y0  = label_cy - th // 2 - pad_y - bb[1]
+    pill_x1  = cx + tw // 2 + pad_x - bb[0]
+    pill_y1  = label_cy + th // 2 + pad_y - bb[1]
+    pill_r   = (pill_y1 - pill_y0) // 2
 
-    # Subtle dark shadow for depth
-    draw.text((tx + 2, ty + 2), text, font=fnt, fill=(0, 0, 60, 90))
-    # White text
-    draw.text((tx, ty), text, font=fnt, fill=WHITE)
+    # Semi-transparent white pill background
+    pill_img = Image.new('RGBA', (W, W), (0, 0, 0, 0))
+    pill_drw = ImageDraw.Draw(pill_img)
+    pill_drw.rounded_rectangle([pill_x0, pill_y0, pill_x1, pill_y1],
+                                radius=pill_r, fill=(255, 255, 255, 90))
+    img.alpha_composite(pill_img)
+    draw = ImageDraw.Draw(img)
+
+    # Text: gold colour for contrast and luxury feel
+    tx = cx - tw // 2 - bb[0]
+    ty = label_cy - th // 2 - bb[1]
+    draw.text((tx + 2, ty + 3), text, font=fnt, fill=(0, 0, 40, 80))   # shadow
+    draw.text((tx, ty), text, font=fnt, fill=GOLD)
 
     return img
 
