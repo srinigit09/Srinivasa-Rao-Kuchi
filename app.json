@@ -28,7 +28,9 @@
       "permissions": [
         "android.permission.READ_CONTACTS",
         "android.permission.WRITE_EXTERNAL_STORAGE"
-      ]
+      ],
+      "enableProguardInReleaseBuilds": true,
+      "enableShrinkResourcesInReleaseBuilds": true
     },
     "web": {
       "favicon": "./assets/favicon.png"
