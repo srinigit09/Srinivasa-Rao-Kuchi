@@ -48,6 +48,7 @@ const ALL_ID = '__all__';
 export default function DashboardScreen({ navigation }: Props) {
   const { user, signOut } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>(ALL_ID);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -55,6 +56,7 @@ export default function DashboardScreen({ navigation }: Props) {
 
   const load = useCallback(async () => {
     if (!user) return;
+    setLoading(true);
     const [bldRes, unitRes, payRes] = await Promise.all([
       supabase
         .from('buildings')
@@ -85,6 +87,7 @@ export default function DashboardScreen({ navigation }: Props) {
       allUnits: (unitRes.data ?? []) as any,
       allPayments: (payRes.data ?? []) as any,
     });
+    setLoading(false);
   }, [user]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -198,12 +201,11 @@ export default function DashboardScreen({ navigation }: Props) {
           </TouchableOpacity>
         )}
 
-        {/* ── Stat cards: 4 cards, label on top (larger), count below ── */}
+        {/* ── Stat cards: 3 cards (Buildings removed) ── */}
         <View style={styles.grid}>
-          <StatCard label="Buildings"   value={data?.totalBuildings ?? 0} icon="business" color={COLORS.primary} onPress={navToBuildings} />
-          <StatCard label="Total Units" value={displayUnits}    icon="home"   color="#7C3AED" onPress={navToUnits} />
-          <StatCard label="Occupied"    value={displayOccupied} icon="person" color={COLORS.success} onPress={navToOccupied} />
-          <StatCard label="Vacant"      value={displayVacant}   icon="key"    color="#D97706" onPress={navToVacant} />
+          <StatCard label="Total Units" value={displayUnits}    icon="home-outline"   color="#7C3AED" onPress={navToUnits}    loading={loading} />
+          <StatCard label="Occupied"    value={displayOccupied} icon="person-add"     color={COLORS.success} onPress={navToOccupied} loading={loading} />
+          <StatCard label="Vacant"      value={displayVacant}   icon="key-outline"    color="#D97706" onPress={navToVacant}  loading={loading} />
         </View>
 
         {/* ── This Month's Payment Summary ── */}
@@ -301,10 +303,13 @@ export default function DashboardScreen({ navigation }: Props) {
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-const StatCard = ({ label, value, icon, color, onPress }: any) => (
+const StatCard = ({ label, value, icon, color, onPress, loading }: any) => (
   <TouchableOpacity style={styles.statCard} onPress={onPress} activeOpacity={0.75}>
     <Text style={[styles.statLabel, { color }]}>{label}</Text>
-    <Text style={styles.statValue}>{value}</Text>
+    {loading
+      ? <View style={styles.statSkeleton} />
+      : <Text style={styles.statValue}>{value}</Text>
+    }
     <View style={[styles.statIconWrap, { backgroundColor: color + '18' }]}>
       <Ionicons name={icon} size={14} color={color} />
     </View>
@@ -376,6 +381,7 @@ const styles = StyleSheet.create({
   },
   statLabel: { fontSize: 12, fontWeight: '800', textAlign: 'center', letterSpacing: 0.1 },
   statValue: { fontSize: 28, fontWeight: '900', color: COLORS.text, lineHeight: 32 },
+  statSkeleton: { width: 48, height: 32, borderRadius: 6, backgroundColor: '#E5E7EB', marginVertical: 2 },
   statIconWrap: { width: 26, height: 26, borderRadius: 7, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
 
   row: { flexDirection: 'row' },
