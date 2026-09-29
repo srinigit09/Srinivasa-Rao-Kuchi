@@ -73,14 +73,14 @@ export default function BuildingsScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('AddEditBuilding', {})}
           >
             <Ionicons name="add-circle" size={22} color={COLORS.primary} />
-            <Text style={styles.addText}>Add new Building</Text>
+            <Text style={styles.addText}>Add Building</Text>
           </TouchableOpacity>
         }
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>🏢</Text>
             <Text style={styles.emptyTitle}>No buildings yet</Text>
-            <Text style={styles.emptyText}>Tap "Add new Building" to get started.</Text>
+            <Text style={styles.emptyText}>Tap "Add Building" to get started.</Text>
           </View>
         }
         renderItem={({ item }) => (

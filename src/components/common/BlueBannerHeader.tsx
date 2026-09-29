@@ -55,5 +55,5 @@ const styles = StyleSheet.create({
   backPlaceholder: { width: 36, height: 36 },
   textBlock: { flex: 1 },
   title: { fontSize: 20, fontWeight: '800', color: '#fff' },
-  subtitle: { fontSize: 16, fontWeight: '600', color: 'rgba(255,255,255,0.9)', marginTop: 3 },
+  subtitle: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
 });
