@@ -1,4 +1,4 @@
-import { format, parse, startOfMonth, isThisMonth, isPast, parseISO } from 'date-fns';
+import { format, startOfMonth, isThisMonth, isPast, parseISO } from 'date-fns';
 
 export const formatCurrency = (amount: number): string =>
   `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
