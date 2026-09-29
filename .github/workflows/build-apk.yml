@@ -44,7 +44,7 @@ jobs:
           echo "EXPO_PUBLIC_SUPABASE_ANON_KEY=${EXPO_PUBLIC_SUPABASE_ANON_KEY}" >> .env
 
       - name: Build APK (local)
-        run: eas build --platform android --profile preview --local --non-interactive --output ./rentease-preview.apk
+        run: eas build --platform android --profile preview --local --non-interactive --clear-cache --output ./rentease-preview.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
