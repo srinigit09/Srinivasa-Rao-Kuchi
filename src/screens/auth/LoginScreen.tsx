@@ -17,6 +17,24 @@ import { showAlert } from '../../utils';
 
 const HEADER_BLUE = '#1D4ED8';
 
+/** Converts raw Supabase/network errors into user-friendly messages */
+const friendlyError = (msg: string): string => {
+  const m = msg.toLowerCase();
+  if (m.includes('fetch') || m.includes('network') || m.includes('failed to fetch') || m.includes('networkerror') || m.includes('timeout') || m.includes('abort')) {
+    return 'No internet connection. Please check your network and try again.';
+  }
+  if (m.includes('invalid login credentials') || m.includes('invalid email') || m.includes('invalid password')) {
+    return 'Incorrect email or password. Please try again.';
+  }
+  if (m.includes('email not confirmed')) {
+    return 'Please verify your email address before signing in.';
+  }
+  if (m.includes('too many requests') || m.includes('rate limit')) {
+    return 'Too many attempts. Please wait a moment and try again.';
+  }
+  return msg; // fallback to original if no match
+};
+
 type Props = { navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'> };
 
 const ADMIN_EMAIL = 'srinivas06in@gmail.com';
@@ -110,7 +128,7 @@ export default function LoginScreen({ navigation }: Props) {
         });
         if (signUpErr) {
           setLoading(false);
-          setError(signUpErr.message);
+          setError(friendlyError(signUpErr.message));
           return;
         }
         if (signUpData.user) {
@@ -124,7 +142,7 @@ export default function LoginScreen({ navigation }: Props) {
         }
       } else {
         setLoading(false);
-        setError(signInErr.message);
+        setError(friendlyError(signInErr.message));
         return;
       }
     } else if (data.user) {
@@ -151,7 +169,7 @@ export default function LoginScreen({ navigation }: Props) {
         options: { shouldCreateUser: true },
       });
       setLoading(false);
-      if (otpErr) { setError(otpErr.message); return; }
+      if (otpErr) { setError(friendlyError(otpErr.message)); return; }
     } else {
       setLoading(false);
     }
