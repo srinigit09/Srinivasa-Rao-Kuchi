@@ -188,7 +188,7 @@ export default function DashboardScreen({ navigation }: Props) {
       {/* ── Quick Actions ── */}
       <View style={styles.quickActionsPanel}>
         <QuickActionBtn label="Add Tenant"     icon="person-add-outline" onPress={() => navigation.navigate('AddTenantStep1')} />
-        <QuickActionBtn label="Record Payment" icon="cash-outline"       onPress={() => navigation.navigate('Tenants' as any)} />
+        <QuickActionBtn label="Record Payment" icon="cash-outline"       onPress={() => navigation.navigate('OccupiedTenants', {})} />
       </View>
 
       {/* ── Scrollable body ── */}
@@ -252,19 +252,6 @@ export default function DashboardScreen({ navigation }: Props) {
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDropdownOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet}>
             <Text style={styles.dropdownTitle}>Filter by Building</Text>
-
-            {/* All buildings row */}
-            <TouchableOpacity
-              style={[styles.dropdownItem, selectedBuildingId === ALL_ID && styles.dropdownItemActive]}
-              onPress={() => { setSelectedBuildingId(ALL_ID); setDropdownOpen(false); }}
-            >
-              <Ionicons name="grid-outline" size={18} color={selectedBuildingId === ALL_ID ? COLORS.primary : COLORS.muted} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.dropdownItemText, selectedBuildingId === ALL_ID && { color: COLORS.primary }]}>All Buildings</Text>
-                <Text style={styles.dropdownItemSub}>{data?.totalBuildings ?? 0} buildings · {data?.allUnits.length ?? 0} total units</Text>
-              </View>
-              {selectedBuildingId === ALL_ID && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
-            </TouchableOpacity>
 
             {/* Per-building rows */}
             <FlatList
