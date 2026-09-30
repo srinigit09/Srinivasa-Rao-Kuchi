@@ -71,7 +71,7 @@ export default function OccupiedTenantsScreen({ navigation, route }: Props) {
   return (
     <View style={styles.container}>
       <BlueBannerHeader
-        title="Occupied Units"
+        title="Record Payment"
         subtitle={bannerSubtitle}
         onBack={() => navigation.goBack()}
       />

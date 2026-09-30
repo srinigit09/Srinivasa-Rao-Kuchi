@@ -4,7 +4,7 @@
       <stop offset="0%" stop-color="#1A38A8"/>
       <stop offset="100%" stop-color="#2563EB"/>
     </linearGradient>
-    <radialGradient id="bloom" cx="50%" cy="47%" r="46%">
+    <radialGradient id="bloom" cx="50%" cy="42%" r="46%">
       <stop offset="0%" stop-color="#4A74FF" stop-opacity="0.28"/>
       <stop offset="100%" stop-color="#1A38A8" stop-opacity="0"/>
     </radialGradient>
@@ -24,15 +24,11 @@
       <stop offset="0%" stop-color="#7498DC"/>
       <stop offset="100%" stop-color="#4A6DC0"/>
     </linearGradient>
-    <linearGradient id="pillFill" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="rgba(255,255,255,0.30)"/>
-      <stop offset="100%" stop-color="rgba(255,255,255,0.15)"/>
-    </linearGradient>
     <filter id="hShadow" x="-18%" y="-12%" width="136%" height="136%">
-      <feDropShadow dx="0" dy="14" stdDeviation="20" flood-color="#06123A" flood-opacity="0.42"/>
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#06123A" flood-opacity="0.38"/>
     </filter>
-    <filter id="pShadow" x="-10%" y="-25%" width="120%" height="170%">
-      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#06123A" flood-opacity="0.28"/>
+    <filter id="tShadow" x="-5%" y="-20%" width="110%" height="150%">
+      <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#06123A" flood-opacity="0.50"/>
     </filter>
   </defs>
 
@@ -41,65 +37,60 @@
   <rect width="1024" height="1024" rx="216" ry="216" fill="url(#bloom)"/>
 
   <!--
-    LAYOUT — shorter house, label moved up.
+    LAYOUT — compact house in upper half, large plain label below.
 
-    Roof:   apex y=270, eave y=460  → roof height=190
-    Walls:  y=457 → y=660           → wall height=203
-    Gap:    660→695  (35px)
-    Pill:   695→795  (100px tall)
-    Total:  270→795 = 525px
-    Centre: 270+263 = 533 ≈ 512 (slightly low — good visual balance)
+    House:  apex y=210, eave y=390  → roof height=180
+    Walls:  y=387 → y=560           → wall height=173
+    Gap:    560→610  (50px)
+    Label:  y=700 (text baseline)   → font-size=112
 
-    Eaves:  left=236, right=788 (span 552, centred 512 ✓)
-    Walls:  left=272, right=752 (span 480, centred 512 ✓)
+    Eaves:  left=282, right=742 (span 460, centred 512 ✓)
+    Walls:  left=312, right=712 (span 400, centred 512 ✓)
   -->
 
   <!-- ══ HOUSE ══ -->
   <g filter="url(#hShadow)">
 
-    <!-- Roof: apex(512,270) eave-left(236,460) eave-right(788,460) -->
-    <polygon points="512,270  236,460  788,460" fill="url(#roofFill)"/>
-    <line x1="236" y1="460" x2="788" y2="460" stroke="#A2BEEE" stroke-width="4"/>
+    <!-- Roof: apex(512,210) eave-left(282,390) eave-right(742,390) -->
+    <polygon points="512,210  282,390  742,390" fill="url(#roofFill)"/>
+    <line x1="282" y1="390" x2="742" y2="390" stroke="#8AAAD8" stroke-width="3.5"/>
 
-    <!-- Walls: x=272 y=457 w=480 h=203 → base y=660 -->
-    <rect x="272" y="457" width="480" height="203" fill="url(#wallFill)"/>
-    <rect x="272" y="457" width="22" height="203" fill="rgba(30,60,160,0.18)"/>
-    <rect x="730" y="457" width="22" height="203" fill="rgba(30,60,160,0.18)"/>
+    <!-- Walls: x=312 y=387 w=400 h=173 → base y=560 -->
+    <rect x="312" y="387" width="400" height="173" fill="url(#wallFill)"/>
+    <rect x="312" y="387" width="18" height="173" fill="rgba(30,60,160,0.16)"/>
+    <rect x="694" y="387" width="18" height="173" fill="rgba(30,60,160,0.16)"/>
 
-    <!-- Left window: y=480 h=80 -->
-    <rect x="302" y="480" width="106" height="80" rx="10" fill="url(#glass)"/>
-    <rect x="302" y="480" width="106" height="80" rx="10" fill="none" stroke="#2E5BAA" stroke-width="3"/>
-    <line x1="355" y1="480" x2="355" y2="560" stroke="#2E5BAA" stroke-width="2.5"/>
-    <line x1="302" y1="520" x2="408" y2="520" stroke="#2E5BAA" stroke-width="2.5"/>
-    <rect x="306" y="484" width="26" height="9" rx="4" fill="rgba(255,255,255,0.55)"/>
+    <!-- Left window: 88×70 -->
+    <rect x="338" y="408" width="88" height="70" rx="9" fill="url(#glass)"/>
+    <rect x="338" y="408" width="88" height="70" rx="9" fill="none" stroke="#2E5BAA" stroke-width="2.5"/>
+    <line x1="382" y1="408" x2="382" y2="478" stroke="#2E5BAA" stroke-width="2"/>
+    <line x1="338" y1="443" x2="426" y2="443" stroke="#2E5BAA" stroke-width="2"/>
+    <rect x="342" y="412" width="22" height="8" rx="4" fill="rgba(255,255,255,0.55)"/>
 
-    <!-- Right window: y=480 h=80 -->
-    <rect x="616" y="480" width="106" height="80" rx="10" fill="url(#glass)"/>
-    <rect x="616" y="480" width="106" height="80" rx="10" fill="none" stroke="#2E5BAA" stroke-width="3"/>
-    <line x1="669" y1="480" x2="669" y2="560" stroke="#2E5BAA" stroke-width="2.5"/>
-    <line x1="616" y1="520" x2="722" y2="520" stroke="#2E5BAA" stroke-width="2.5"/>
-    <rect x="620" y="484" width="26" height="9" rx="4" fill="rgba(255,255,255,0.55)"/>
+    <!-- Right window: 88×70 -->
+    <rect x="586" y="408" width="88" height="70" rx="9" fill="url(#glass)"/>
+    <rect x="586" y="408" width="88" height="70" rx="9" fill="none" stroke="#2E5BAA" stroke-width="2.5"/>
+    <line x1="630" y1="408" x2="630" y2="478" stroke="#2E5BAA" stroke-width="2"/>
+    <line x1="586" y1="443" x2="674" y2="443" stroke="#2E5BAA" stroke-width="2"/>
+    <rect x="590" y="412" width="22" height="8" rx="4" fill="rgba(255,255,255,0.55)"/>
 
-    <!-- Door: arch-top centred x=512, base y=660 -->
-    <path d="M458,660 L458,575 Q458,540 512,540 Q566,540 566,575 L566,660 Z" fill="url(#doorFill)"/>
-    <path d="M458,660 L458,575 Q458,540 512,540 Q566,540 566,575 L566,660 Z"
-          fill="none" stroke="#2E5BAA" stroke-width="3"/>
-    <path d="M458,575 Q458,540 512,540 Q566,540 566,575"
-          fill="none" stroke="rgba(255,255,255,0.65)" stroke-width="3.5"/>
-
+    <!-- Door: arch centred x=512, base y=560 -->
+    <path d="M468,560 L468,490 Q468,460 512,460 Q556,460 556,490 L556,560 Z" fill="url(#doorFill)"/>
+    <path d="M468,560 L468,490 Q468,460 512,460 Q556,460 556,490 L556,560 Z"
+          fill="none" stroke="#2E5BAA" stroke-width="2.5"/>
+    <path d="M468,490 Q468,460 512,460 Q556,460 556,490"
+          fill="none" stroke="rgba(255,255,255,0.65)" stroke-width="3"/>
     <!-- Door knob -->
-    <circle cx="548" cy="615" r="9" fill="#FBBF24"/>
-    <circle cx="548" cy="615" r="4" fill="#FDE68A"/>
+    <circle cx="544" cy="520" r="7" fill="#FBBF24"/>
+    <circle cx="544" cy="520" r="3" fill="#FDE68A"/>
 
   </g>
 
-  <!-- ══ PILL LABEL ══  y=695 → y=795, centred x=512 -->
-  <g filter="url(#pShadow)">
-    <rect x="258" y="695" width="508" height="100" rx="50"
-          fill="url(#pillFill)" stroke="rgba(255,255,255,0.50)" stroke-width="2"/>
-    <text x="512" y="771"
+  <!-- ══ PLAIN TEXT LABEL ══ — no box, no pill, just bold white text -->
+  <g filter="url(#tShadow)">
+    <text x="512" y="700"
           font-family="Arial,Helvetica,sans-serif"
-          font-size="88" font-weight="800" letter-spacing="2"
+          font-size="112" font-weight="800" letter-spacing="-1"
           text-anchor="middle" fill="#FFFFFF">RentEase</text>
   </g>
 

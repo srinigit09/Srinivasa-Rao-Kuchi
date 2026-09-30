@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
   tenantName:     { fontSize: 14, fontWeight: '600', color: COLORS.text },
   tenantMeta:     { fontSize: 12, color: COLORS.muted, marginTop: 2 },
   periodText:     { fontSize: 12, color: COLORS.muted, marginTop: 2 },
-  modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 },
+  modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-start', paddingTop: 140, paddingHorizontal: 16 },
   modalBox:       { backgroundColor: COLORS.white, borderRadius: 16, padding: 24, width: 320, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12, elevation: 10 },
   modalTitle:     { fontSize: 17, fontWeight: '700', color: COLORS.text, marginBottom: 4 },
   modalHint:      { fontSize: 12, color: COLORS.muted, marginBottom: 16 },

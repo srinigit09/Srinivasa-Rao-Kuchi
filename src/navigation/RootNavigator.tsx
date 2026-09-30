@@ -61,7 +61,7 @@ export type AppStackParamList = {
   AddEditBuilding: { buildingId?: string };
   BuildingDetail: { buildingId: string };
   AddEditUnit: { buildingId: string; unitId?: string };
-  AddTenantStep1: undefined;
+  AddTenantStep1: { buildingId?: string; unitId?: string } | undefined;
   AddTenantStep2: { buildingId: string; unitId: string; buildingType: 'residential' | 'pg' };
   AddTenantStep3: { buildingId: string; unitId: string; buildingType: 'residential' | 'pg'; tenantData: Record<string, unknown> };
   TenantProfile: { tenantId: string };

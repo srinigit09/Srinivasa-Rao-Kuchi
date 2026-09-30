@@ -140,7 +140,7 @@ export default function DashboardScreen({ navigation }: Props) {
 
   const dropdownLabel = isFiltered
     ? selectedBuilding?.name ?? 'Select Building'
-    : `All Buildings${data ? ` (${data.totalBuildings})` : ''}`;
+    : 'All Buildings';
 
   // Navigation helpers — pass building filter through params
   const buildingParam = isFiltered

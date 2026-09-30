@@ -42,12 +42,14 @@ export default function MoveOutScreen({ navigation, route }: Props) {
 
   const confirm = () => {
     if (submitting.current) return;
-    // Use window.confirm on web (Alert.alert is a no-op on web)
-    const ok = typeof window !== 'undefined'
-      ? window.confirm(`Confirm Move-Out for ${tenant?.full_name}?\n\nThis will mark the unit as vacant. This cannot be undone.`)
-      : true; // on native, skip confirm here — Alert below handles it
-    if (!ok) return;
-    processMovOut();
+    Alert.alert(
+      'Confirm Move-Out',
+      `Move out ${tenant?.full_name}?\n\nThis will mark the unit as vacant and cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Confirm', style: 'destructive', onPress: processMovOut },
+      ]
+    );
   };
 
   const processMovOut = async () => {

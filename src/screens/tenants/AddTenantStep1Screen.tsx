@@ -12,16 +12,18 @@ import { COLORS } from '../../constants';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import { formatCurrency } from '../../utils';
 
-type Props = { navigation: NativeStackNavigationProp<AppStackParamList, 'AddTenantStep1'> };
+type Props = {
+  navigation: NativeStackNavigationProp<AppStackParamList, 'AddTenantStep1'>;
+  route: any;
+};
 
 interface UnitItem {
   id: string;
   unit_number: string;
   unit_type: string;
-  is_vacant: boolean;
   rent_per_bed: number;
   total_beds: number;
-  active_tenant_count: number; // fetched from tenants table
+  active_tenant_count: number;
 }
 
 interface BuildingItem {
@@ -31,15 +33,23 @@ interface BuildingItem {
   units: UnitItem[];
 }
 
-export default function AddTenantStep1Screen({ navigation }: Props) {
+export default function AddTenantStep1Screen({ navigation, route }: Props) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  // Optional: pre-filter to a specific building (passed from AllUnitsScreen or BuildingDetail)
+  const prefilteredBuildingId: string | undefined = route.params?.buildingId;
+  const prefilteredUnitId: string | undefined = route.params?.unitId;
+
   const [buildings, setBuildings] = useState<BuildingItem[]>([]);
-  const [selected, setSelected] = useState<{ buildingId: string; unitId: string } | null>(null);
+  const [selected, setSelected] = useState<{ buildingId: string; unitId: string } | null>(
+    prefilteredBuildingId && prefilteredUnitId
+      ? { buildingId: prefilteredBuildingId, unitId: prefilteredUnitId }
+      : null
+  );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Cancel button in header — exits the whole Add Tenant flow back to Tenants tab
+  // Cancel button in header
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -57,16 +67,22 @@ export default function AddTenantStep1Screen({ navigation }: Props) {
     if (!user) return;
     if (!silent) setLoading(true);
 
-    // Fetch buildings + units
-    const { data: buildingData } = await supabase
+    // Fetch buildings + units — only vacant/available units
+    let bldQuery = supabase
       .from('buildings')
       .select('id, name, building_type, units(id, unit_number, unit_type, is_vacant, rent_per_bed, total_beds)')
       .eq('owner_id', user.id)
       .order('name');
 
-    if (!buildingData) { setBuildings([]); return; }
+    // If pre-filtered to a specific building, fetch only that one
+    if (prefilteredBuildingId) {
+      bldQuery = bldQuery.eq('id', prefilteredBuildingId);
+    }
 
-    // Fetch active tenant counts per unit in one query
+    const { data: buildingData } = await bldQuery;
+    if (!buildingData) { setBuildings([]); setLoading(false); return; }
+
+    // Fetch active tenant counts per unit
     const allUnitIds = buildingData.flatMap((b: any) => (b.units ?? []).map((u: any) => u.id));
     let tenantCountMap: Record<string, number> = {};
     if (allUnitIds.length > 0) {
@@ -80,32 +96,39 @@ export default function AddTenantStep1Screen({ navigation }: Props) {
       });
     }
 
-    const enriched: BuildingItem[] = buildingData.map((b: any) => ({
-      ...b,
-      units: (b.units ?? []).map((u: any) => ({
-        ...u,
-        active_tenant_count: tenantCountMap[u.id] ?? 0,
-      })),
-    }));
+    const enriched: BuildingItem[] = buildingData
+      .map((b: any) => {
+        const availableUnits = (b.units ?? [])
+          .map((u: any) => ({ ...u, active_tenant_count: tenantCountMap[u.id] ?? 0 }))
+          .filter((u: any) => {
+            // Only show units that can accept a new tenant
+            if (b.building_type === 'residential') return u.active_tenant_count === 0;
+            return u.active_tenant_count < u.total_beds;
+          });
+        return { ...b, units: availableUnits };
+      })
+      .filter((b: BuildingItem) => b.units.length > 0); // hide buildings with no available units
 
     setBuildings(enriched);
     setLoading(false);
-  }, [user]);
+
+    // If pre-selected unit+building, jump straight to Step 2
+    if (prefilteredBuildingId && prefilteredUnitId && !selected) {
+      const building = enriched.find(b => b.id === prefilteredBuildingId);
+      if (building) {
+        navigation.replace('AddTenantStep2', {
+          buildingId: prefilteredBuildingId,
+          unitId: prefilteredUnitId,
+          buildingType: building.building_type,
+        });
+      }
+    }
+  }, [user, prefilteredBuildingId, prefilteredUnitId]);
 
   useFocusEffect(useCallback(() => {
     if (buildings.length > 0) { load(true); } else { load(); }
   }, [load, buildings.length]));
   const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
-
-  /** Returns true if the unit can accept one more tenant */
-  const canAccept = (u: UnitItem, buildingType: 'residential' | 'pg') => {
-    if (buildingType === 'residential') {
-      // Residential: only one active tenant allowed per unit
-      return u.active_tenant_count === 0;
-    }
-    // PG: allow up to total_beds active tenants
-    return u.active_tenant_count < u.total_beds;
-  };
 
   const proceed = () => {
     if (!selected) { Alert.alert('Select a unit', 'Please select a unit to add a tenant.'); return; }
@@ -119,7 +142,7 @@ export default function AddTenantStep1Screen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Step 1: Select Unit</Text>
-      <Text style={styles.sub}>Choose the building and unit for the new tenant.</Text>
+      <Text style={styles.sub}>Only vacant / available units are shown.</Text>
       <FlatList
         data={buildings}
         keyExtractor={b => b.id}
@@ -127,7 +150,9 @@ export default function AddTenantStep1Screen({ navigation }: Props) {
         contentContainerStyle={styles.list}
         ListEmptyComponent={loading ? null : (
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>No buildings found. Add a building first.</Text>
+            <Ionicons name="home-outline" size={48} color={COLORS.border} />
+            <Text style={styles.emptyTitle}>No vacant units</Text>
+            <Text style={styles.emptyText}>All units are occupied or no buildings exist.</Text>
           </View>
         )}
         renderItem={({ item }) => (
@@ -135,64 +160,34 @@ export default function AddTenantStep1Screen({ navigation }: Props) {
             <Text style={styles.buildingName}>
               {item.building_type === 'residential' ? '🏠' : '🏨'} {item.name}
             </Text>
-            {item.units?.map(u => {
-              const available = canAccept(u, item.building_type);
+            {item.units.map(u => {
               const isSelected = selected?.unitId === u.id;
               const bedsFree = item.building_type === 'pg' ? u.total_beds - u.active_tenant_count : null;
 
               return (
                 <TouchableOpacity
                   key={u.id}
-                  style={[
-                    styles.unitRow,
-                    isSelected && styles.unitRowSelected,
-                    !available && styles.unitRowLocked,
-                  ]}
-                  onPress={() => {
-                    if (!available) {
-                      const msg = item.building_type === 'pg'
-                        ? 'This room is fully occupied. All beds are taken.'
-                        : 'This unit is already occupied. Move out the existing tenant first.';
-                      Alert.alert('Unit Occupied', msg);
-                      return;
-                    }
-                    setSelected({ buildingId: item.id, unitId: u.id });
-                  }}
-                  activeOpacity={available ? 0.7 : 1}
+                  style={[styles.unitRow, isSelected && styles.unitRowSelected]}
+                  onPress={() => setSelected({ buildingId: item.id, unitId: u.id })}
+                  activeOpacity={0.7}
                 >
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.unitNum, !available && styles.textMuted]}>
-                      {u.unit_number} — {u.unit_type}
-                    </Text>
+                    <Text style={styles.unitNum}>{u.unit_number} — {u.unit_type}</Text>
                     <Text style={styles.unitRent}>
                       {formatCurrency(u.rent_per_bed)} {item.building_type === 'pg' ? '/ bed' : '/ month'}
                     </Text>
                     {item.building_type === 'pg' && (
                       <Text style={styles.bedInfo}>
-                        {u.active_tenant_count}/{u.total_beds} beds occupied
-                        {bedsFree !== null && bedsFree > 0 ? ` · ${bedsFree} free` : ''}
+                        {u.active_tenant_count}/{u.total_beds} beds occupied · {bedsFree} free
                       </Text>
                     )}
                   </View>
-
-                  {/* Status badge */}
-                  {available ? (
-                    <View style={[styles.badge, { backgroundColor: COLORS.successLight }]}>
-                      <Text style={{ fontSize: 11, color: COLORS.success, fontWeight: '600' }}>
-                        {item.building_type === 'pg' ? `${bedsFree} Bed${bedsFree !== 1 ? 's' : ''} Free` : 'Vacant'}
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={[styles.badge, { backgroundColor: COLORS.dangerLight }]}>
-                      <Text style={{ fontSize: 11, color: COLORS.danger, fontWeight: '600' }}>Full</Text>
-                    </View>
-                  )}
-
-                  {/* Lock icon for unavailable, checkmark for selected */}
-                  {!available && (
-                    <Ionicons name="lock-closed" size={16} color={COLORS.muted} />
-                  )}
-                  {isSelected && available && (
+                  <View style={[styles.badge, { backgroundColor: COLORS.successLight }]}>
+                    <Text style={{ fontSize: 11, color: COLORS.success, fontWeight: '600' }}>
+                      {item.building_type === 'pg' ? `${bedsFree} Bed${bedsFree !== 1 ? 's' : ''} Free` : 'Vacant'}
+                    </Text>
+                  </View>
+                  {isSelected && (
                     <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} />
                   )}
                 </TouchableOpacity>
@@ -214,7 +209,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   header: { fontSize: 18, fontWeight: '700', color: COLORS.text, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },
   sub: { fontSize: 13, color: COLORS.muted, paddingHorizontal: 16, marginBottom: 8 },
-  list: { padding: 16, gap: 12 },
+  list: { padding: 16, gap: 12, paddingBottom: 100 },
   buildingGroup: { backgroundColor: COLORS.white, borderRadius: 12, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   buildingName: { fontSize: 14, fontWeight: '700', color: COLORS.text, padding: 12, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   unitRow: {
@@ -222,15 +217,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: 10,
   },
   unitRowSelected: { backgroundColor: COLORS.primaryLight },
-  unitRowLocked: { backgroundColor: '#FAFAFA', opacity: 0.75 },
   unitNum: { fontSize: 14, fontWeight: '600', color: COLORS.text },
-  textMuted: { color: COLORS.muted },
   unitRent: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
   bedInfo: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
   badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   footer: { padding: 16, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.border },
   nextBtn: { backgroundColor: COLORS.primary, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
   nextText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  empty: { padding: 40, alignItems: 'center' },
-  emptyText: { color: COLORS.muted, fontSize: 14, textAlign: 'center' },
+  empty: { alignItems: 'center', paddingTop: 80, gap: 8 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
+  emptyText: { fontSize: 14, color: COLORS.muted, textAlign: 'center' },
 });

@@ -1,9 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Modal,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -29,14 +29,13 @@ interface UnitRow {
   tenant_name: string | null;
 }
 
-const HEADER_BLUE = '#1D4ED8';
-
 export default function AllUnitsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
   const { buildingId, buildingName } = route.params ?? {};
   const [units, setUnits] = useState<UnitRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [vacantSheet, setVacantSheet] = useState<UnitRow | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!user) return;
@@ -87,6 +86,16 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
     ? `${buildingName}  ·  ${totalUnits} units · ${occupiedCount} occupied · ${vacantCount} vacant`
     : `${totalUnits} units · ${occupiedCount} occupied · ${vacantCount} vacant`;
 
+  const handleAddUnit = () => {
+    if (buildingId) {
+      // We have a building context — go straight to add unit form
+      navigation.navigate('AddEditUnit', { buildingId });
+    } else {
+      // No building context — go to Buildings screen to pick one first
+      navigation.navigate('Buildings' as any);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <BlueBannerHeader
@@ -101,18 +110,11 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
-          <TouchableOpacity
-            style={styles.addBtn}
-            onPress={() => {
-              if (buildingId) {
-                navigation.navigate('AddEditUnit', { buildingId });
-              } else {
-                navigation.navigate('Buildings' as any);
-              }
-            }}
-          >
+          <TouchableOpacity style={styles.addBtn} onPress={handleAddUnit}>
             <Ionicons name="add-circle" size={22} color={COLORS.primary} />
-            <Text style={styles.addText}>Add New Unit</Text>
+            <Text style={styles.addText}>
+              {buildingId ? 'Add New Unit' : 'Add New Unit (select building first)'}
+            </Text>
           </TouchableOpacity>
         }
         ListEmptyComponent={loading ? null : (
@@ -125,13 +127,10 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
         renderItem={({ item }) => {
           const isPG = item.building_type === 'pg';
           const isVacant = item.is_vacant;
-          // Residential: flat/unit rent; PG: per-bed cost shown
           const rentLabel = isPG
             ? `${formatCurrency(item.rent_per_bed)} / bed · ${item.total_beds} beds`
             : `${formatCurrency(item.rent_per_bed)} / month`;
-          const bedsLabel = isPG
-            ? `${item.active_count}/${item.total_beds} beds occupied`
-            : null;
+          const bedsLabel = isPG ? `${item.active_count}/${item.total_beds} beds occupied` : null;
 
           return (
             <TouchableOpacity
@@ -140,7 +139,8 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
                 if (!isVacant && item.tenant_id) {
                   navigation.navigate('TenantProfile', { tenantId: item.tenant_id });
                 } else {
-                  navigation.navigate('BuildingDetail', { buildingId: item.building_id });
+                  // Show vacant unit detail sheet
+                  setVacantSheet(item);
                 }
               }}
             >
@@ -167,21 +167,73 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
                       : 'Occupied'}
                   </Text>
                 </View>
-
-                {isVacant && (
-                  <TouchableOpacity
-                    style={styles.addTenantBtn}
-                    onPress={() => navigation.navigate('AddTenantStep1')}
-                  >
-                    <Ionicons name="person-add-outline" size={14} color={COLORS.primary} />
-                    <Text style={styles.addTenantText}>Add Tenant</Text>
-                  </TouchableOpacity>
-                )}
               </View>
             </TouchableOpacity>
           );
         }}
       />
+
+      {/* ── Vacant Unit Detail Sheet ── */}
+      <Modal
+        visible={!!vacantSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setVacantSheet(null)}
+      >
+        <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={() => setVacantSheet(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.sheet}>
+            {vacantSheet && (
+              <>
+                <View style={styles.sheetHandle} />
+                <Text style={styles.sheetTitle}>{vacantSheet.unit_number}</Text>
+                <Text style={styles.sheetSub}>{vacantSheet.unit_type} · {vacantSheet.building_name}</Text>
+
+                <View style={styles.sheetDivider} />
+
+                <View style={styles.sheetRow}>
+                  <Text style={styles.sheetLabel}>Status</Text>
+                  <View style={[styles.badge, { backgroundColor: COLORS.successLight }]}>
+                    <Text style={[styles.badgeText, { color: COLORS.success }]}>Vacant</Text>
+                  </View>
+                </View>
+                <View style={styles.sheetRow}>
+                  <Text style={styles.sheetLabel}>Rent</Text>
+                  <Text style={styles.sheetValue}>
+                    {formatCurrency(vacantSheet.rent_per_bed)}
+                    {vacantSheet.building_type === 'pg' ? ' / bed' : ' / month'}
+                  </Text>
+                </View>
+                {vacantSheet.building_type === 'pg' && (
+                  <View style={styles.sheetRow}>
+                    <Text style={styles.sheetLabel}>Beds</Text>
+                    <Text style={styles.sheetValue}>{vacantSheet.total_beds} total · {vacantSheet.total_beds - vacantSheet.active_count} free</Text>
+                  </View>
+                )}
+
+                <View style={styles.sheetDivider} />
+
+                <TouchableOpacity
+                  style={styles.sheetAddBtn}
+                  onPress={() => {
+                    setVacantSheet(null);
+                    navigation.navigate('AddTenantStep1', {
+                      buildingId: vacantSheet.building_id,
+                      unitId: vacantSheet.id,
+                    });
+                  }}
+                >
+                  <Ionicons name="person-add-outline" size={20} color="#fff" />
+                  <Text style={styles.sheetAddText}>Add New Tenant</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.sheetCancelBtn} onPress={() => setVacantSheet(null)}>
+                  <Text style={styles.sheetCancelText}>Close</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -207,12 +259,29 @@ const styles = StyleSheet.create({
   right: { alignItems: 'flex-end', gap: 8, marginLeft: 8 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   badgeText: { fontSize: 11, fontWeight: '700' },
-  addTenantBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: COLORS.primaryLight, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 7,
-  },
-  addTenantText: { fontSize: 11, color: COLORS.primary, fontWeight: '600' },
   empty: { alignItems: 'center', paddingTop: 80, gap: 8 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
   emptyText: { fontSize: 14, color: COLORS.muted },
+
+  // Vacant unit sheet
+  sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: COLORS.white, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24, paddingBottom: 36,
+    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, elevation: 16,
+  },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.border, alignSelf: 'center', marginBottom: 20 },
+  sheetTitle: { fontSize: 22, fontWeight: '800', color: COLORS.text },
+  sheetSub: { fontSize: 14, color: COLORS.muted, marginTop: 4, marginBottom: 16 },
+  sheetDivider: { height: 1, backgroundColor: COLORS.border, marginVertical: 12 },
+  sheetRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
+  sheetLabel: { fontSize: 14, color: COLORS.muted, fontWeight: '500' },
+  sheetValue: { fontSize: 14, fontWeight: '700', color: COLORS.text },
+  sheetAddBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    backgroundColor: COLORS.primary, borderRadius: 12, paddingVertical: 15, marginTop: 8,
+  },
+  sheetAddText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  sheetCancelBtn: { alignItems: 'center', paddingVertical: 14 },
+  sheetCancelText: { color: COLORS.muted, fontSize: 15, fontWeight: '600' },
 });
