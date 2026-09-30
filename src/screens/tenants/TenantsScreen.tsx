@@ -20,10 +20,12 @@ export default function TenantsScreen({ navigation }: Props) {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [filtered, setFiltered] = useState<Tenant[]>([]);
   const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!user) return;
+    if (!silent) setLoading(true);
     const { data } = await supabase
       .from('tenants')
       .select(`*, units(unit_number, rent_per_bed, buildings(name))`)
@@ -38,11 +40,14 @@ export default function TenantsScreen({ navigation }: Props) {
     }));
     setTenants(enriched);
     setFiltered(enriched);
+    setLoading(false);
   }, [user]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => {
+    if (tenants.length > 0) { load(true); } else { load(); }
+  }, [load, tenants.length]));
 
-  const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
+  const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 
   const handleSearch = (q: string) => {
     setSearch(q);
@@ -86,13 +91,13 @@ export default function TenantsScreen({ navigation }: Props) {
             </TouchableOpacity>
           </View>
         }
-        ListEmptyComponent={
+        ListEmptyComponent={loading ? null : (
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>👤</Text>
             <Text style={styles.emptyTitle}>No tenants found</Text>
             <Text style={styles.emptyText}>{search ? 'Try a different search.' : 'Add your first tenant.'}</Text>
           </View>
-        }
+        )}
         renderItem={({ item }) => (
           <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('TenantProfile', { tenantId: item.id })}>
             <View style={styles.avatar}>

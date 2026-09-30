@@ -48,15 +48,15 @@ const ALL_ID = '__all__';
 export default function DashboardScreen({ navigation }: Props) {
   const { user, signOut } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>(ALL_ID);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const insets = useSafeAreaInsets();
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!user) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     const [bldRes, unitRes, payRes] = await Promise.all([
       supabase
         .from('buildings')
@@ -90,8 +90,15 @@ export default function DashboardScreen({ navigation }: Props) {
     setLoading(false);
   }, [user]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-  const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
+  useFocusEffect(useCallback(() => {
+    // If we already have data, refresh silently in the background (no skeleton flash)
+    if (data) {
+      load(true);
+    } else {
+      load();
+    }
+  }, [load, data]));
+  const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 
   // ── derived stats, all filtered by selectedBuildingId ────────────────────
   const isFiltered = selectedBuildingId !== ALL_ID;

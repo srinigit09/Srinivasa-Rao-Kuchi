@@ -19,12 +19,12 @@ export default function VacantUnitsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
   const { buildingId, buildingName } = route.params ?? {};
   const [units, setUnits] = useState<VacantUnit[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
     if (!user) return;
+    if (!silent) setLoading(true);
     let query = supabase
       .from('v_vacant_units')
       .select('*')
@@ -36,8 +36,10 @@ export default function VacantUnitsScreen({ navigation, route }: Props) {
     setLoading(false);
   }, [user, buildingId]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-  const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
+  useFocusEffect(useCallback(() => {
+    if (units.length > 0) { load(true); } else { load(); }
+  }, [load, units.length]));
+  const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 
   const bannerSubtitle = buildingName
     ? `${buildingName}  ·  ${units.length} unit${units.length !== 1 ? 's' : ''} available`

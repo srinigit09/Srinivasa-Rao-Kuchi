@@ -36,6 +36,7 @@ export default function AddTenantStep1Screen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const [buildings, setBuildings] = useState<BuildingItem[]>([]);
   const [selected, setSelected] = useState<{ buildingId: string; unitId: string } | null>(null);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   // Cancel button in header — exits the whole Add Tenant flow back to Tenants tab
@@ -52,8 +53,9 @@ export default function AddTenantStep1Screen({ navigation }: Props) {
     });
   }, [navigation]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!user) return;
+    if (!silent) setLoading(true);
 
     // Fetch buildings + units
     const { data: buildingData } = await supabase
@@ -87,10 +89,13 @@ export default function AddTenantStep1Screen({ navigation }: Props) {
     }));
 
     setBuildings(enriched);
+    setLoading(false);
   }, [user]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-  const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
+  useFocusEffect(useCallback(() => {
+    if (buildings.length > 0) { load(true); } else { load(); }
+  }, [load, buildings.length]));
+  const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 
   /** Returns true if the unit can accept one more tenant */
   const canAccept = (u: UnitItem, buildingType: 'residential' | 'pg') => {
@@ -120,11 +125,11 @@ export default function AddTenantStep1Screen({ navigation }: Props) {
         keyExtractor={b => b.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={styles.list}
-        ListEmptyComponent={
+        ListEmptyComponent={loading ? null : (
           <View style={styles.empty}>
             <Text style={styles.emptyText}>No buildings found. Add a building first.</Text>
           </View>
-        }
+        )}
         renderItem={({ item }) => (
           <View style={styles.buildingGroup}>
             <Text style={styles.buildingName}>

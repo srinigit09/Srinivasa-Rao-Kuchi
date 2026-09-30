@@ -35,12 +35,12 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
   const { buildingId, buildingName } = route.params ?? {};
   const [units, setUnits] = useState<UnitRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
     if (!user) return;
+    if (!silent) setLoading(true);
     let query = supabase
       .from('units')
       .select(`
@@ -74,8 +74,10 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
     setLoading(false);
   }, [user, buildingId]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-  const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
+  useFocusEffect(useCallback(() => {
+    if (units.length > 0) { load(true); } else { load(); }
+  }, [load, units.length]));
+  const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 
   const totalUnits = units.length;
   const vacantCount = units.filter(u => u.is_vacant).length;
