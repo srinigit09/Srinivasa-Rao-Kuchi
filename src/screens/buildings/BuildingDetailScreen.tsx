@@ -135,7 +135,7 @@ export default function BuildingDetailScreen({ navigation, route }: Props) {
               onPress={() => navigation.navigate('AddEditUnit', { buildingId })}
             >
               <Ionicons name="add-circle" size={20} color={COLORS.primary} />
-              <Text style={styles.addText}>Add Unit</Text>
+              <Text style={styles.addText}>Add New Unit</Text>
             </TouchableOpacity>
           </View>
         }

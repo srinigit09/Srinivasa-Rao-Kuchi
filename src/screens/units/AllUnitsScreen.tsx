@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Modal,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Modal, TextInput,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -33,6 +33,8 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
   const { buildingId, buildingName } = route.params ?? {};
   const [units, setUnits] = useState<UnitRow[]>([]);
+  const [filtered, setFiltered] = useState<UnitRow[]>([]);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [vacantSheet, setVacantSheet] = useState<UnitRow | null>(null);
@@ -70,6 +72,7 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
       };
     });
     setUnits(rows);
+    setFiltered(rows);
     setLoading(false);
   }, [user, buildingId]);
 
@@ -77,6 +80,17 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
     if (units.length > 0) { load(true); } else { load(); }
   }, [load, units.length]));
   const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
+
+  const handleSearch = (q: string) => {
+    setSearch(q);
+    const lower = q.toLowerCase();
+    setFiltered(units.filter(u =>
+      u.unit_number.toLowerCase().includes(lower) ||
+      u.building_name.toLowerCase().includes(lower) ||
+      u.unit_type.toLowerCase().includes(lower) ||
+      (u.tenant_name ?? '').toLowerCase().includes(lower)
+    ));
+  };
 
   const totalUnits = units.length;
   const vacantCount = units.filter(u => u.is_vacant).length;
@@ -105,17 +119,34 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
       />
 
       <FlatList
-        data={units}
+        data={filtered}
         keyExtractor={u => u.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
-          <TouchableOpacity style={styles.addBtn} onPress={handleAddUnit}>
-            <Ionicons name="add-circle" size={22} color={COLORS.primary} />
-            <Text style={styles.addText}>
-              {buildingId ? 'Add New Unit' : 'Add New Unit (select building first)'}
-            </Text>
-          </TouchableOpacity>
+          <View>
+            <View style={styles.searchRow}>
+              <Ionicons name="search" size={16} color={COLORS.muted} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search unit, building, tenant..."
+                placeholderTextColor={COLORS.muted}
+                value={search}
+                onChangeText={handleSearch}
+              />
+              {search.length > 0 && (
+                <TouchableOpacity onPress={() => { setSearch(''); setFiltered(units); }}>
+                  <Ionicons name="close-circle" size={16} color={COLORS.muted} />
+                </TouchableOpacity>
+              )}
+            </View>
+            <TouchableOpacity style={styles.addBtn} onPress={handleAddUnit}>
+              <Ionicons name="add-circle" size={22} color={COLORS.primary} />
+              <Text style={styles.addText}>
+                {buildingId ? 'Add New Unit' : 'Add New Unit (select building first)'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         }
         ListEmptyComponent={loading ? null : (
           <View style={styles.empty}>
@@ -216,10 +247,7 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
                   style={styles.sheetAddBtn}
                   onPress={() => {
                     setVacantSheet(null);
-                    navigation.navigate('AddTenantStep1', {
-                      buildingId: vacantSheet.building_id,
-                      unitId: vacantSheet.id,
-                    });
+                    navigation.navigate('AddNewTenant');
                   }}
                 >
                   <Ionicons name="person-add-outline" size={20} color="#fff" />
@@ -241,6 +269,13 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   list: { padding: 16, gap: 10, paddingBottom: 32 },
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: COLORS.white, borderRadius: 10,
+    borderWidth: 1, borderColor: COLORS.border,
+    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 8,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: COLORS.text },
   addBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: COLORS.primaryLight, padding: 15, borderRadius: 12, marginBottom: 6,

@@ -85,7 +85,7 @@ export default function TenantsScreen({ navigation }: Props) {
                 onChangeText={handleSearch}
               />
             </View>
-            <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('AddTenantStep1')}>
+            <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('AddNewTenant')}>
               <Ionicons name="person-add" size={20} color={COLORS.primary} />
               <Text style={styles.addText}>Add New Tenant</Text>
             </TouchableOpacity>

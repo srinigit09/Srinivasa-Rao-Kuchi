@@ -79,10 +79,10 @@ export default function VacantUnitsScreen({ navigation, route }: Props) {
               </View>
               <TouchableOpacity
                 style={styles.addTenantBtn}
-                onPress={() => navigation.navigate('AddTenantStep1')}
+                onPress={() => navigation.navigate('AddNewTenant')}
               >
                 <Ionicons name="person-add-outline" size={16} color={COLORS.primary} />
-                <Text style={styles.addTenantText}>Add Tenant</Text>
+                <Text style={styles.addTenantText}>Add New Tenant</Text>
               </TouchableOpacity>
             </View>
           );
