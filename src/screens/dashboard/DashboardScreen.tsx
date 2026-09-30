@@ -43,14 +43,13 @@ interface DashboardData {
 }
 
 const HEADER_BLUE = '#1D4ED8';
-const ALL_ID = '__all__';
 
 export default function DashboardScreen({ navigation }: Props) {
   const { user, signOut } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedBuildingId, setSelectedBuildingId] = useState<string>(ALL_ID);
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const insets = useSafeAreaInsets();
 
@@ -87,41 +86,35 @@ export default function DashboardScreen({ navigation }: Props) {
       allUnits: (unitRes.data ?? []) as any,
       allPayments: (payRes.data ?? []) as any,
     });
+
+    // Auto-select first building if none selected yet
+    setSelectedBuildingId(prev =>
+      prev && allBuildings.find(b => b.id === prev) ? prev : (allBuildings[0]?.id ?? '')
+    );
+
     setLoading(false);
   }, [user]);
 
   useFocusEffect(useCallback(() => {
-    // If we already have data, refresh silently in the background (no skeleton flash)
-    if (data) {
-      load(true);
-    } else {
-      load();
-    }
+    if (data) { load(true); } else { load(); }
   }, [load, data]));
   const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 
-  // ── derived stats, all filtered by selectedBuildingId ────────────────────
-  const isFiltered = selectedBuildingId !== ALL_ID;
+  // ── derived stats — always filtered by selected building ─────────────────
   const selectedBuilding = data?.buildings.find(b => b.id === selectedBuildingId);
 
-  // Unit counts
-  const filteredUnits = isFiltered
-    ? (data?.allUnits ?? []).filter(u => u.building_id === selectedBuildingId)
-    : (data?.allUnits ?? []);
+  const filteredUnits = (data?.allUnits ?? []).filter(u => u.building_id === selectedBuildingId);
   const displayUnits    = filteredUnits.length;
   const displayVacant   = filteredUnits.filter(u => u.is_vacant).length;
   const displayOccupied = displayUnits - displayVacant;
 
-  // Payments filtered by building
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
-  const filteredPayments = isFiltered
-    ? (data?.allPayments ?? []).filter(p => {
-        const bid = (p.tenants as any)?.units?.buildings?.id;
-        return bid === selectedBuildingId;
-      })
-    : (data?.allPayments ?? []);
+  const filteredPayments = (data?.allPayments ?? []).filter(p => {
+    const bid = (p.tenants as any)?.units?.buildings?.id;
+    return bid === selectedBuildingId;
+  });
 
   const thisMonthPayments = filteredPayments.filter(p => p.payment_month === thisMonth);
   const collectedThisMonth = thisMonthPayments.reduce((s, p) => s + (p.amount_paid ?? 0) + (p.advance_paid ?? 0), 0);
@@ -138,18 +131,12 @@ export default function DashboardScreen({ navigation }: Props) {
       month:  p.payment_month,
     }));
 
-  const dropdownLabel = isFiltered
-    ? selectedBuilding?.name ?? 'Select Building'
-    : 'All Buildings';
+  const dropdownLabel = selectedBuilding?.name ?? 'Select Building';
 
-  // Navigation helpers — pass building filter through params
-  const buildingParam = isFiltered
-    ? { buildingId: selectedBuildingId, buildingName: selectedBuilding?.name }
-    : {};
-  const navToBuildings = () => navigation.navigate('Buildings' as any);
-  const navToUnits     = () => navigation.navigate('AllUnits', buildingParam);
-  const navToOccupied  = () => navigation.navigate('OccupiedTenants', buildingParam);
-  const navToVacant    = () => navigation.navigate('VacantUnits', buildingParam);
+  // Navigation helpers — always pass the selected building
+  const buildingParam = { buildingId: selectedBuildingId, buildingName: selectedBuilding?.name };
+  const navToUnits    = () => navigation.navigate('AllUnits', buildingParam);
+  const navToOccupied = () => navigation.navigate('OccupiedTenants', buildingParam);
 
   return (
     <View style={{ flex: 1, backgroundColor: HEADER_BLUE }}>
@@ -187,7 +174,7 @@ export default function DashboardScreen({ navigation }: Props) {
 
       {/* ── Quick Actions ── */}
       <View style={styles.quickActionsPanel}>
-        <QuickActionBtn label="Add Tenant"     icon="person-add-outline" onPress={() => navigation.navigate('AddTenantStep1')} />
+        <QuickActionBtn label="Add Tenant"     icon="person-add-outline" onPress={() => navigation.navigate('AddNewTenant')} />
         <QuickActionBtn label="Record Payment" icon="cash-outline"       onPress={() => navigation.navigate('OccupiedTenants', {})} />
       </View>
 
@@ -212,7 +199,7 @@ export default function DashboardScreen({ navigation }: Props) {
         <View style={styles.grid}>
           <StatCard label="Total Units" value={displayUnits}    icon="home-outline"   color="#7C3AED" onPress={navToUnits}    loading={loading} />
           <StatCard label="Occupied"    value={displayOccupied} icon="person-add"     color={COLORS.success} onPress={navToOccupied} loading={loading} />
-          <StatCard label="Vacant"      value={displayVacant}   icon="key-outline"    color="#D97706" onPress={navToVacant}  loading={loading} />
+          <StatCard label="Vacant"      value={displayVacant}   icon="key-outline"    color="#D97706" onPress={() => navigation.navigate('AddNewTenant')} loading={loading} />
         </View>
 
         {/* ── This Month's Payment Summary ── */}
@@ -279,15 +266,13 @@ export default function DashboardScreen({ navigation }: Props) {
               )}
             />
 
-            {/* Open building detail shortcut */}
-            {isFiltered && (
-              <TouchableOpacity
-                style={styles.viewBuildingBtn}
-                onPress={() => { setDropdownOpen(false); navigation.navigate('BuildingDetail', { buildingId: selectedBuildingId }); }}
-              >
-                <Text style={styles.viewBuildingText}>Open Building Detail →</Text>
-              </TouchableOpacity>
-            )}
+            {/* Open building detail shortcut — always shown since a building is always selected */}
+            <TouchableOpacity
+              style={styles.viewBuildingBtn}
+              onPress={() => { setDropdownOpen(false); navigation.navigate('BuildingDetail', { buildingId: selectedBuildingId }); }}
+            >
+              <Text style={styles.viewBuildingText}>Open Building Detail →</Text>
+            </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>

@@ -35,6 +35,7 @@ import ReportsScreen from '../screens/reports/ReportsScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import MoveOutScreen from '../screens/tenants/MoveOutScreen';
 import AdminClientsScreen from '../screens/admin/AdminClientsScreen';
+import AddNewTenantScreen from '../screens/tenants/AddNewTenantScreen';
 
 export type RootStackParamList = {
   Auth: undefined;
@@ -61,6 +62,7 @@ export type AppStackParamList = {
   AddEditBuilding: { buildingId?: string };
   BuildingDetail: { buildingId: string };
   AddEditUnit: { buildingId: string; unitId?: string };
+  AddNewTenant: undefined;
   AddTenantStep1: { buildingId?: string; unitId?: string } | undefined;
   AddTenantStep2: { buildingId: string; unitId: string; buildingType: 'residential' | 'pg' };
   AddTenantStep3: { buildingId: string; unitId: string; buildingType: 'residential' | 'pg'; tenantData: Record<string, unknown> };
@@ -136,6 +138,7 @@ const AppNavigator = () => (
     <AppStack.Screen name="AddEditBuilding" component={AddEditBuildingScreen} options={{ title: 'Building' }} />
     <AppStack.Screen name="BuildingDetail" component={BuildingDetailScreen} options={{ title: 'Building Details' }} />
     <AppStack.Screen name="AddEditUnit" component={AddEditUnitScreen} options={{ title: 'Unit' }} />
+    <AppStack.Screen name="AddNewTenant" component={AddNewTenantScreen} options={{ headerShown: false }} />
     <AppStack.Screen name="AddTenantStep1" component={AddTenantStep1Screen} options={{ title: 'Add Tenant (1/3)' }} />
     <AppStack.Screen name="AddTenantStep2" component={AddTenantStep2Screen} options={{ title: 'Add Tenant (2/3)' }} />
     <AppStack.Screen name="AddTenantStep3" component={AddTenantStep3Screen} options={{ title: 'Add Tenant (3/3)' }} />
