@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, TextInput,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, TextInput, Modal,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -22,11 +22,23 @@ interface OccupiedRow {
   unit_number: string;
   building_name: string;
   building_type: 'residential' | 'pg';
+  building_id: string;
+}
+
+interface BuildingSummary {
+  id: string;
+  name: string;
+  building_type: 'residential' | 'pg';
 }
 
 export default function OccupiedTenantsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
-  const { buildingId, buildingName } = route.params ?? {};
+  const { buildingId: initialBuildingId } = route.params ?? {};
+
+  const [buildings, setBuildings] = useState<BuildingSummary[]>([]);
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>(initialBuildingId ?? '');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
   const [tenants, setTenants] = useState<OccupiedRow[]>([]);
   const [filtered, setFiltered] = useState<OccupiedRow[]>([]);
   const [search, setSearch] = useState('');
@@ -36,6 +48,24 @@ export default function OccupiedTenantsScreen({ navigation, route }: Props) {
   const load = useCallback(async (silent = false) => {
     if (!user) return;
     if (!silent) setLoading(true);
+
+    // Load buildings for dropdown
+    const { data: bldData } = await supabase
+      .from('buildings')
+      .select('id, name, building_type')
+      .eq('owner_id', user.id)
+      .order('name');
+
+    const blds: BuildingSummary[] = (bldData ?? []).map((b: any) => ({
+      id: b.id, name: b.name, building_type: b.building_type,
+    }));
+    setBuildings(blds);
+
+    const effectiveBuildingId = selectedBuildingId || blds[0]?.id || '';
+    if (!selectedBuildingId && blds[0]?.id) {
+      setSelectedBuildingId(blds[0].id);
+    }
+
     let query = supabase
       .from('tenants')
       .select('id, full_name, phone, move_in_date, units(unit_number, building_id, buildings(name, building_type))')
@@ -56,15 +86,16 @@ export default function OccupiedTenantsScreen({ navigation, route }: Props) {
       building_id: t.units?.building_id ?? '',
     }));
 
-    if (buildingId) rows = rows.filter(r => r.building_id === buildingId);
+    if (effectiveBuildingId) rows = rows.filter((r: OccupiedRow) => r.building_id === effectiveBuildingId);
     setTenants(rows);
     setFiltered(rows);
+    setSearch('');
     setLoading(false);
-  }, [user, buildingId]);
+  }, [user, selectedBuildingId]);
 
   useFocusEffect(useCallback(() => {
-    if (tenants.length > 0) { load(true); } else { load(); }
-  }, [load, tenants.length]));
+    load();
+  }, [load]));
   const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 
   const handleSearch = (q: string) => {
@@ -78,10 +109,11 @@ export default function OccupiedTenantsScreen({ navigation, route }: Props) {
     ));
   };
 
+  const selectedBuilding = buildings.find(b => b.id === selectedBuildingId);
+  const dropdownLabel = selectedBuilding?.name ?? 'Select Building';
 
-
-  const bannerSubtitle = buildingName
-    ? `${buildingName}  ·  ${tenants.length} active tenant${tenants.length !== 1 ? 's' : ''}`
+  const bannerSubtitle = selectedBuilding
+    ? `${selectedBuilding.name}  ·  ${tenants.length} active tenant${tenants.length !== 1 ? 's' : ''}`
     : `${tenants.length} active tenant${tenants.length !== 1 ? 's' : ''}`;
 
   return (
@@ -91,6 +123,13 @@ export default function OccupiedTenantsScreen({ navigation, route }: Props) {
         subtitle={bannerSubtitle}
         onBack={() => navigation.goBack()}
       />
+
+      {/* Building Dropdown */}
+      <TouchableOpacity style={styles.dropdownBtn} onPress={() => setDropdownOpen(true)} activeOpacity={0.8}>
+        <Ionicons name="business-outline" size={16} color={COLORS.primary} />
+        <Text style={styles.dropdownLabel} numberOfLines={1}>{dropdownLabel}</Text>
+        <Ionicons name="chevron-down" size={16} color={COLORS.muted} />
+      </TouchableOpacity>
 
       <FlatList
         data={filtered}
@@ -102,7 +141,7 @@ export default function OccupiedTenantsScreen({ navigation, route }: Props) {
             <Ionicons name="search" size={16} color={COLORS.muted} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search tenant, building, unit..."
+              placeholder="Search tenant, unit..."
               placeholderTextColor={COLORS.muted}
               value={search}
               onChangeText={handleSearch}
@@ -141,19 +180,52 @@ export default function OccupiedTenantsScreen({ navigation, route }: Props) {
           </TouchableOpacity>
         )}
       />
+
+      {/* Building Picker Modal */}
+      <Modal visible={dropdownOpen} transparent animationType="fade" onRequestClose={() => setDropdownOpen(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDropdownOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet}>
+            <Text style={styles.dropdownTitle}>Select Building</Text>
+            {buildings.map(b => (
+              <TouchableOpacity
+                key={b.id}
+                style={[styles.dropdownItem, selectedBuildingId === b.id && styles.dropdownItemActive]}
+                onPress={() => { setSelectedBuildingId(b.id); setDropdownOpen(false); }}
+              >
+                <Ionicons
+                  name={b.building_type === 'pg' ? 'bed-outline' : 'business-outline'}
+                  size={18}
+                  color={selectedBuildingId === b.id ? COLORS.primary : COLORS.muted}
+                />
+                <Text style={[styles.dropdownItemText, selectedBuildingId === b.id && { color: COLORS.primary }]}>
+                  {b.name}
+                </Text>
+                {selectedBuildingId === b.id && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
+              </TouchableOpacity>
+            ))}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
+
+  dropdownBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    paddingHorizontal: 16, paddingVertical: 12,
+  },
+  dropdownLabel: { flex: 1, fontSize: 15, fontWeight: '700', color: COLORS.text },
+
   list: { padding: 16, gap: 10, paddingBottom: 32 },
   searchRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: COLORS.white, borderRadius: 10,
     borderWidth: 1, borderColor: COLORS.border,
     paddingHorizontal: 12, paddingVertical: 10, marginBottom: 8,
-    marginHorizontal: 16, marginTop: 12,
   },
   searchInput: { flex: 1, fontSize: 14, color: COLORS.text },
   card: {
@@ -172,4 +244,22 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', paddingTop: 80, gap: 8 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
   emptyText: { fontSize: 14, color: COLORS.muted },
+
+  // Building picker modal
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-start', paddingTop: 80, paddingHorizontal: 16,
+  },
+  dropdownSheet: {
+    backgroundColor: COLORS.white, borderRadius: 16, paddingVertical: 8,
+    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, elevation: 12,
+  },
+  dropdownTitle: {
+    fontSize: 13, fontWeight: '700', color: COLORS.muted,
+    paddingHorizontal: 18, paddingVertical: 10,
+    letterSpacing: 0.5, textTransform: 'uppercase',
+  },
+  dropdownItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14 },
+  dropdownItemActive: { backgroundColor: COLORS.primaryLight },
+  dropdownItemText: { flex: 1, fontSize: 15, fontWeight: '600', color: COLORS.text },
 });

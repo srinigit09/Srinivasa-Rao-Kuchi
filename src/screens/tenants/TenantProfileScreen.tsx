@@ -29,7 +29,7 @@ export default function TenantProfileScreen({ navigation, route }: Props) {
 
   const load = useCallback(async () => {
     const [{ data: t }, { data: p }] = await Promise.all([
-      supabase.from('tenants').select(`*, units(unit_number, rent_per_bed, buildings(name, id))`).eq('id', tenantId).single(),
+      supabase.from('tenants').select(`*, units(unit_number, rent_per_bed, buildings(name, id, building_type))`).eq('id', tenantId).single(),
       supabase.from('payments').select('*').eq('tenant_id', tenantId).order('payment_month', { ascending: false }),
     ]);
     if (t) {
@@ -38,6 +38,7 @@ export default function TenantProfileScreen({ navigation, route }: Props) {
         unit_number: (t as any).units?.unit_number,
         building_name: (t as any).units?.buildings?.name,
         building_id: (t as any).units?.buildings?.id,
+        building_type: (t as any).units?.buildings?.building_type ?? 'residential',
         rent_per_bed: (t as any).units?.rent_per_bed,
       });
     }
@@ -101,7 +102,10 @@ export default function TenantProfileScreen({ navigation, route }: Props) {
 
       {/* Rent & Deposit */}
       <Card title="Rent & Deposit">
-        <Row label="Monthly Rent" value={formatCurrency(effectiveRent)} />
+        <Row
+          label={tenant.building_type === 'pg' ? 'Rent / Bed' : 'Monthly Rent'}
+          value={formatCurrency(effectiveRent)}
+        />
         <Row label="Security Deposit" value={formatCurrency(tenant.deposit_amount)} />
         {tenant.deposit_returned > 0 && <Row label="Deposit Returned" value={formatCurrency(tenant.deposit_returned)} />}
       </Card>

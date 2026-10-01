@@ -184,17 +184,6 @@ export default function DashboardScreen({ navigation }: Props) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
         contentContainerStyle={{ paddingBottom: 32 }}
       >
-        {/* Overdue alert */}
-        {overduePayments.length > 0 && (
-          <TouchableOpacity style={styles.alertBanner} onPress={() => navigation.navigate('Outstanding', buildingParam)}>
-            <Ionicons name="alert-circle" size={16} color={COLORS.danger} />
-            <Text style={styles.alertText}>
-              {overduePayments.length} overdue payment{overduePayments.length > 1 ? 's' : ''} — tap to view
-            </Text>
-            <Ionicons name="chevron-forward" size={14} color={COLORS.danger} />
-          </TouchableOpacity>
-        )}
-
         {/* ── Stat cards: 3 cards (Buildings removed) ── */}
         <View style={styles.grid}>
           <StatCard label="Total Units" value={displayUnits}    icon="home-outline"   color="#7C3AED" onPress={navToUnits}    loading={loading} />
@@ -344,13 +333,6 @@ const styles = StyleSheet.create({
   qaLabel: { fontSize: 11, color: 'rgba(255,255,255,0.93)', textAlign: 'center', fontWeight: '600' },
 
   body: { flex: 1, backgroundColor: COLORS.bg },
-
-  alertBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: COLORS.dangerLight, marginHorizontal: 14, marginTop: 12,
-    padding: 10, borderRadius: 10,
-  },
-  alertText: { flex: 1, color: COLORS.danger, fontSize: 12, fontWeight: '500' },
 
   grid: { flexDirection: 'row', paddingHorizontal: 10, marginTop: 12, gap: 8 },
   statCard: {

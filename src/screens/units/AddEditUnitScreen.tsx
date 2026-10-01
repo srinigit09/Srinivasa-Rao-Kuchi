@@ -85,13 +85,15 @@ export default function AddEditUnitScreen({ navigation, route }: Props) {
           onChange={setUnitType}
           error={errors.unitType}
         />
-        <FormField
-          label={buildingType === 'pg' ? 'Number of Beds in Room' : 'Number of Beds/Rooms'}
-          placeholder="1"
-          keyboardType="number-pad"
-          value={totalBeds}
-          onChangeText={setTotalBeds}
-        />
+        {buildingType === 'pg' && (
+          <FormField
+            label="Number of Beds in this Room"
+            placeholder="e.g. 2"
+            keyboardType="number-pad"
+            value={totalBeds}
+            onChangeText={setTotalBeds}
+          />
+        )}
         <FormField
           label={buildingType === 'pg' ? 'Rent per Bed (₹)' : 'Monthly Rent (₹)'}
           required

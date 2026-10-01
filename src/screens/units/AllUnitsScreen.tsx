@@ -14,6 +14,8 @@ import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'AllUnits'>;
 
+interface ActiveTenant { id: string; full_name: string; }
+
 interface UnitRow {
   id: string;
   unit_number: string;
@@ -25,13 +27,27 @@ interface UnitRow {
   building_id: string;
   building_name: string;
   active_count: number;
-  tenant_id: string | null;
-  tenant_name: string | null;
+  tenant_id: string | null;       // first tenant (for residential quick-nav)
+  tenant_name: string | null;     // first tenant name
+  active_tenants: ActiveTenant[]; // all active tenants (important for PG)
+}
+
+interface BuildingSummary {
+  id: string;
+  name: string;
+  building_type: 'residential' | 'pg';
 }
 
 export default function AllUnitsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
-  const { buildingId, buildingName } = route.params ?? {};
+
+  // initialBuildingId comes in when navigating from Dashboard
+  const { buildingId: initialBuildingId } = route.params ?? {};
+
+  const [buildings, setBuildings] = useState<BuildingSummary[]>([]);
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>(initialBuildingId ?? '');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
   const [units, setUnits] = useState<UnitRow[]>([]);
   const [filtered, setFiltered] = useState<UnitRow[]>([]);
   const [search, setSearch] = useState('');
@@ -42,7 +58,35 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
   const load = useCallback(async (silent = false) => {
     if (!user) return;
     if (!silent) setLoading(true);
-    let query = supabase
+
+    // Load buildings list for dropdown
+    const { data: bldData } = await supabase
+      .from('buildings')
+      .select('id, name, building_type')
+      .eq('owner_id', user.id)
+      .order('name');
+
+    const blds: BuildingSummary[] = (bldData ?? []).map((b: any) => ({
+      id: b.id,
+      name: b.name,
+      building_type: b.building_type,
+    }));
+    setBuildings(blds);
+
+    // Auto-select first building if none selected
+    const effectiveBuildingId = selectedBuildingId || blds[0]?.id || '';
+    if (!selectedBuildingId && blds[0]?.id) {
+      setSelectedBuildingId(blds[0].id);
+    }
+
+    if (!effectiveBuildingId) {
+      setUnits([]);
+      setFiltered([]);
+      setLoading(false);
+      return;
+    }
+
+    const { data } = await supabase
       .from('units')
       .select(`
         id, unit_number, unit_type, is_vacant, rent_per_bed, total_beds,
@@ -50,9 +94,8 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
         tenants(id, full_name, is_active)
       `)
       .eq('owner_id', user.id)
+      .eq('building_id', effectiveBuildingId)
       .order('unit_number');
-    if (buildingId) query = query.eq('building_id', buildingId);
-    const { data } = await query;
 
     const rows: UnitRow[] = (data ?? []).map((u: any) => {
       const activeTenants = (u.tenants ?? []).filter((t: any) => t.is_active);
@@ -69,16 +112,19 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
         active_count: activeTenants.length,
         tenant_id: activeTenants[0]?.id ?? null,
         tenant_name: activeTenants[0]?.full_name ?? null,
+        active_tenants: activeTenants.map((t: any) => ({ id: t.id, full_name: t.full_name })),
       };
     });
     setUnits(rows);
     setFiltered(rows);
+    setSearch('');
     setLoading(false);
-  }, [user, buildingId]);
+  }, [user, selectedBuildingId]);
 
   useFocusEffect(useCallback(() => {
-    if (units.length > 0) { load(true); } else { load(); }
-  }, [load, units.length]));
+    load();
+  }, [load]));
+
   const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 
   const handleSearch = (q: string) => {
@@ -86,7 +132,6 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
     const lower = q.toLowerCase();
     setFiltered(units.filter(u =>
       u.unit_number.toLowerCase().includes(lower) ||
-      u.building_name.toLowerCase().includes(lower) ||
       u.unit_type.toLowerCase().includes(lower) ||
       (u.tenant_name ?? '').toLowerCase().includes(lower)
     ));
@@ -96,19 +141,12 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
   const vacantCount = units.filter(u => u.is_vacant).length;
   const occupiedCount = totalUnits - vacantCount;
 
-  const bannerSubtitle = buildingName
-    ? `${buildingName}  ·  ${totalUnits} units · ${occupiedCount} occupied · ${vacantCount} vacant`
-    : `${totalUnits} units · ${occupiedCount} occupied · ${vacantCount} vacant`;
+  const selectedBuilding = buildings.find(b => b.id === selectedBuildingId);
+  const dropdownLabel = selectedBuilding?.name ?? 'Select Building';
 
-  const handleAddUnit = () => {
-    if (buildingId) {
-      // We have a building context — go straight to add unit form
-      navigation.navigate('AddEditUnit', { buildingId });
-    } else {
-      // No building context — go to Buildings screen to pick one first
-      navigation.navigate('Buildings' as any);
-    }
-  };
+  const bannerSubtitle = selectedBuilding
+    ? `${selectedBuilding.name}  ·  ${totalUnits} unit${totalUnits !== 1 ? 's' : ''} · ${occupiedCount} occupied · ${vacantCount} vacant`
+    : 'Select a building';
 
   return (
     <View style={styles.container}>
@@ -117,6 +155,13 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
         subtitle={bannerSubtitle}
         onBack={() => navigation.goBack()}
       />
+
+      {/* Building Dropdown */}
+      <TouchableOpacity style={styles.dropdownBtn} onPress={() => setDropdownOpen(true)} activeOpacity={0.8}>
+        <Ionicons name="business-outline" size={16} color={COLORS.primary} />
+        <Text style={styles.dropdownLabel} numberOfLines={1}>{dropdownLabel}</Text>
+        <Ionicons name="chevron-down" size={16} color={COLORS.muted} />
+      </TouchableOpacity>
 
       <FlatList
         data={filtered}
@@ -129,7 +174,7 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
               <Ionicons name="search" size={16} color={COLORS.muted} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search unit, building, tenant..."
+                placeholder="Search unit, tenant..."
                 placeholderTextColor={COLORS.muted}
                 value={search}
                 onChangeText={handleSearch}
@@ -140,10 +185,19 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
                 </TouchableOpacity>
               )}
             </View>
-            <TouchableOpacity style={styles.addBtn} onPress={handleAddUnit}>
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={() => {
+                if (selectedBuildingId) {
+                  navigation.navigate('AddEditUnit', { buildingId: selectedBuildingId });
+                } else {
+                  navigation.navigate('Buildings' as any);
+                }
+              }}
+            >
               <Ionicons name="add-circle" size={22} color={COLORS.primary} />
               <Text style={styles.addText}>
-                {buildingId ? 'Add New Unit' : 'Add New Unit (select building first)'}
+                {selectedBuildingId ? 'Add New Unit' : 'Select a building first'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -151,36 +205,44 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
         ListEmptyComponent={loading ? null : (
           <View style={styles.empty}>
             <Ionicons name="home-outline" size={48} color={COLORS.border} />
-            <Text style={styles.emptyTitle}>No units yet</Text>
-            <Text style={styles.emptyText}>Add buildings and units first.</Text>
+            <Text style={styles.emptyTitle}>{selectedBuildingId ? 'No units yet' : 'Select a building'}</Text>
+            <Text style={styles.emptyText}>{selectedBuildingId ? 'Add units to this building.' : 'Use the dropdown above.'}</Text>
           </View>
         )}
         renderItem={({ item }) => {
           const isPG = item.building_type === 'pg';
           const isVacant = item.is_vacant;
           const rentLabel = isPG
-            ? `${formatCurrency(item.rent_per_bed)} / bed · ${item.total_beds} beds`
+            ? `${formatCurrency(item.rent_per_bed)} / bed · ${item.total_beds} bed${item.total_beds !== 1 ? 's' : ''}`
             : `${formatCurrency(item.rent_per_bed)} / month`;
           const bedsLabel = isPG ? `${item.active_count}/${item.total_beds} beds occupied` : null;
+
+          // PG: always show sheet (need bed detail + add more tenant)
+          // Residential fully occupied: navigate directly to tenant profile
+          const handlePress = () => {
+            if (isPG || isVacant) {
+              setVacantSheet(item);
+            } else if (item.tenant_id) {
+              navigation.navigate('TenantProfile', { tenantId: item.tenant_id });
+            } else {
+              setVacantSheet(item);
+            }
+          };
 
           return (
             <TouchableOpacity
               style={styles.card}
-              onPress={() => {
-                if (!isVacant && item.tenant_id) {
-                  navigation.navigate('TenantProfile', { tenantId: item.tenant_id });
-                } else {
-                  // Show vacant unit detail sheet
-                  setVacantSheet(item);
-                }
-              }}
+              onPress={handlePress}
             >
               <View style={{ flex: 1 }}>
                 <Text style={styles.unitNum}>{item.unit_number}</Text>
-                <Text style={styles.unitType}>{item.unit_type} · {item.building_name}</Text>
+                <Text style={styles.unitType}>{item.unit_type}</Text>
                 <Text style={styles.rent}>{rentLabel}</Text>
                 {bedsLabel && <Text style={styles.beds}>{bedsLabel}</Text>}
-                {!isVacant && item.tenant_name && (
+                {isPG && item.active_tenants.map(t => (
+                  <Text key={t.id} style={styles.tenantName}>👤 {t.full_name}</Text>
+                ))}
+                {!isPG && !isVacant && item.tenant_name && (
                   <Text style={styles.tenantName}>👤 {item.tenant_name}</Text>
                 )}
               </View>
@@ -195,7 +257,7 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
                       ? (isPG && item.total_beds > item.active_count
                           ? `${item.total_beds - item.active_count} bed${item.total_beds - item.active_count > 1 ? 's' : ''} free`
                           : 'Vacant')
-                      : 'Occupied'}
+                      : (isPG ? `${item.active_count}/${item.total_beds} beds` : 'Occupied')}
                   </Text>
                 </View>
               </View>
@@ -221,38 +283,73 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
 
                 <View style={styles.sheetDivider} />
 
-                <View style={styles.sheetRow}>
-                  <Text style={styles.sheetLabel}>Status</Text>
-                  <View style={[styles.badge, { backgroundColor: COLORS.successLight }]}>
-                    <Text style={[styles.badgeText, { color: COLORS.success }]}>Vacant</Text>
-                  </View>
-                </View>
-                <View style={styles.sheetRow}>
-                  <Text style={styles.sheetLabel}>Rent</Text>
-                  <Text style={styles.sheetValue}>
-                    {formatCurrency(vacantSheet.rent_per_bed)}
-                    {vacantSheet.building_type === 'pg' ? ' / bed' : ' / month'}
-                  </Text>
-                </View>
-                {vacantSheet.building_type === 'pg' && (
-                  <View style={styles.sheetRow}>
-                    <Text style={styles.sheetLabel}>Beds</Text>
-                    <Text style={styles.sheetValue}>{vacantSheet.total_beds} total · {vacantSheet.total_beds - vacantSheet.active_count} free</Text>
-                  </View>
+                {/* Beds / Status row */}
+                {vacantSheet.building_type === 'pg' ? (
+                  <>
+                    <View style={styles.sheetRow}>
+                      <Text style={styles.sheetLabel}>Beds</Text>
+                      <Text style={styles.sheetValue}>
+                        {vacantSheet.total_beds} total · {vacantSheet.active_count} occupied · {vacantSheet.total_beds - vacantSheet.active_count} free
+                      </Text>
+                    </View>
+                    <View style={styles.sheetRow}>
+                      <Text style={styles.sheetLabel}>Rent / Bed</Text>
+                      <Text style={styles.sheetValue}>{formatCurrency(vacantSheet.rent_per_bed)}</Text>
+                    </View>
+                    {/* Tenant list for PG */}
+                    {vacantSheet.active_tenants.length > 0 && (
+                      <View style={{ marginTop: 4 }}>
+                        <Text style={[styles.sheetLabel, { marginBottom: 6 }]}>Current Tenants</Text>
+                        {vacantSheet.active_tenants.map(t => (
+                          <TouchableOpacity
+                            key={t.id}
+                            style={styles.sheetTenantRow}
+                            onPress={() => { setVacantSheet(null); navigation.navigate('TenantProfile', { tenantId: t.id }); }}
+                          >
+                            <Ionicons name="person-circle-outline" size={18} color={COLORS.primary} />
+                            <Text style={styles.sheetTenantName}>{t.full_name}</Text>
+                            <Ionicons name="chevron-forward" size={14} color={COLORS.muted} />
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.sheetRow}>
+                      <Text style={styles.sheetLabel}>Status</Text>
+                      <View style={[styles.badge, { backgroundColor: COLORS.successLight }]}>
+                        <Text style={[styles.badgeText, { color: COLORS.success }]}>Vacant</Text>
+                      </View>
+                    </View>
+                    <View style={styles.sheetRow}>
+                      <Text style={styles.sheetLabel}>Monthly Rent</Text>
+                      <Text style={styles.sheetValue}>{formatCurrency(vacantSheet.rent_per_bed)}</Text>
+                    </View>
+                  </>
                 )}
 
                 <View style={styles.sheetDivider} />
 
-                <TouchableOpacity
-                  style={styles.sheetAddBtn}
-                  onPress={() => {
-                    setVacantSheet(null);
-                    navigation.navigate('AddNewTenant');
-                  }}
-                >
-                  <Ionicons name="person-add-outline" size={20} color="#fff" />
-                  <Text style={styles.sheetAddText}>Add New Tenant</Text>
-                </TouchableOpacity>
+                {/* Add tenant button — only when capacity available */}
+                {(vacantSheet.building_type !== 'pg' || vacantSheet.active_count < vacantSheet.total_beds) && (
+                  <TouchableOpacity
+                    style={styles.sheetAddBtn}
+                    onPress={() => {
+                      setVacantSheet(null);
+                      navigation.navigate('AddTenantStep2', {
+                        buildingId: vacantSheet.building_id,
+                        unitId: vacantSheet.id,
+                        buildingType: vacantSheet.building_type,
+                      });
+                    }}
+                  >
+                    <Ionicons name="person-add-outline" size={20} color="#fff" />
+                    <Text style={styles.sheetAddText}>
+                      {vacantSheet.building_type === 'pg' ? 'Add Bed Tenant' : 'Add Tenant'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
                 <TouchableOpacity style={styles.sheetCancelBtn} onPress={() => setVacantSheet(null)}>
                   <Text style={styles.sheetCancelText}>Close</Text>
@@ -262,12 +359,46 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* ── Building Picker Modal ── */}
+      <Modal visible={dropdownOpen} transparent animationType="fade" onRequestClose={() => setDropdownOpen(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDropdownOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet}>
+            <Text style={styles.dropdownTitle}>Select Building</Text>
+            {buildings.map(b => (
+              <TouchableOpacity
+                key={b.id}
+                style={[styles.dropdownItem, selectedBuildingId === b.id && styles.dropdownItemActive]}
+                onPress={() => { setSelectedBuildingId(b.id); setDropdownOpen(false); }}
+              >
+                <Ionicons
+                  name={b.building_type === 'pg' ? 'bed-outline' : 'business-outline'}
+                  size={18}
+                  color={selectedBuildingId === b.id ? COLORS.primary : COLORS.muted}
+                />
+                <Text style={[styles.dropdownItemText, selectedBuildingId === b.id && { color: COLORS.primary }]}>
+                  {b.name}
+                </Text>
+                {selectedBuildingId === b.id && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
+              </TouchableOpacity>
+            ))}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
+
+  dropdownBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    paddingHorizontal: 16, paddingVertical: 12,
+  },
+  dropdownLabel: { flex: 1, fontSize: 15, fontWeight: '700', color: COLORS.text },
+
   list: { padding: 16, gap: 10, paddingBottom: 32 },
   searchRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -319,4 +450,27 @@ const styles = StyleSheet.create({
   sheetAddText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   sheetCancelBtn: { alignItems: 'center', paddingVertical: 14 },
   sheetCancelText: { color: COLORS.muted, fontSize: 15, fontWeight: '600' },
+  sheetTenantRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingVertical: 9, borderTopWidth: 1, borderTopColor: COLORS.border,
+  },
+  sheetTenantName: { flex: 1, fontSize: 14, color: COLORS.text, fontWeight: '500' },
+
+  // Building picker modal
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-start', paddingTop: 80, paddingHorizontal: 16,
+  },
+  dropdownSheet: {
+    backgroundColor: COLORS.white, borderRadius: 16, paddingVertical: 8,
+    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, elevation: 12,
+  },
+  dropdownTitle: {
+    fontSize: 13, fontWeight: '700', color: COLORS.muted,
+    paddingHorizontal: 18, paddingVertical: 10,
+    letterSpacing: 0.5, textTransform: 'uppercase',
+  },
+  dropdownItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14 },
+  dropdownItemActive: { backgroundColor: COLORS.primaryLight },
+  dropdownItemText: { flex: 1, fontSize: 15, fontWeight: '600', color: COLORS.text },
 });
