@@ -94,7 +94,7 @@ export default function MaintenanceScreen({ navigation, route }: Props) {
           onPress={() => navigation.navigate('AddEditMaintenanceRequest' as any, { buildingId: filterBuildingId })}
         >
           <Ionicons name="add-circle" size={18} color={COLORS.primary} />
-          <Text style={styles.actionBtnText}>New Service Request</Text>
+          <Text style={styles.actionBtnText}>New Request</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -102,7 +102,15 @@ export default function MaintenanceScreen({ navigation, route }: Props) {
           onPress={() => navigation.navigate('VendorsDirectory' as any, {})}
         >
           <Ionicons name="people-outline" size={18} color={COLORS.secondary} />
-          <Text style={[styles.actionBtnText, { color: COLORS.secondary }]}>Vendors & Directory</Text>
+          <Text style={[styles.actionBtnText, { color: COLORS.secondary }]}>Technicians & Directory</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.noticesBtn}
+          onPress={() => navigation.navigate('SocietyNotices' as any, { buildingId: filterBuildingId, buildingName })}
+        >
+          <Ionicons name="megaphone-outline" size={18} color={COLORS.accent} />
+          <Text style={[styles.actionBtnText, { color: COLORS.accent }]}>Notices</Text>
         </TouchableOpacity>
       </View>
 
@@ -217,8 +225,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   toolbar: {
     flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 16,
+    gap: 6,
+    paddingHorizontal: 14,
     paddingTop: 12,
   },
   actionBtn: {
@@ -227,25 +235,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.white,
-    padding: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: COLORS.primary,
-    gap: 6,
+    gap: 4,
   },
   vendorBtn: {
-    flex: 1,
+    flex: 1.2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.white,
-    padding: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: COLORS.secondary,
-    gap: 6,
+    gap: 4,
   },
-  actionBtnText: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
+  noticesBtn: {
+    flex: 0.8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.accent,
+    gap: 4,
+  },
+  actionBtnText: { fontSize: 11, fontWeight: '700', color: COLORS.primary },
   filterWrap: { marginTop: 10 },
   filterList: { paddingHorizontal: 16, gap: 8 },
   filterChip: {

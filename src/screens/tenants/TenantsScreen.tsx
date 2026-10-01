@@ -7,8 +7,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { COLORS } from '../../constants';
-import { Tenant } from '../../types';
+import { COLORS, PROPERTY_TYPES } from '../../constants';
+import { Tenant, BuildingType } from '../../types';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import { formatDate } from '../../utils';
 import BlueBannerHeader from '../../components/common/BlueBannerHeader';
@@ -18,14 +18,15 @@ type Props = { navigation: NativeStackNavigationProp<AppStackParamList> };
 interface BuildingSummary {
   id: string;
   name: string;
-  building_type: 'residential' | 'pg';
+  building_type: BuildingType;
 }
 
 export default function TenantsScreen({ navigation }: Props) {
   const { user } = useAuth();
   const [buildings, setBuildings] = useState<BuildingSummary[]>([]);
-  const [selectedBuildingId, setSelectedBuildingId] = useState<string>('');
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>('ALL');
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [filterType, setFilterType] = useState<'ALL' | 'tenant' | 'owner_occupant'>('ALL');
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [filtered, setFiltered] = useState<Tenant[]>([]);
@@ -37,7 +38,7 @@ export default function TenantsScreen({ navigation }: Props) {
     if (!user) return;
     if (!silent) setLoading(true);
 
-    // Load buildings for dropdown
+    // Load buildings for filter dropdown
     const { data: bldData } = await supabase
       .from('buildings')
       .select('id, name, building_type')
@@ -49,33 +50,47 @@ export default function TenantsScreen({ navigation }: Props) {
     }));
     setBuildings(blds);
 
-    const effectiveBuildingId = selectedBuildingId || blds[0]?.id || '';
-    if (!selectedBuildingId && blds[0]?.id) {
-      setSelectedBuildingId(blds[0].id);
-    }
-
     const { data } = await supabase
       .from('tenants')
-      .select(`*, units(unit_number, rent_per_bed, building_id, buildings(name))`)
+      .select(`*, units(unit_number, rent_per_bed, building_id, buildings(name, building_type))`)
       .eq('owner_id', user.id)
       .eq('is_active', true)
       .order('full_name');
 
     let enriched = (data ?? []).map((t: any) => ({
       ...t,
-      unit_number: t.units?.unit_number,
-      building_name: t.units?.buildings?.name,
+      unit_number: t.units?.unit_number ?? '—',
+      building_name: t.units?.buildings?.name ?? '—',
       building_id: t.units?.building_id,
+      building_type: t.units?.buildings?.building_type,
       rent_per_bed: t.units?.rent_per_bed,
     }));
 
-    if (effectiveBuildingId) enriched = enriched.filter((t: any) => t.building_id === effectiveBuildingId);
+    if (selectedBuildingId && selectedBuildingId !== 'ALL') {
+      enriched = enriched.filter((t: any) => t.building_id === selectedBuildingId);
+    }
 
     setTenants(enriched);
-    setFiltered(enriched);
-    setSearch('');
+    applyFilters(enriched, search, filterType);
     setLoading(false);
   }, [user, selectedBuildingId]);
+
+  const applyFilters = (list: Tenant[], q: string, fType: 'ALL' | 'tenant' | 'owner_occupant') => {
+    let result = list;
+    if (fType !== 'ALL') {
+      result = result.filter(t => (t.resident_type ?? 'tenant') === fType);
+    }
+    if (q.trim()) {
+      const lower = q.toLowerCase();
+      result = result.filter(t =>
+        t.full_name.toLowerCase().includes(lower) ||
+        (t.phone ?? '').includes(q) ||
+        (t.unit_number ?? '').toLowerCase().includes(lower) ||
+        (t.building_name ?? '').toLowerCase().includes(lower)
+      );
+    }
+    setFiltered(result);
+  };
 
   useFocusEffect(useCallback(() => {
     load();
@@ -85,36 +100,62 @@ export default function TenantsScreen({ navigation }: Props) {
 
   const handleSearch = (q: string) => {
     setSearch(q);
-    const lower = q.toLowerCase();
-    setFiltered(tenants.filter(t =>
-      t.full_name.toLowerCase().includes(lower) ||
-      (t.phone ?? '').includes(q) ||
-      (t.unit_number ?? '').toLowerCase().includes(lower) ||
-      (t.building_name ?? '').toLowerCase().includes(lower),
-    ));
+    applyFilters(tenants, q, filterType);
+  };
+
+  const handleTypeFilter = (type: 'ALL' | 'tenant' | 'owner_occupant') => {
+    setFilterType(type);
+    applyFilters(tenants, search, type);
   };
 
   const selectedBuilding = buildings.find(b => b.id === selectedBuildingId);
-  const dropdownLabel = selectedBuilding?.name ?? 'Select Building';
+  const dropdownLabel = selectedBuildingId === 'ALL'
+    ? 'All Properties / Communities'
+    : (selectedBuilding?.name ?? 'Select Property');
 
-  const bannerSubtitle = selectedBuilding
-    ? `${selectedBuilding.name}  ·  ${tenants.length} active tenant${tenants.length !== 1 ? 's' : ''}`
-    : `${tenants.length} active tenant${tenants.length !== 1 ? 's' : ''}`;
+  const bannerSubtitle = `${filtered.length} active resident${filtered.length !== 1 ? 's' : ''}`;
 
   return (
     <View style={styles.container}>
       <BlueBannerHeader
-        title="All Tenants"
+        title="Residents & Occupants"
         subtitle={bannerSubtitle}
-        onBack={navigation.canGoBack() ? () => navigation.goBack() : undefined}
       />
 
-      {/* Building Dropdown */}
+      {/* Property Filter Bar */}
       <TouchableOpacity style={styles.dropdownBtn} onPress={() => setDropdownOpen(true)} activeOpacity={0.8}>
-        <Ionicons name="business-outline" size={16} color={COLORS.primary} />
+        <Ionicons name="business" size={16} color={COLORS.primary} />
         <Text style={styles.dropdownLabel} numberOfLines={1}>{dropdownLabel}</Text>
         <Ionicons name="chevron-down" size={16} color={COLORS.muted} />
       </TouchableOpacity>
+
+      {/* Resident Type Segmented Filter (All, Tenants, Owners) */}
+      <View style={styles.segmentRow}>
+        <TouchableOpacity
+          style={[styles.segmentBtn, filterType === 'ALL' && styles.segmentBtnActive]}
+          onPress={() => handleTypeFilter('ALL')}
+        >
+          <Text style={[styles.segmentText, filterType === 'ALL' && styles.segmentTextActive]}>
+            All ({tenants.length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.segmentBtn, filterType === 'tenant' && styles.segmentBtnActive]}
+          onPress={() => handleTypeFilter('tenant')}
+        >
+          <Text style={[styles.segmentText, filterType === 'tenant' && styles.segmentTextActive]}>
+            👤 Tenants
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.segmentBtn, filterType === 'owner_occupant' && styles.segmentBtnActive]}
+          onPress={() => handleTypeFilter('owner_occupant')}
+        >
+          <Text style={[styles.segmentText, filterType === 'owner_occupant' && styles.segmentTextActive]}>
+            👑 Owner Residents
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       <FlatList
         data={filtered}
@@ -127,50 +168,78 @@ export default function TenantsScreen({ navigation }: Props) {
               <Ionicons name="search" size={18} color={COLORS.muted} style={styles.searchIcon} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search tenant, unit..."
+                placeholder="Search resident name, unit, phone..."
                 placeholderTextColor={COLORS.muted}
                 value={search}
                 onChangeText={handleSearch}
               />
               {search.length > 0 && (
-                <TouchableOpacity onPress={() => { setSearch(''); setFiltered(tenants); }} style={{ paddingRight: 10 }}>
+                <TouchableOpacity onPress={() => handleSearch('')} style={{ paddingRight: 10 }}>
                   <Ionicons name="close-circle" size={16} color={COLORS.muted} />
                 </TouchableOpacity>
               )}
             </View>
             <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('AddNewTenant')}>
-              <Ionicons name="person-add" size={20} color={COLORS.primary} />
-              <Text style={styles.addText}>Add New Tenant</Text>
+              <Ionicons name="person-add" size={18} color={COLORS.primary} />
+              <Text style={styles.addText}>Add New Resident / Tenant</Text>
             </TouchableOpacity>
           </View>
         }
         ListEmptyComponent={loading ? null : (
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>👤</Text>
-            <Text style={styles.emptyTitle}>No tenants found</Text>
-            <Text style={styles.emptyText}>{search ? 'Try a different search.' : 'Add your first tenant.'}</Text>
+            <Text style={styles.emptyTitle}>No residents found</Text>
+            <Text style={styles.emptyText}>{search ? 'Try a different search query.' : 'Add your first tenant or resident.'}</Text>
           </View>
         )}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('TenantProfile', { tenantId: item.id })}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{item.full_name[0].toUpperCase()}</Text>
-            </View>
-            <View style={styles.cardBody}>
-              <Text style={styles.name}>{item.full_name}</Text>
-              <Text style={styles.meta}>{item.building_name} · {item.unit_number}</Text>
-              <Text style={styles.meta}>📞 {item.phone} · Since {formatDate(item.move_in_date)}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={COLORS.muted} />
-          </TouchableOpacity>
-        )}
+        renderItem={({ item }) => {
+          const isOwner = item.resident_type === 'owner_occupant';
+          return (
+            <TouchableOpacity
+              style={styles.card}
+              onPress={() => navigation.navigate('TenantProfile', { tenantId: item.id })}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.avatar, isOwner && styles.avatarOwner]}>
+                <Text style={[styles.avatarText, isOwner && styles.avatarTextOwner]}>
+                  {item.full_name ? item.full_name[0].toUpperCase() : 'U'}
+                </Text>
+              </View>
+              <View style={styles.cardBody}>
+                <View style={styles.nameRow}>
+                  <Text style={styles.name}>{item.full_name}</Text>
+                  <View style={[styles.typeBadge, isOwner ? styles.ownerBadge : styles.tenantBadge]}>
+                    <Text style={isOwner ? styles.ownerBadgeText : styles.tenantBadgeText}>
+                      {isOwner ? '👑 Owner' : 'Tenant'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.meta}>📍 {item.building_name} · Unit {item.unit_number}</Text>
+                <Text style={styles.meta}>📞 {item.phone} · Active since {formatDate(item.move_in_date)}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.muted} />
+            </TouchableOpacity>
+          );
+        }}
       />
 
-      {/* Building Picker Modal */}
+      {/* Property Filter Modal */}
       <Modal visible={dropdownOpen} transparent animationType="fade" onRequestClose={() => setDropdownOpen(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDropdownOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet}>
-            <Text style={styles.dropdownTitle}>Select Building</Text>
+            <Text style={styles.dropdownTitle}>Filter by Property / Society</Text>
+
+            <TouchableOpacity
+              style={[styles.dropdownItem, selectedBuildingId === 'ALL' && styles.dropdownItemActive]}
+              onPress={() => { setSelectedBuildingId('ALL'); setDropdownOpen(false); }}
+            >
+              <Ionicons name="globe-outline" size={18} color={selectedBuildingId === 'ALL' ? COLORS.primary : COLORS.muted} />
+              <Text style={[styles.dropdownItemText, selectedBuildingId === 'ALL' && { color: COLORS.primary }]}>
+                All Properties / Societies
+              </Text>
+              {selectedBuildingId === 'ALL' && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
+            </TouchableOpacity>
+
             {buildings.map(b => (
               <TouchableOpacity
                 key={b.id}
@@ -178,7 +247,7 @@ export default function TenantsScreen({ navigation }: Props) {
                 onPress={() => { setSelectedBuildingId(b.id); setDropdownOpen(false); }}
               >
                 <Ionicons
-                  name={b.building_type === 'pg' ? 'bed-outline' : 'business-outline'}
+                  name="business-outline"
                   size={18}
                   color={selectedBuildingId === b.id ? COLORS.primary : COLORS.muted}
                 />
@@ -197,14 +266,43 @@ export default function TenantsScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-
   dropdownBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border,
     paddingHorizontal: 16, paddingVertical: 12,
   },
-  dropdownLabel: { flex: 1, fontSize: 15, fontWeight: '700', color: COLORS.text },
-
+  dropdownLabel: { flex: 1, fontSize: 14, fontWeight: '700', color: COLORS.text },
+  segmentRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    gap: 8,
+  },
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  segmentBtnActive: {
+    backgroundColor: COLORS.primaryLight,
+    borderColor: COLORS.primary,
+  },
+  segmentText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.muted,
+  },
+  segmentTextActive: {
+    color: COLORS.primary,
+    fontWeight: '700',
+  },
   list: { padding: 16, gap: 10, paddingBottom: 32 },
   searchRow: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white,
@@ -213,43 +311,50 @@ const styles = StyleSheet.create({
   searchIcon: { paddingLeft: 12 },
   searchInput: { flex: 1, padding: 12, fontSize: 14, color: COLORS.text },
   addBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: COLORS.primaryLight, padding: 14, borderRadius: 10, marginBottom: 4,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: COLORS.white, padding: 14, borderRadius: 10, marginBottom: 6,
+    borderWidth: 1.5, borderColor: COLORS.primary, borderStyle: 'dashed',
   },
-  addText: { color: COLORS.primary, fontWeight: '700', fontSize: 15 },
+  addText: { color: COLORS.primary, fontWeight: '700', fontSize: 14 },
   card: {
     backgroundColor: COLORS.white, borderRadius: 12, padding: 14,
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+    borderWidth: 1, borderColor: COLORS.border,
   },
   avatar: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: COLORS.primaryLight, alignItems: 'center', justifyContent: 'center',
   },
+  avatarOwner: {
+    backgroundColor: '#FEF3C7',
+  },
   avatarText: { fontSize: 18, fontWeight: '700', color: COLORS.primary },
+  avatarTextOwner: { color: '#B45309' },
   cardBody: { flex: 1 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   name: { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  typeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  tenantBadge: { backgroundColor: COLORS.primaryLight },
+  tenantBadgeText: { fontSize: 10, fontWeight: '700', color: COLORS.primary },
+  ownerBadge: { backgroundColor: '#FEF3C7' },
+  ownerBadgeText: { fontSize: 10, fontWeight: '700', color: '#B45309' },
   meta: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
-  empty: { alignItems: 'center', paddingTop: 80, gap: 8 },
-  emptyIcon: { fontSize: 48 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
-  emptyText: { fontSize: 14, color: COLORS.muted },
-
-  // Building picker modal
+  empty: { alignItems: 'center', paddingTop: 60, gap: 8 },
+  emptyIcon: { fontSize: 44 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text },
+  emptyText: { fontSize: 13, color: COLORS.muted },
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-start', paddingTop: 80, paddingHorizontal: 16,
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center', paddingHorizontal: 20,
   },
   dropdownSheet: {
-    backgroundColor: COLORS.white, borderRadius: 16, paddingVertical: 8,
-    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, elevation: 12,
+    backgroundColor: COLORS.white, borderRadius: 16, padding: 16,
   },
   dropdownTitle: {
-    fontSize: 13, fontWeight: '700', color: COLORS.muted,
-    paddingHorizontal: 18, paddingVertical: 10,
-    letterSpacing: 0.5, textTransform: 'uppercase',
+    fontSize: 14, fontWeight: '700', color: COLORS.text,
+    marginBottom: 12,
   },
-  dropdownItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14 },
-  dropdownItemActive: { backgroundColor: COLORS.primaryLight },
-  dropdownItemText: { flex: 1, fontSize: 15, fontWeight: '600', color: COLORS.text },
+  dropdownItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 8, borderRadius: 8 },
+  dropdownItemActive: { backgroundColor: '#EFF6FF' },
+  dropdownItemText: { flex: 1, fontSize: 14, fontWeight: '600', color: COLORS.text },
 });

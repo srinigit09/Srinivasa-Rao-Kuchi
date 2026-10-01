@@ -9,8 +9,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { COLORS } from '../../constants';
-import { Payment } from '../../types';
+import { COLORS, PROPERTY_TYPES } from '../../constants';
+import { Payment, BuildingType } from '../../types';
 import { formatCurrency, formatMonth } from '../../utils';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import StatusBadge from '../../components/common/StatusBadge';
@@ -22,7 +22,7 @@ type FilterKey = 'thisMonth' | 'lastQuarter' | '6months' | '1year' | 'custom';
 interface BuildingSummary {
   id: string;
   name: string;
-  building_type: 'residential' | 'pg';
+  building_type: BuildingType;
   total_units: number;
   vacant_units: number;
 }
@@ -57,154 +57,224 @@ function getDateRange(filter: FilterKey, customFrom: string, customTo: string) {
     case 'lastQuarter': return { from: ymd(new Date(now.getFullYear(), now.getMonth() - 2, 1)), to: ymd(now) };
     case '6months':     return { from: ymd(new Date(now.getFullYear(), now.getMonth() - 5, 1)), to: ymd(now) };
     case '1year':       return { from: ymd(new Date(now.getFullYear(), now.getMonth() - 11, 1)), to: ymd(now) };
-    case 'custom':
-      return {
-        from: customFrom || ymd(new Date(now.getFullYear(), now.getMonth() - 2, 1)),
-        to:   customTo   || ymd(now),
-      };
+    case 'custom':      return { from: customFrom || ymd(now), to: customTo || ymd(now) };
   }
 }
 
 export default function ReportsScreen({ navigation }: Props) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const [selectedFilter, setSelectedFilter] = useState<FilterKey>('6months');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [activeFilter, setActiveFilter]     = useState<FilterKey>('thisMonth');
-  const [customFrom,   setCustomFrom]        = useState('');
-  const [customTo,     setCustomTo]          = useState('');
-  const [showModal,    setShowModal]         = useState(false);
-  const [tempFrom,     setTempFrom]          = useState('');
-  const [tempTo,       setTempTo]            = useState('');
+  // Buildings dropdown state
+  const [buildings, setBuildings] = useState<BuildingSummary[]>([]);
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>('ALL');
+  const [buildingDropdown, setBuildingDropdown] = useState(false);
 
-  // Building filter
-  const ALL_ID = '__all__';
-  const [buildings,          setBuildings]          = useState<BuildingSummary[]>([]);
-  const [selectedBuildingId, setSelectedBuildingId] = useState<string>(ALL_ID);
-  const [buildingDropdown,   setBuildingDropdown]   = useState(false);
+  // Data
+  const [monthlySummaries, setMonthlySummaries] = useState<MonthlySummary[]>([]);
+  const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
 
-  const [summaries,       setSummaries]       = useState<MonthlySummary[]>([]);
-  const [pendingPayments, setPendingPayments] = useState<Payment[]>([]);
-  const [refreshing,      setRefreshing]      = useState(false);
+  // Totals
+  const [totalCollected, setTotalCollected] = useState(0);
+  const [totalOutstanding, setTotalOutstanding] = useState(0);
+  const [totalDue, setTotalDue] = useState(0);
+  const [paidCount, setPaidCount] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
 
-  const load = useCallback(async () => {
+  const loadData = useCallback(async () => {
     if (!user) return;
-    const { from, to } = getDateRange(activeFilter, customFrom, customTo);
-    const [{ data: bld }, { data: s }, { data: p }] = await Promise.all([
-      supabase
-        .from('buildings')
-        .select('id, name, building_type, units(id, is_vacant)')
-        .eq('owner_id', user.id)
-        .order('name'),
-      supabase.from('v_monthly_summary').select('*')
-        .eq('owner_id', user.id).gte('month', from).lte('month', to)
-        .order('month', { ascending: false }),
-      supabase.from('payments')
-        .select('*, tenants(full_name, phone, units(unit_number, building_id, buildings(name, id)))')
-        .eq('owner_id', user.id).neq('status', 'Paid')
-        .gte('payment_month', from).lte('payment_month', to)
-        .order('payment_month', { ascending: false }),
-    ]);
+    const { from, to } = getDateRange(selectedFilter, customFrom, customTo);
 
-    setBuildings((bld ?? []).map((b: any) => ({
+    // Fetch buildings list
+    const { data: bldData } = await supabase
+      .from('buildings')
+      .select('id, name, building_type, units(id, is_vacant)')
+      .eq('owner_id', user.id)
+      .order('name');
+
+    const blds: BuildingSummary[] = (bldData ?? []).map((b: any) => ({
       id: b.id,
       name: b.name,
       building_type: b.building_type,
       total_units: b.units?.length ?? 0,
       vacant_units: b.units?.filter((u: any) => u.is_vacant).length ?? 0,
-    })));
+    }));
+    setBuildings(blds);
 
-    setSummaries((s ?? []) as MonthlySummary[]);
+    // Fetch payments
+    let query = supabase
+      .from('payments')
+      .select(`
+        id, amount_due, amount_paid, advance_paid, outstanding, status,
+        payment_month, payment_date, payment_mode, notes, receipt_number,
+        electricity, water, maintenance_charge, other_charges,
+        tenants (
+          full_name, phone,
+          units (
+            unit_number,
+            buildings ( id, name )
+          )
+        )
+      `)
+      .eq('owner_id', user.id)
+      .gte('payment_month', from)
+      .lte('payment_month', to)
+      .order('payment_month', { ascending: false });
 
-    let payments = (p ?? []).map((x: any) => ({
-      ...x,
-      tenant_name:   x.tenants?.full_name,
-      unit_number:   x.tenants?.units?.unit_number,
-      building_name: x.tenants?.units?.buildings?.name,
-      _building_id:  x.tenants?.units?.building_id,
-    })) as (Payment & { _building_id?: string })[];
+    const { data: paymentsData, error } = await query;
+    if (error) { console.error(error); return; }
 
-    if (selectedBuildingId !== ALL_ID) {
-      payments = payments.filter(pp => pp._building_id === selectedBuildingId);
-    }
+    const allPayments: Payment[] = (paymentsData ?? []).map((p: any) => ({
+      id: p.id,
+      owner_id: user.id,
+      tenant_id: p.tenant_id,
+      payment_month: p.payment_month,
+      amount_due: p.amount_due,
+      amount_paid: p.amount_paid,
+      advance_paid: p.advance_paid ?? 0,
+      payment_date: p.payment_date,
+      payment_mode: p.payment_mode,
+      electricity: p.electricity ?? 0,
+      water: p.water ?? 0,
+      maintenance_charge: p.maintenance_charge ?? 0,
+      other_charges: p.other_charges ?? 0,
+      other_label: p.other_label,
+      outstanding: p.outstanding,
+      status: p.status,
+      notes: p.notes,
+      receipt_number: p.receipt_number,
+      created_at: '',
+      tenant_name: p.tenants?.full_name ?? '—',
+      tenant_phone: p.tenants?.phone ?? '',
+      unit_number: p.tenants?.units?.unit_number ?? '—',
+      building_name: p.tenants?.units?.buildings?.name ?? '—',
+      _building_id: p.tenants?.units?.buildings?.id ?? '',
+    } as any));
 
-    setPendingPayments(payments as Payment[]);
-  }, [user, activeFilter, customFrom, customTo, selectedBuildingId]);
+    // Filter by selected building if not ALL
+    const filteredPayments = (selectedBuildingId && selectedBuildingId !== 'ALL')
+      ? allPayments.filter((p: any) => p._building_id === selectedBuildingId)
+      : allPayments;
 
-  // Reload whenever the filter or custom range changes
-  useEffect(() => { load(); }, [load]);
+    // Aggregate monthly
+    const monthMap = new Map<string, MonthlySummary>();
+    let col = 0, out = 0, due = 0, paid = 0, pend = 0;
 
-  const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
+    filteredPayments.forEach((p) => {
+      const m = p.payment_month.substring(0, 7) + '-01';
+      const existing = monthMap.get(m) ?? {
+        month: m,
+        total_due: 0,
+        total_collected: 0,
+        total_outstanding: 0,
+        paid_count: 0,
+        partial_count: 0,
+        pending_count: 0,
+      };
 
-  const isFiltered = selectedBuildingId !== ALL_ID;
-  const selectedBuilding = buildings.find(b => b.id === selectedBuildingId);
+      const collected = (p.amount_paid ?? 0) + (p.advance_paid ?? 0);
+      existing.total_due += p.amount_due ?? 0;
+      existing.total_collected += collected;
+      existing.total_outstanding += p.outstanding ?? 0;
+      if (p.status === 'Paid') existing.paid_count++;
+      else if (p.status === 'Partial') existing.partial_count++;
+      else existing.pending_count++;
 
-  // Filter monthly summaries by building if a specific building is selected.
-  // v_monthly_summary doesn't have building_id, so we apply pending-payment
-  // derived totals instead when filtered; for the breakdown table we keep
-  // unfiltered summaries but note the caveat. Building-level summary totals
-  // are derived from the already-filtered pendingPayments list below.
-  const totalReceived    = summaries.reduce((s, m) => s + m.total_collected, 0);
-  const totalOutstanding = summaries.reduce((s, m) => s + m.total_outstanding, 0);
+      monthMap.set(m, existing);
 
-  const dropdownLabel = isFiltered
-    ? selectedBuilding?.name ?? 'Select Building'
-    : `All Buildings (${buildings.length})`;
+      col += collected;
+      out += p.outstanding ?? 0;
+      due += p.amount_due ?? 0;
+      if (p.status === 'Paid') paid++;
+      else pend++;
+    });
 
-  const rangeLabel = activeFilter === 'custom' && customFrom
-    ? `${formatMonth(customFrom)} – ${formatMonth(customTo)}`
-    : FILTERS.find(f => f.key === activeFilter)?.label ?? '';
+    const sortedSummaries = Array.from(monthMap.values()).sort(
+      (a, b) => b.month.localeCompare(a.month)
+    );
 
-  const openCustomModal = () => {
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
-    setTempFrom(customFrom || ymd(new Date(now.getFullYear(), now.getMonth() - 2, 1)));
-    setTempTo(customTo || ymd(now));
-    setShowModal(true);
+    setMonthlySummaries(sortedSummaries);
+    setRecentPayments(filteredPayments.slice(0, 10));
+    setTotalCollected(col);
+    setTotalOutstanding(out);
+    setTotalDue(due);
+    setPaidCount(paid);
+    setPendingCount(pend);
+  }, [user, selectedFilter, customFrom, customTo, selectedBuildingId]);
+
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
   };
 
-  const applyCustom = () => {
-    if (!tempFrom || !tempTo) return;
-    setCustomFrom(tempFrom);
-    setCustomTo(tempTo);
-    setActiveFilter('custom');
-    setShowModal(false);
+  const handleFilterSelect = (key: FilterKey) => {
+    if (key === 'custom') {
+      setShowModal(true);
+    } else {
+      setSelectedFilter(key);
+    }
+  };
+
+  const collectionRate = totalDue > 0 ? Math.min(100, Math.round((totalCollected / totalDue) * 100)) : 0;
+  const selectedBuilding = buildings.find(b => b.id === selectedBuildingId);
+  const dropdownLabel = selectedBuildingId === 'ALL'
+    ? 'All Properties / Societies'
+    : (selectedBuilding?.name ?? 'Select Property');
+
+  const getPropBadge = (type?: BuildingType) => {
+    const p = PROPERTY_TYPES.find(x => x.id === type);
+    return p ? p.badge : '🏢 Property';
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: COLORS.bg }]}>
-      {/* Blue header banner */}
-      <View style={[styles.headerBanner, { paddingTop: insets.top + 10 }]}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Reports</Text>
+    <View style={{ flex: 1, backgroundColor: HEADER_BLUE }}>
+      {/* Blue Header */}
+      <View style={[styles.headerPanel, { paddingTop: insets.top + 8 }]}>
+        <View style={styles.appNameRow}>
+          <Text style={styles.appName}>Reports & Analytics</Text>
         </View>
 
-        {/* Building filter dropdown */}
-        <TouchableOpacity style={styles.bldDropdownBtn} onPress={() => setBuildingDropdown(true)} activeOpacity={0.8}>
-          <Ionicons name="business-outline" size={15} color="#fff" />
-          <Text style={styles.bldDropdownLabel} numberOfLines={1}>{dropdownLabel}</Text>
-          <Ionicons name="chevron-down" size={15} color="rgba(255,255,255,0.8)" />
+        {/* Property Filter Dropdown */}
+        <TouchableOpacity
+          style={styles.dropdownBtn}
+          onPress={() => setBuildingDropdown(true)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="business" size={16} color="#fff" />
+          <Text style={styles.dropdownLabel} numberOfLines={1}>{dropdownLabel}</Text>
+          <Ionicons name="chevron-down" size={16} color="rgba(255,255,255,0.8)" />
         </TouchableOpacity>
 
-        {/* Date filter chips inside the blue banner */}
+        {/* Time Filters */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterScroll}
+          style={styles.filterScroll}
+          contentContainerStyle={{ gap: 8, paddingBottom: 4 }}
         >
-          {FILTERS.map(f => (
+          {FILTERS.map((f) => (
             <TouchableOpacity
               key={f.key}
-              style={[styles.filterChip, activeFilter === f.key && styles.filterChipActive]}
-              onPress={() => {
-                if (f.key === 'custom') { openCustomModal(); }
-                else { setActiveFilter(f.key); }
-              }}
+              style={[
+                styles.filterTab,
+                selectedFilter === f.key && styles.filterTabActive,
+              ]}
+              onPress={() => handleFilterSelect(f.key)}
             >
-              <Text style={[styles.filterChipText, activeFilter === f.key && styles.filterChipTextActive]}>
+              <Text
+                style={[
+                  styles.filterTabText,
+                  selectedFilter === f.key && styles.filterTabTextActive,
+                ]}
+              >
                 {f.label}
               </Text>
             </TouchableOpacity>
@@ -212,93 +282,117 @@ export default function ReportsScreen({ navigation }: Props) {
         </ScrollView>
       </View>
 
+      {/* Main Content */}
       <ScrollView
+        style={styles.body}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
         contentContainerStyle={{ paddingBottom: 40 }}
       >
-        {/* Period + totals */}
-        <View style={styles.periodRow}>
-          <Ionicons name="calendar-outline" size={14} color={COLORS.muted} />
-          <Text style={styles.periodLabel}>Showing: {rangeLabel}</Text>
-        </View>
-
-        <View style={styles.totalsRow}>
-          <View style={styles.totalChip}>
-            <Text style={styles.totalChipLabel}>Total Received</Text>
-            <Text style={[styles.totalChipValue, { color: COLORS.success }]}>{formatCurrency(totalReceived)}</Text>
+        {/* KPI Grid */}
+        <View style={styles.grid}>
+          <View style={[styles.kpiCard, { borderColor: COLORS.success }]}>
+            <Text style={[styles.kpiLabel, { color: COLORS.success }]}>Collected</Text>
+            <Text style={styles.kpiValue}>{formatCurrency(totalCollected)}</Text>
+            <Text style={styles.kpiSub}>{paidCount} paid</Text>
           </View>
-          <View style={[styles.totalChip, { borderLeftWidth: 1, borderLeftColor: COLORS.border }]}>
-            <Text style={styles.totalChipLabel}>Total Outstanding</Text>
-            <Text style={[styles.totalChipValue, { color: '#D97706' }]}>{formatCurrency(totalOutstanding)}</Text>
+          <View style={[styles.kpiCard, { borderColor: '#D97706' }]}>
+            <Text style={[styles.kpiLabel, { color: '#D97706' }]}>Outstanding</Text>
+            <Text style={[styles.kpiValue, { color: '#D97706' }]}>{formatCurrency(totalOutstanding)}</Text>
+            <Text style={styles.kpiSub}>{pendingCount} pending</Text>
           </View>
         </View>
 
-        {/* Monthly breakdown */}
-        <Card title="Monthly Breakdown">
-          {summaries.length === 0 && (
-            <Text style={styles.emptyText}>No payment records for this period.</Text>
-          )}
-          {summaries.map((s, i) => (
-            <View key={i} style={[styles.summaryRow, i > 0 && styles.topBorder]}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.monthText}>{formatMonth(s.month)}</Text>
-                <Text style={styles.countText}>
-                  ✅ {s.paid_count} paid · ⚠️ {s.partial_count} partial · ❌ {s.pending_count} pending
-                </Text>
-              </View>
-              <View style={{ alignItems: 'flex-end', gap: 2 }}>
-                <Text style={styles.receivedText}>{formatCurrency(s.total_collected)}</Text>
-                {s.total_outstanding > 0 && (
-                  <Text style={styles.outstandingText}>−{formatCurrency(s.total_outstanding)}</Text>
-                )}
-              </View>
+        {/* Collection Efficiency Banner */}
+        <Card>
+          <View style={styles.efficiencyRow}>
+            <View>
+              <Text style={styles.efficiencyLabel}>Collection Rate</Text>
+              <Text style={styles.efficiencyValue}>{collectionRate}%</Text>
             </View>
-          ))}
+            <View style={{ flex: 1, marginLeft: 16 }}>
+              <View style={styles.progressBarBg}>
+                <View style={[styles.progressBarFill, { width: `${collectionRate}%` }]} />
+              </View>
+              <Text style={styles.progressHint}>
+                {formatCurrency(totalCollected)} of {formatCurrency(totalDue)} total dues
+              </Text>
+            </View>
+          </View>
         </Card>
 
-        {pendingPayments.length > 0 && (
-          <Card title={`Pending & Partial (${pendingPayments.length})`}>
-            {pendingPayments.map((p, i) => (
-              <TouchableOpacity
-                key={p.id}
-                style={[styles.pendingRow, i > 0 && styles.topBorder]}
-                onPress={() => navigation.navigate('TenantProfile', { tenantId: p.tenant_id })}
-              >
+        {/* Monthly Breakdown Table */}
+        <Card title="Monthly Breakdown">
+          {monthlySummaries.length === 0 ? (
+            <Text style={styles.emptyText}>No data for this time range.</Text>
+          ) : (
+            monthlySummaries.map((s, idx) => (
+              <View key={s.month} style={[styles.breakdownRow, idx > 0 && styles.topBorder]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.tenantName}>{p.tenant_name}</Text>
-                  <Text style={styles.tenantMeta}>{p.building_name} · {p.unit_number}</Text>
-                  <Text style={styles.periodText}>{formatMonth(p.payment_month)}</Text>
+                  <Text style={styles.monthName}>{formatMonth(s.month)}</Text>
+                  <Text style={styles.monthSub}>
+                    {s.paid_count} paid · {s.partial_count + s.pending_count} pending
+                  </Text>
                 </View>
-                <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={[styles.monthCollected, { color: COLORS.success }]}>
+                    +{formatCurrency(s.total_collected)}
+                  </Text>
+                  {s.total_outstanding > 0 && (
+                    <Text style={[styles.monthOutstanding, { color: '#D97706' }]}>
+                      {formatCurrency(s.total_outstanding)} due
+                    </Text>
+                  )}
+                </View>
+              </View>
+            ))
+          )}
+        </Card>
+
+        {/* Recent Transactions */}
+        <Card title="Recent Transactions">
+          {recentPayments.length === 0 ? (
+            <Text style={styles.emptyText}>No payments recorded yet.</Text>
+          ) : (
+            recentPayments.map((p, idx) => (
+              <View key={p.id} style={[styles.txRow, idx > 0 && styles.topBorder]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.txTenant}>{p.tenant_name}</Text>
+                  <Text style={styles.txMeta}>
+                    {p.building_name} · {p.unit_number} · {formatMonth(p.payment_month)}
+                  </Text>
+                  {p.payment_date && (
+                    <Text style={styles.txDate}>
+                      {new Date(p.payment_date).toLocaleDateString()} · {p.payment_mode ?? 'Cash'}
+                    </Text>
+                  )}
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                  <Text style={styles.txAmount}>{formatCurrency(p.amount_paid + (p.advance_paid ?? 0))}</Text>
                   <StatusBadge status={p.status} />
-                  {p.outstanding > 0 && <Text style={styles.outstandingText}>{formatCurrency(p.outstanding)}</Text>}
                 </View>
-              </TouchableOpacity>
-            ))}
-          </Card>
-        )}
+              </View>
+            ))
+          )}
+        </Card>
       </ScrollView>
 
-      {/* Building picker modal */}
+      {/* Building Filter Modal */}
       <Modal visible={buildingDropdown} transparent animationType="fade" onRequestClose={() => setBuildingDropdown(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setBuildingDropdown(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.bldSheet}>
-            <Text style={styles.bldSheetTitle}>Filter by Building</Text>
+          <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet}>
+            <Text style={styles.dropdownTitle}>Filter by Property / Society</Text>
 
-            {/* All buildings */}
             <TouchableOpacity
-              style={[styles.bldItem, selectedBuildingId === ALL_ID && styles.bldItemActive]}
-              onPress={() => { setSelectedBuildingId(ALL_ID); setBuildingDropdown(false); }}
+              style={[styles.bldItem, selectedBuildingId === 'ALL' && styles.bldItemActive]}
+              onPress={() => { setSelectedBuildingId('ALL'); setBuildingDropdown(false); }}
             >
-              <Ionicons name="grid-outline" size={18} color={selectedBuildingId === ALL_ID ? COLORS.primary : COLORS.muted} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.bldItemText, selectedBuildingId === ALL_ID && { color: COLORS.primary }]}>All Buildings</Text>
-                <Text style={styles.bldItemSub}>{buildings.length} buildings</Text>
-              </View>
-              {selectedBuildingId === ALL_ID && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
+              <Ionicons name="globe-outline" size={18} color={selectedBuildingId === 'ALL' ? COLORS.primary : COLORS.muted} />
+              <Text style={[styles.bldItemText, selectedBuildingId === 'ALL' && { color: COLORS.primary }]}>
+                All Properties / Societies
+              </Text>
+              {selectedBuildingId === 'ALL' && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
             </TouchableOpacity>
 
-            {/* Per-building rows */}
             <FlatList
               data={buildings}
               keyExtractor={b => b.id}
@@ -309,14 +403,14 @@ export default function ReportsScreen({ navigation }: Props) {
                   onPress={() => { setSelectedBuildingId(item.id); setBuildingDropdown(false); }}
                 >
                   <Ionicons
-                    name={item.building_type === 'pg' ? 'bed-outline' : 'business-outline'}
+                    name="business-outline"
                     size={18}
                     color={selectedBuildingId === item.id ? COLORS.primary : COLORS.muted}
                   />
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.bldItemText, selectedBuildingId === item.id && { color: COLORS.primary }]}>{item.name}</Text>
                     <Text style={styles.bldItemSub}>
-                      {item.building_type === 'pg' ? 'PG/Hostel' : 'Residential'} · {item.total_units} units · {item.vacant_units} vacant
+                      {getPropBadge(item.building_type)} · {item.total_units} units · {item.vacant_units} vacant
                     </Text>
                   </View>
                   {selectedBuildingId === item.id && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
@@ -327,48 +421,45 @@ export default function ReportsScreen({ navigation }: Props) {
         </TouchableOpacity>
       </Modal>
 
-      {/* Custom date modal */}
+      {/* Custom Date Range Modal */}
       <Modal visible={showModal} transparent animationType="fade" onRequestClose={() => setShowModal(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowModal(false)}>
-          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-            <View style={styles.modalBox}>
-              <Text style={styles.modalTitle}>Custom Date Range</Text>
-              <Text style={styles.modalHint}>Format: YYYY-MM-01  (e.g. 2025-01-01)</Text>
+          <TouchableOpacity activeOpacity={1} style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Custom Date Range</Text>
+            <Text style={styles.modalHint}>Format: YYYY-MM-01 (e.g. 2025-01-01)</Text>
 
-              <Text style={styles.modalLabel}>From Month</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={tempFrom}
-                onChangeText={setTempFrom}
-                placeholder="2025-01-01"
-                placeholderTextColor={COLORS.muted}
-                keyboardType="numeric"
-                autoFocus
-              />
-              <Text style={styles.modalLabel}>To Month</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={tempTo}
-                onChangeText={setTempTo}
-                placeholder="2025-06-01"
-                placeholderTextColor={COLORS.muted}
-                keyboardType="numeric"
-              />
+            <Text style={styles.modalLabel}>From Month</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="2024-01-01"
+              value={customFrom}
+              onChangeText={setCustomFrom}
+            />
 
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[styles.modalBtn, { backgroundColor: COLORS.border }]}
-                  onPress={() => setShowModal(false)}
-                >
-                  <Text style={[styles.modalBtnText, { color: COLORS.text }]}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalBtn, { backgroundColor: COLORS.primary }]}
-                  onPress={applyCustom}
-                >
-                  <Text style={[styles.modalBtnText, { color: '#fff' }]}>Apply</Text>
-                </TouchableOpacity>
-              </View>
+            <Text style={styles.modalLabel}>To Month</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="2025-01-01"
+              value={customTo}
+              onChangeText={setCustomTo}
+            />
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border }]}
+                onPress={() => setShowModal(false)}
+              >
+                <Text style={{ fontWeight: '600', color: COLORS.text }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: COLORS.primary }]}
+                onPress={() => {
+                  setSelectedFilter('custom');
+                  setShowModal(false);
+                }}
+              >
+                <Text style={{ fontWeight: '700', color: '#fff' }}>Apply</Text>
+              </TouchableOpacity>
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -378,61 +469,257 @@ export default function ReportsScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container:      { flex: 1 },
-  headerBanner:   { backgroundColor: HEADER_BLUE, paddingHorizontal: 16, paddingBottom: 12 },
-  headerRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
-  bldDropdownBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
+  headerPanel: {
+    backgroundColor: HEADER_BLUE,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  appNameRow: {
+    marginBottom: 8,
+  },
+  appName: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  dropdownBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 8,
     marginBottom: 10,
   },
-  bldDropdownLabel: { flex: 1, fontSize: 14, fontWeight: '700', color: '#fff' },
-  bldSheet: {
-    backgroundColor: COLORS.white, borderRadius: 18,
-    paddingTop: 16, paddingBottom: 8,
-    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, elevation: 12,
+  dropdownLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
   },
-  bldSheetTitle: {
-    fontSize: 13, fontWeight: '700', color: COLORS.muted,
-    paddingHorizontal: 18, marginBottom: 8, letterSpacing: 0.5, textTransform: 'uppercase',
+  filterScroll: {
+    marginTop: 2,
   },
-  bldItem:       { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 13 },
-  bldItemActive: { backgroundColor: COLORS.primaryLight },
-  bldItemText:   { fontSize: 15, fontWeight: '600', color: COLORS.text },
-  bldItemSub:    { fontSize: 11, color: COLORS.muted, marginTop: 1 },
-  backBtn:        { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
-  headerTitle:    { fontSize: 20, fontWeight: '800', color: '#fff' },
-  filterScroll:   { gap: 8, paddingRight: 8 },
-  filterChip:     { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
-  filterChipActive:     { backgroundColor: '#fff' },
-  filterChipText:       { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.9)' },
-  filterChipTextActive: { color: HEADER_BLUE },
-  periodRow:      { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 20, paddingVertical: 10 },
-  periodLabel:    { fontSize: 12, color: COLORS.muted },
-  totalsRow:      { flexDirection: 'row', backgroundColor: COLORS.white, marginHorizontal: 16, marginBottom: 4, borderRadius: 12, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  totalChip:      { flex: 1, alignItems: 'center', paddingVertical: 14 },
-  totalChipLabel: { fontSize: 11, color: COLORS.muted, marginBottom: 4 },
-  totalChipValue: { fontSize: 20, fontWeight: '800' },
-  emptyText:      { color: COLORS.muted, fontSize: 14, paddingVertical: 8 },
-  summaryRow:     { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
-  topBorder:      { borderTopWidth: 1, borderTopColor: COLORS.border },
-  monthText:      { fontSize: 15, fontWeight: '700', color: COLORS.text },
-  countText:      { fontSize: 11, color: COLORS.muted, marginTop: 3 },
-  receivedText:   { fontSize: 15, fontWeight: '700', color: COLORS.success },
-  outstandingText:{ fontSize: 12, color: '#D97706', fontWeight: '600' },
-  pendingRow:     { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
-  tenantName:     { fontSize: 14, fontWeight: '600', color: COLORS.text },
-  tenantMeta:     { fontSize: 12, color: COLORS.muted, marginTop: 2 },
-  periodText:     { fontSize: 12, color: COLORS.muted, marginTop: 2 },
-  modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-start', paddingTop: 140, paddingHorizontal: 16 },
-  modalBox:       { backgroundColor: COLORS.white, borderRadius: 16, padding: 24, width: 320, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12, elevation: 10 },
-  modalTitle:     { fontSize: 17, fontWeight: '700', color: COLORS.text, marginBottom: 4 },
-  modalHint:      { fontSize: 12, color: COLORS.muted, marginBottom: 16 },
-  modalLabel:     { fontSize: 13, fontWeight: '600', color: COLORS.text, marginBottom: 6 },
-  modalInput:     { borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, padding: 12, fontSize: 15, color: COLORS.text, marginBottom: 14, backgroundColor: COLORS.bg },
-  modalActions:   { flexDirection: 'row', gap: 10, marginTop: 4 },
-  modalBtn:       { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
-  modalBtnText:   { fontSize: 15, fontWeight: '700' },
+  filterTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  filterTabActive: {
+    backgroundColor: '#fff',
+  },
+  filterTabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.85)',
+  },
+  filterTabTextActive: {
+    color: HEADER_BLUE,
+    fontWeight: '800',
+  },
+  body: {
+    flex: 1,
+    backgroundColor: COLORS.bg,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingTop: 16,
+    paddingHorizontal: 14,
+  },
+  grid: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  kpiCard: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1.5,
+  },
+  kpiLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  kpiValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.text,
+    marginTop: 4,
+  },
+  kpiSub: {
+    fontSize: 11,
+    color: COLORS.muted,
+    marginTop: 2,
+  },
+  efficiencyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  efficiencyLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.muted,
+  },
+  efficiencyValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: COLORS.primary,
+    marginTop: 2,
+  },
+  progressBarBg: {
+    height: 8,
+    backgroundColor: COLORS.border,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 4,
+  },
+  progressHint: {
+    fontSize: 10,
+    color: COLORS.muted,
+    marginTop: 4,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  topBorder: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  monthName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  monthSub: {
+    fontSize: 11,
+    color: COLORS.muted,
+    marginTop: 2,
+  },
+  monthCollected: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  monthOutstanding: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  txRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  txTenant: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  txMeta: {
+    fontSize: 11,
+    color: COLORS.muted,
+    marginTop: 2,
+  },
+  txDate: {
+    fontSize: 10,
+    color: COLORS.muted,
+    marginTop: 2,
+  },
+  txAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: COLORS.muted,
+    textAlign: 'center',
+    paddingVertical: 14,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  dropdownSheet: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 16,
+  },
+  dropdownTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 12,
+  },
+  bldItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  bldItemActive: {
+    backgroundColor: '#EFF6FF',
+  },
+  bldItemText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  bldItemSub: {
+    fontSize: 11,
+    color: COLORS.muted,
+    marginTop: 1,
+  },
+  modalBox: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 18,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  modalHint: {
+    fontSize: 12,
+    color: COLORS.muted,
+    marginBottom: 12,
+  },
+  modalLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+    color: COLORS.text,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
 });

@@ -29,7 +29,7 @@ export default function TenantProfileScreen({ navigation, route }: Props) {
 
   const load = useCallback(async () => {
     const [{ data: t }, { data: p }] = await Promise.all([
-      supabase.from('tenants').select(`*, units(unit_number, rent_per_bed, buildings(name, id, building_type))`).eq('id', tenantId).single(),
+      supabase.from('tenants').select(`*, units(unit_number, rent_per_bed, monthly_maintenance, buildings(name, id, building_type, monthly_maintenance_charge))`).eq('id', tenantId).single(),
       supabase.from('payments').select('*').eq('tenant_id', tenantId).order('payment_month', { ascending: false }),
     ]);
     if (t) {
@@ -48,15 +48,21 @@ export default function TenantProfileScreen({ navigation, route }: Props) {
   useFocusEffect(useCallback(() => { load(); }, [load]));
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
+  const isOwner = tenant?.resident_type === 'owner_occupant';
+
   const sendReminder = () => {
     if (!tenant) return;
     const now = new Date();
+    const effectiveDue = isOwner
+      ? ((tenant as any).units?.monthly_maintenance ?? (tenant as any).units?.buildings?.monthly_maintenance_charge ?? 0)
+      : (tenant.rent_override ?? tenant.rent_per_bed ?? 0);
+
     const msg = buildReminderMessage({
       tenantName: tenant.full_name,
       buildingName: tenant.building_name ?? '',
       unitNumber: tenant.unit_number ?? '',
       month: `${now.toLocaleString('default', { month: 'long' })} ${now.getFullYear()}`,
-      amountDue: tenant.rent_override ?? tenant.rent_per_bed ?? 0,
+      amountDue: effectiveDue,
       upiId: profile?.upi_id ?? undefined,
     });
     openWhatsApp(tenant.phone, msg);
@@ -77,50 +83,75 @@ export default function TenantProfileScreen({ navigation, route }: Props) {
     >
       {/* Hero card */}
       <View style={styles.hero}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{tenant.full_name[0].toUpperCase()}</Text>
+        <View style={[styles.avatar, isOwner && styles.avatarOwner]}>
+          <Text style={[styles.avatarText, isOwner && styles.avatarTextOwner]}>
+            {tenant.full_name ? tenant.full_name[0].toUpperCase() : 'U'}
+          </Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.tenantName}>{tenant.full_name}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Text style={styles.tenantName}>{tenant.full_name}</Text>
+            <View style={[styles.typeBadge, isOwner ? styles.ownerBadge : styles.tenantBadge]}>
+              <Text style={isOwner ? styles.ownerBadgeText : styles.tenantBadgeText}>
+                {isOwner ? '👑 Owner' : 'Tenant'}
+              </Text>
+            </View>
+          </View>
           <Text style={styles.tenantMeta}>📞 {tenant.phone}</Text>
-          <Text style={styles.tenantMeta}>🏠 {tenant.building_name} · {tenant.unit_number}</Text>
-          <Text style={styles.tenantMeta}>📅 Since {formatDate(tenant.move_in_date)}</Text>
+          <Text style={styles.tenantMeta}>📍 {tenant.building_name} · Unit {tenant.unit_number}</Text>
+          <Text style={styles.tenantMeta}>📅 Active since {formatDate(tenant.move_in_date)}</Text>
         </View>
       </View>
 
-      {/* Actions */}
+      {/* Quick Actions */}
       <View style={styles.actionsRow}>
-        <ActionBtn icon="cash-outline" label="Record Payment"
-          onPress={() => navigation.navigate('RecordPayment', { tenantId })} />
-        <ActionBtn icon="time-outline" label="Payment History"
-          onPress={() => navigation.navigate('PaymentHistory', { tenantId })} />
-        <ActionBtn icon="logo-whatsapp" label="Send Reminder"
-          onPress={sendReminder} color="#25D366" />
-        <ActionBtn icon="exit-outline" label="Move Out"
-          onPress={moveOut} color={COLORS.danger} />
+        <ActionBtn
+          icon="cash-outline"
+          label={isOwner ? 'Record Dues' : 'Record Rent'}
+          onPress={() => navigation.navigate('RecordPayment', { tenantId })}
+        />
+        <ActionBtn
+          icon="time-outline"
+          label="Payment History"
+          onPress={() => navigation.navigate('PaymentHistory', { tenantId })}
+        />
+        <ActionBtn
+          icon="logo-whatsapp"
+          label="Send Reminder"
+          onPress={sendReminder}
+          color="#25D366"
+        />
+        <ActionBtn
+          icon="exit-outline"
+          label="Move Out"
+          onPress={moveOut}
+          color={COLORS.danger}
+        />
       </View>
 
-      {/* Rent & Deposit */}
-      <Card title="Rent & Deposit">
-        <Row
-          label={tenant.building_type === 'pg' ? 'Rent / Bed' : 'Monthly Rent'}
-          value={formatCurrency(effectiveRent)}
-        />
+      {/* Dues / Rent & Deposit */}
+      <Card title={isOwner ? 'Maintenance & Society Dues' : 'Rent & Deposit Details'}>
+        {!isOwner && (
+          <Row
+            label={tenant.building_type === 'pg' ? 'Rent / Bed' : 'Monthly Base Rent'}
+            value={formatCurrency(effectiveRent)}
+          />
+        )}
         <Row label="Security Deposit" value={formatCurrency(tenant.deposit_amount)} />
         {tenant.deposit_returned > 0 && <Row label="Deposit Returned" value={formatCurrency(tenant.deposit_returned)} />}
       </Card>
 
-      {/* Tenant Details */}
-      <Card title="Personal Details">
+      {/* Resident Details */}
+      <Card title="Personal Details & Verification">
         {tenant.email && <Row label="Email" value={tenant.email} />}
         {tenant.id_type && <Row label={tenant.id_type} value={tenant.id_number ?? '—'} />}
-        {tenant.emergency_name && <Row label="Emergency Contact" value={`${tenant.emergency_name} · ${tenant.emergency_phone}`} />}
+        {tenant.emergency_name && <Row label="Emergency Contact" value={`${tenant.emergency_name} (${tenant.emergency_phone ?? ''})`} />}
         {tenant.notes && <Row label="Notes" value={tenant.notes} />}
       </Card>
 
       {/* Recent Payments */}
       {payments.length > 0 && (
-        <Card title="Recent Payments">
+        <Card title="Recent Transactions & Receipts">
           {payments.slice(0, 5).map((p, i) => (
             <TouchableOpacity
               key={p.id}
@@ -129,14 +160,16 @@ export default function TenantProfileScreen({ navigation, route }: Props) {
             >
               <View style={{ flex: 1 }}>
                 <Text style={styles.payMonth}>{formatMonth(p.payment_month)}</Text>
-                <Text style={styles.payAmt}>{formatCurrency(p.amount_paid)} / {formatCurrency(p.amount_due)}</Text>
+                <Text style={styles.payAmt}>
+                  Paid: {formatCurrency(p.amount_paid + (p.advance_paid ?? 0))} · Total Due: {formatCurrency(p.amount_due)}
+                </Text>
               </View>
               <StatusBadge status={p.status} />
             </TouchableOpacity>
           ))}
           {payments.length > 5 && (
             <TouchableOpacity style={styles.viewAll} onPress={() => navigation.navigate('PaymentHistory', { tenantId })}>
-              <Text style={styles.viewAllText}>View all payments →</Text>
+              <Text style={styles.viewAllText}>View complete history ({payments.length} transactions) →</Text>
             </TouchableOpacity>
           )}
         </Card>
@@ -158,39 +191,91 @@ const ActionBtn = ({ icon, label, onPress, color = COLORS.primary }: any) => (
     <View style={[styles.actionIconWrap, { backgroundColor: color + '20' }]}>
       <Ionicons name={icon} size={22} color={color} />
     </View>
-    <Text style={[styles.actionLabel, { color }]}>{label}</Text>
+    <Text style={styles.actionLabel} numberOfLines={2}>{label}</Text>
   </TouchableOpacity>
 );
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   hero: {
-    flexDirection: 'row', gap: 14, backgroundColor: COLORS.white,
-    padding: 20, borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    padding: 16,
+    margin: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 14,
   },
   avatar: {
-    width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.primaryLight,
-    alignItems: 'center', justifyContent: 'center',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  avatarText: { fontSize: 24, fontWeight: '700', color: COLORS.primary },
-  tenantName: { fontSize: 18, fontWeight: '700', color: COLORS.text },
-  tenantMeta: { fontSize: 13, color: COLORS.muted, marginTop: 3 },
+  avatarOwner: { backgroundColor: '#FEF3C7' },
+  avatarText: { fontSize: 22, fontWeight: '800', color: COLORS.primary },
+  avatarTextOwner: { color: '#B45309' },
+  tenantName: { fontSize: 17, fontWeight: '700', color: COLORS.text },
+  typeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  tenantBadge: { backgroundColor: COLORS.primaryLight },
+  tenantBadgeText: { fontSize: 10, fontWeight: '700', color: COLORS.primary },
+  ownerBadge: { backgroundColor: '#FEF3C7' },
+  ownerBadgeText: { fontSize: 10, fontWeight: '700', color: '#B45309' },
+  tenantMeta: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
   actionsRow: {
-    flexDirection: 'row', justifyContent: 'space-around',
-    backgroundColor: COLORS.white, paddingVertical: 16,
-    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    marginBottom: 10,
+    gap: 8,
   },
-  actionBtn: { alignItems: 'center', gap: 6 },
-  actionIconWrap: { width: 46, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  actionLabel: { fontSize: 11, textAlign: 'center', maxWidth: 60 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  rowLabel: { fontSize: 13, color: COLORS.muted, flex: 1 },
-  rowValue: { fontSize: 13, color: COLORS.text, fontWeight: '500', flex: 1.5, textAlign: 'right' },
-  payRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+  actionBtn: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 6,
+  },
+  actionIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionLabel: { fontSize: 10, fontWeight: '600', color: COLORS.text, textAlign: 'center' },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  rowLabel: { fontSize: 13, color: COLORS.muted },
+  rowValue: { fontSize: 13, fontWeight: '600', color: COLORS.text },
+  payRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
   topBorder: { borderTopWidth: 1, borderTopColor: COLORS.border },
-  payMonth: { fontSize: 14, fontWeight: '600', color: COLORS.text },
-  payAmt: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
-  viewAll: { paddingTop: 12 },
-  viewAllText: { color: COLORS.primary, fontSize: 13 },
+  payMonth: { fontSize: 14, fontWeight: '700', color: COLORS.text },
+  payAmt: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
+  viewAll: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    marginTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  viewAllText: { fontSize: 13, fontWeight: '700', color: COLORS.primary },
 });
