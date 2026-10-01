@@ -6,7 +6,8 @@ export type BuildingType =
   | 'gated_community'      // Gated Community / Society
   | 'commercial';          // Commercial Property (Shops, Offices, Warehouses, Showrooms)
 
-export type ResidentType = 'tenant' | 'owner_occupant';
+export type ResidentType = 'tenant' | 'owner_occupant' | 'guest';
+export type StayType = 'month' | 'week' | 'day';
 
 export type ResidentialUnitType =
   | 'Room'
@@ -126,12 +127,15 @@ export interface Tenant {
   id_number: string | null;
   move_in_date: string;
   move_out_date: string | null;
+  notice_date?: string | null;
+  expected_vacate_date?: string | null;
   rent_override: number | null;
   deposit_amount: number;
   deposit_returned: number;
   emergency_name: string | null;
   emergency_phone: string | null;
   resident_type?: ResidentType;
+  stay_type?: StayType;
   notes: string | null;
   is_active: boolean;
   created_at: string;

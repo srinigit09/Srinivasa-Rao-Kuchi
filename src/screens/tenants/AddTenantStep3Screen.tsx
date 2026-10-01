@@ -30,6 +30,7 @@ export default function AddTenantStep3Screen({ navigation, route }: Props) {
   const [emergencyPhone, setEmergencyPhone] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Prevent double-submit: true while the insert is in-flight
   const submitting = useRef(false);
@@ -65,6 +66,15 @@ export default function AddTenantStep3Screen({ navigation, route }: Props) {
   const save = async () => {
     if (submitting.current) return;   // block duplicate taps
     if (!moveInDate) { Alert.alert('Required', 'Please enter move-in date.'); return; }
+
+    if (emergencyPhone.trim()) {
+      const cleanEmerg = emergencyPhone.replace(/\D/g, '');
+      if (cleanEmerg.length < 10) {
+        setErrors({ emergencyPhone: 'Enter a valid 10-digit phone number' });
+        return;
+      }
+    }
+    setErrors({});
 
     submitting.current = true;  // stays true until navigation — prevents any re-tap
     setLoading(true);
@@ -109,6 +119,7 @@ export default function AddTenantStep3Screen({ navigation, route }: Props) {
       id_type: td.idType || null,
       id_number: td.idNumber || null,
       resident_type: td.residentType || 'tenant',
+      stay_type: td.stayType || 'month',
       move_in_date: moveInDate,
       rent_override: rentOverride ? parseFloat(rentOverride) : null,
       deposit_amount: deposit ? parseFloat(deposit) : 0,
@@ -118,7 +129,14 @@ export default function AddTenantStep3Screen({ navigation, route }: Props) {
     });
 
     if (!error) {
-      await supabase.from('units').update({ is_vacant: false }).eq('id', unitId);
+      // Recheck capacity after insert: only mark is_vacant: false when all beds / capacity is full
+      const newActiveCount = (activeTenantCount ?? 0) + 1;
+      const isNowFull = buildingTypeCheck === 'pg'
+        ? newActiveCount >= totalBeds
+        : true;
+      if (isNowFull) {
+        await supabase.from('units').update({ is_vacant: false }).eq('id', unitId);
+      }
     }
 
     setLoading(false);
@@ -153,7 +171,11 @@ export default function AddTenantStep3Screen({ navigation, route }: Props) {
   const effectiveRent = rentOverride ? parseFloat(rentOverride) || 0 : unitRent;
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 20}
+    >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.rentInfo}>
           <Text style={styles.rentInfoText}>
@@ -198,8 +220,10 @@ export default function AddTenantStep3Screen({ navigation, route }: Props) {
           label="Emergency Contact Phone"
           placeholder="Phone number"
           keyboardType="phone-pad"
+          maxLength={10}
           value={emergencyPhone}
           onChangeText={setEmergencyPhone}
+          error={errors.emergencyPhone}
         />
         <FormField
           label="Notes"
@@ -223,7 +247,7 @@ export default function AddTenantStep3Screen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
-  container: { padding: 20, paddingBottom: 40 },
+  container: { padding: 20, paddingBottom: 100 },
   rentInfo: {
     backgroundColor: COLORS.primaryLight,
     borderRadius: 8,

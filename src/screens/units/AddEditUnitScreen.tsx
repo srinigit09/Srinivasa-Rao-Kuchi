@@ -110,7 +110,11 @@ export default function AddEditUnitScreen({ navigation, route }: Props) {
       : 'Residential Unit Type';
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 20}
+    >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <FormField
           label={unitLabel}
@@ -141,7 +145,16 @@ export default function AddEditUnitScreen({ navigation, route }: Props) {
           required
           options={typeOptions}
           value={unitType}
-          onChange={setUnitType}
+          onChange={(val) => {
+            setUnitType(val);
+            if (isPG) {
+              if (val === 'Single') setTotalBeds('1');
+              else if (val === '2-Sharing') setTotalBeds('2');
+              else if (val === '3-Sharing') setTotalBeds('3');
+              else if (val === '4-Sharing') setTotalBeds('4');
+              else if (val === '5-Sharing') setTotalBeds('5');
+            }
+          }}
           error={errors.unitType}
         />
 
@@ -186,5 +199,5 @@ export default function AddEditUnitScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
-  container: { padding: 20, paddingBottom: 40 },
+  container: { padding: 20, paddingBottom: 100 },
 });

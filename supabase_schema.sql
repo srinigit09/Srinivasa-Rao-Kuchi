@@ -150,7 +150,12 @@ create table if not exists public.tenants (
   created_at       timestamptz default now()
 );
 
-alter table public.tenants add column if not exists resident_type text default 'tenant' check (resident_type in ('tenant', 'owner_occupant'));
+alter table public.tenants drop constraint if exists tenants_resident_type_check;
+alter table public.tenants add column if not exists resident_type text default 'tenant';
+alter table public.tenants add constraint tenants_resident_type_check check (resident_type in ('tenant', 'owner_occupant', 'guest'));
+alter table public.tenants add column if not exists stay_type text default 'month' check (stay_type in ('month', 'week', 'day'));
+alter table public.tenants add column if not exists notice_date date;
+alter table public.tenants add column if not exists expected_vacate_date date;
 
 alter table public.tenants enable row level security;
 drop policy if exists "Owner only" on public.tenants;

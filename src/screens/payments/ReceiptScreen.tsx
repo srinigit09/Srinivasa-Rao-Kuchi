@@ -239,6 +239,7 @@ export default function ReceiptScreen({ navigation, route }: Props) {
       {/* Actions */}
       <View style={styles.actions}>
         <ActionBtn icon="share-outline" label="Share PDF" onPress={sharePDF} />
+        <ActionBtn icon="create-outline" label="Edit Entry" onPress={() => navigation.navigate('RecordPayment', { tenantId: payment.tenant_id, paymentId: payment.id })} color="#7C3AED" />
         <ActionBtn icon="logo-whatsapp" label="WhatsApp" onPress={sendWhatsApp} color="#25D366" />
         <ActionBtn icon="print-outline" label="Print" onPress={printReceipt} />
       </View>

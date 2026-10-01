@@ -103,6 +103,13 @@ export const ID_TYPES = ['Aadhaar', 'PAN', 'Passport', 'Driving License'] as con
 export const RESIDENT_TYPES = [
   { id: 'tenant', label: 'Tenant (Rent Payer)' },
   { id: 'owner_occupant', label: 'Owner Resident (Maintenance Payer)' },
+  { id: 'guest', label: 'Guest / Short Stay' },
+] as const;
+
+export const STAY_TYPES = [
+  { id: 'month', label: 'Month Wise' },
+  { id: 'week', label: 'Week Wise' },
+  { id: 'day', label: 'Day Wise' },
 ] as const;
 
 export const MAINTENANCE_CATEGORIES = [

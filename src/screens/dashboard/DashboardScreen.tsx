@@ -40,8 +40,9 @@ interface PaymentRow {
 interface DashboardData {
   buildings: BuildingSummary[];
   totalBuildings: number;
-  allUnits: { id: string; is_vacant: boolean; building_id: string }[];
+  allUnits: { id: string; is_vacant: boolean; building_id: string; total_beds?: number }[];
   allPayments: PaymentRow[];
+  allTenants: { id: string; is_active: boolean; unit_id: string; building_id: string; expected_vacate_date?: string | null; full_name: string; unit_number?: string }[];
   openMaintenanceCount: number;
   activeNoticesCount: number;
 }
@@ -60,7 +61,7 @@ export default function DashboardScreen({ navigation }: Props) {
   const load = useCallback(async (silent = false) => {
     if (!user) return;
     if (!silent) setLoading(true);
-    const [bldRes, unitRes, payRes, maintRes, noticeRes] = await Promise.all([
+    const [bldRes, unitRes, payRes, tenantRes, maintRes, noticeRes] = await Promise.all([
       supabase
         .from('buildings')
         .select('id, name, building_type, society_name, units(id, is_vacant)')
@@ -68,12 +69,17 @@ export default function DashboardScreen({ navigation }: Props) {
         .order('name'),
       supabase
         .from('units')
-        .select('id, is_vacant, building_id')
+        .select('id, is_vacant, building_id, total_beds')
         .eq('owner_id', user.id),
       supabase
         .from('payments')
         .select('amount_paid, advance_paid, outstanding, status, payment_month, tenant_id, tenants(full_name, units(unit_number, building_id, buildings(name, id)))')
         .eq('owner_id', user.id),
+      supabase
+        .from('tenants')
+        .select('id, full_name, is_active, unit_id, expected_vacate_date, units(building_id, unit_number)')
+        .eq('owner_id', user.id)
+        .eq('is_active', true),
       supabase
         .from('maintenance_requests')
         .select('id', { count: 'exact', head: true })
@@ -100,6 +106,15 @@ export default function DashboardScreen({ navigation }: Props) {
       totalBuildings: allBuildings.length,
       allUnits: (unitRes.data ?? []) as any,
       allPayments: (payRes.data ?? []) as any,
+      allTenants: (tenantRes.data ?? []).map((t: any) => ({
+        id: t.id,
+        full_name: t.full_name,
+        is_active: t.is_active,
+        unit_id: t.unit_id,
+        building_id: t.units?.building_id,
+        unit_number: t.units?.unit_number,
+        expected_vacate_date: t.expected_vacate_date,
+      })),
       openMaintenanceCount: maintRes.count ?? 0,
       activeNoticesCount: noticeRes.count ?? 0,
     });
@@ -120,10 +135,26 @@ export default function DashboardScreen({ navigation }: Props) {
   // ── derived stats — always filtered by selected building ─────────────────
   const selectedBuilding = data?.buildings.find(b => b.id === selectedBuildingId);
 
+  const isPGBuilding = selectedBuilding?.building_type === 'pg';
   const filteredUnits = (data?.allUnits ?? []).filter(u => u.building_id === selectedBuildingId);
-  const displayUnits    = filteredUnits.length;
-  const displayVacant   = filteredUnits.filter(u => u.is_vacant).length;
-  const displayOccupied = displayUnits - displayVacant;
+  const buildingTenants = (data?.allTenants ?? []).filter(t => t.building_id === selectedBuildingId);
+
+  const displayUnits = isPGBuilding
+    ? filteredUnits.reduce((sum, u) => sum + (u.total_beds || 1), 0)
+    : filteredUnits.length;
+
+  const displayOccupied = isPGBuilding
+    ? buildingTenants.length
+    : filteredUnits.filter(u => !u.is_vacant).length;
+
+  const displayVacant = Math.max(0, displayUnits - displayOccupied);
+
+  const noticePeriodTenants = (data?.allTenants ?? []).filter(t => {
+    if (t.building_id !== selectedBuildingId) return false;
+    if (!t.expected_vacate_date) return false;
+    const today = new Date().toISOString().split('T')[0];
+    return t.expected_vacate_date >= today;
+  });
 
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
@@ -206,25 +237,67 @@ export default function DashboardScreen({ navigation }: Props) {
       <View style={styles.quickActionsPanel}>
         <QuickActionBtn label="Add Resident" icon="person-add-outline" onPress={() => navigation.navigate('AddNewTenant')} />
         <QuickActionBtn label="Record Payment" icon="cash-outline" onPress={() => navigation.navigate('OccupiedTenants', {})} />
-        <QuickActionBtn label="Services / Fix" icon="construct-outline" onPress={() => navigation.navigate('Maintenance' as any, buildingParam)} />
+        <QuickActionBtn label="Services" icon="construct-outline" onPress={() => navigation.navigate('Maintenance' as any, buildingParam)} />
         <QuickActionBtn label="Notices" icon="megaphone-outline" onPress={() => navigation.navigate('SocietyNotices' as any, buildingParam)} />
+        <QuickActionBtn label="Reports" icon="bar-chart-outline" onPress={() => navigation.navigate('Tabs', { screen: 'Reports' } as any)} />
       </View>
 
       {/* ── Scrollable body ── */}
       <ScrollView
         style={styles.body}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
-        contentContainerStyle={{ paddingBottom: 32 }}
+        contentContainerStyle={{ paddingBottom: 40 }}
       >
         {/* ── Stat cards ── */}
         <View style={styles.grid}>
-          <StatCard label="Total Units" value={displayUnits} icon="home-outline" color="#7C3AED" onPress={navToUnits} loading={loading} />
-          <StatCard label="Occupied" value={displayOccupied} icon="person-add" color={COLORS.success} onPress={navToOccupied} loading={loading} />
-          <StatCard label="Vacant" value={displayVacant} icon="key-outline" color="#D97706" onPress={() => navigation.navigate('AddNewTenant')} loading={loading} />
+          <StatCard
+            label={isPGBuilding ? 'Total Beds' : 'Total Units'}
+            value={displayUnits}
+            icon="home-outline"
+            color="#7C3AED"
+            onPress={navToUnits}
+            loading={loading}
+          />
+          <StatCard
+            label={isPGBuilding ? 'Beds Occupied' : 'Occupied'}
+            value={displayOccupied}
+            icon="person-add"
+            color={COLORS.success}
+            onPress={navToOccupied}
+            loading={loading}
+          />
+          <StatCard
+            label={isPGBuilding ? 'Beds Vacant' : 'Vacant'}
+            value={displayVacant}
+            icon="key-outline"
+            color="#D97706"
+            onPress={() => navigation.navigate('AddNewTenant')}
+            loading={loading}
+          />
         </View>
 
-        {/* ── This Month's Payment Summary ── */}
-        <Card title="This Month's Dues & Collections">
+        {/* ── Notice Period Alert Box (if any active tenant is on notice) ── */}
+        {noticePeriodTenants.length > 0 && (
+          <TouchableOpacity
+            style={styles.noticeAlertCard}
+            onPress={() => navigation.navigate('OccupiedTenants', buildingParam)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.noticeAlertIcon}>
+              <Ionicons name="time-outline" size={20} color="#B45309" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.noticeAlertTitle}>Notice Period Active ({noticePeriodTenants.length})</Text>
+              <Text style={styles.noticeAlertSub}>
+                {noticePeriodTenants.map(t => `${t.full_name} (${t.unit_number}) - vacating ${t.expected_vacate_date}`).join(' · ')}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#B45309" />
+          </TouchableOpacity>
+        )}
+
+        {/* ── Payment Summary of the Month ── */}
+        <Card title="Payment Summary of the Month">
           <View style={styles.row}>
             <TouchableOpacity style={styles.colHalf} onPress={() => navigation.navigate('CollectedPayments', buildingParam)}>
               <Text style={styles.amtLabel}>Received (Rent + Dues)</Text>
@@ -232,29 +305,28 @@ export default function DashboardScreen({ navigation }: Props) {
               <Text style={styles.tapHint}>tap for details ›</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.colHalf, styles.borderLeft]} onPress={() => navigation.navigate('Outstanding', buildingParam)}>
-              <Text style={styles.amtLabel}>Outstanding Pending</Text>
+              <Text style={styles.amtLabel}>Outstanding</Text>
               <Text style={[styles.amtValue, { color: '#D97706' }]}>{formatCurrency(pendingThisMonth)}</Text>
               <Text style={styles.tapHint}>tap for details ›</Text>
             </TouchableOpacity>
           </View>
         </Card>
 
-        {/* ── Active Service Requests Quick Box ── */}
-        <Card title="Services & Maintenance Status">
-          <TouchableOpacity
-            style={styles.serviceBox}
-            onPress={() => navigation.navigate('Maintenance' as any, buildingParam)}
-          >
-            <View style={[styles.serviceIconWrap, { backgroundColor: COLORS.primaryLight }]}>
-              <Ionicons name="construct" size={20} color={COLORS.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.serviceTitle}>Active Service Requests</Text>
-              <Text style={styles.serviceCount}>{data?.openMaintenanceCount ?? 0} Pending / In Progress</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={COLORS.muted} />
-          </TouchableOpacity>
-        </Card>
+        {/* ── Service Requests Link Box ── */}
+        <TouchableOpacity
+          style={styles.serviceBox}
+          onPress={() => navigation.navigate('Maintenance' as any, buildingParam)}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.serviceIconWrap, { backgroundColor: COLORS.primaryLight }]}>
+            <Ionicons name="construct" size={20} color={COLORS.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.serviceTitle}>Service Requests</Text>
+            <Text style={styles.serviceCount}>{data?.openMaintenanceCount ?? 0} Pending / In Progress</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={COLORS.muted} />
+        </TouchableOpacity>
       </ScrollView>
 
       {/* ── Building picker modal ── */}
@@ -309,12 +381,14 @@ export default function DashboardScreen({ navigation }: Props) {
 const StatCard = ({ label, value, icon, color, onPress, loading }: any) => (
   <TouchableOpacity style={styles.statCard} onPress={onPress} activeOpacity={0.75}>
     <Text style={[styles.statLabel, { color }]}>{label}</Text>
-    {loading
-      ? <View style={styles.statSkeleton} />
-      : <Text style={styles.statValue}>{value}</Text>
-    }
-    <View style={[styles.statIconWrap, { backgroundColor: color + '18' }]}>
-      <Ionicons name={icon} size={14} color={color} />
+    <View style={styles.statValueRow}>
+      {loading
+        ? <View style={styles.statSkeleton} />
+        : <Text style={styles.statValue}>{value}</Text>
+      }
+      <View style={[styles.statIconWrap, { backgroundColor: color + '18' }]}>
+        <Ionicons name={icon} size={15} color={color} />
+      </View>
     </View>
   </TouchableOpacity>
 );
@@ -434,35 +508,64 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
-    position: 'relative',
   },
   statLabel: {
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
   },
+  statValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
   statValue: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
     color: COLORS.text,
-    marginTop: 4,
   },
   statSkeleton: {
-    height: 20,
+    height: 22,
     width: 32,
     backgroundColor: COLORS.border,
     borderRadius: 4,
-    marginTop: 4,
   },
   statIconWrap: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  noticeAlertCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  noticeAlertIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FDE68A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noticeAlertTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  noticeAlertSub: {
+    fontSize: 11,
+    color: '#B45309',
+    marginTop: 2,
   },
   serviceRow: { gap: 4 },
   serviceBox: {

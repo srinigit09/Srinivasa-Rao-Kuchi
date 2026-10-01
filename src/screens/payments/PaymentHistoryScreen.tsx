@@ -77,11 +77,11 @@ export default function PaymentHistoryScreen({ navigation, route }: Props) {
           </View>
         }
         renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => navigation.navigate('Receipt', { paymentId: item.id })}
-          >
-            <View style={{ flex: 1 }}>
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={{ flex: 1 }}
+              onPress={() => navigation.navigate('Receipt', { paymentId: item.id })}
+            >
               <Text style={styles.month}>{formatMonth(item.payment_month)}</Text>
               <Text style={styles.amtRow}>Rent Paid: {formatCurrency(item.amount_paid)} / Due: {formatCurrency(item.amount_due)}</Text>
               {(item.advance_paid ?? 0) > 0 && (
@@ -90,9 +90,18 @@ export default function PaymentHistoryScreen({ navigation, route }: Props) {
               {item.outstanding > 0 && <Text style={styles.outstanding}>Outstanding: {formatCurrency(item.outstanding)}</Text>}
               {item.payment_date && <Text style={styles.date}>{item.payment_mode} · {formatDate(item.payment_date)}</Text>}
               {item.receipt_number && <Text style={styles.rcpNo}>{item.receipt_number}</Text>}
+            </TouchableOpacity>
+
+            <View style={styles.cardActions}>
+              <StatusBadge status={item.status} />
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={() => navigation.navigate('RecordPayment', { tenantId, paymentId: item.id })}
+              >
+                <Text style={styles.editBtnText}>✏️ Edit</Text>
+              </TouchableOpacity>
             </View>
-            <StatusBadge status={item.status} />
-          </TouchableOpacity>
+          </View>
         )}
       />
     </View>
@@ -122,6 +131,23 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white, borderRadius: 12, padding: 14,
     flexDirection: 'row', alignItems: 'center', gap: 12,
     shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+  },
+  cardActions: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  editBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  editBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
   month: { fontSize: 15, fontWeight: '700', color: COLORS.text },
   amtRow: { fontSize: 13, color: COLORS.muted, marginTop: 3 },

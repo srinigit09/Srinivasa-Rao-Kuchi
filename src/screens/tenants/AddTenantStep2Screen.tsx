@@ -8,8 +8,8 @@ import { AppStackParamList } from '../../navigation/RootNavigator';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
 import SelectField from '../../components/common/SelectField';
-import { COLORS, ID_TYPES, RESIDENT_TYPES } from '../../constants';
-import { ResidentType } from '../../types';
+import { COLORS, ID_TYPES, RESIDENT_TYPES, STAY_TYPES } from '../../constants';
+import { ResidentType, StayType } from '../../types';
 
 type Props = {
   navigation: NativeStackNavigationProp<AppStackParamList, 'AddTenantStep2'>;
@@ -32,6 +32,7 @@ export default function AddTenantStep2Screen({ navigation, route }: Props) {
   }, [navigation]);
 
   const [residentType, setResidentType] = useState<ResidentType>('tenant');
+  const [stayType, setStayType] = useState<StayType>('month');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -51,15 +52,21 @@ export default function AddTenantStep2Screen({ navigation, route }: Props) {
     if (!validate()) return;
     navigation.navigate('AddTenantStep3', {
       buildingId, unitId, buildingType,
-      tenantData: { residentType, fullName, phone, email, idType, idNumber },
+      tenantData: { residentType, stayType, fullName, phone, email, idType, idNumber },
     });
   };
 
+  const isOwner = residentType === 'owner_occupant';
+
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 20}
+    >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <SelectField
-          label="Occupant Type"
+          label="Resident Type"
           required
           options={RESIDENT_TYPES.map(r => r.label)}
           value={RESIDENT_TYPES.find(r => r.id === residentType)?.label ?? 'Tenant (Rent Payer)'}
@@ -69,8 +76,27 @@ export default function AddTenantStep2Screen({ navigation, route }: Props) {
           }}
         />
 
+        {!isOwner && (
+          <SelectField
+            label="Stay Type"
+            required
+            options={STAY_TYPES.map(s => s.label)}
+            value={STAY_TYPES.find(s => s.id === stayType)?.label ?? 'Month Wise'}
+            onChange={(val) => {
+              const found = STAY_TYPES.find(s => s.label === val);
+              if (found) setStayType(found.id);
+            }}
+          />
+        )}
+
         <FormField
-          label={residentType === 'owner_occupant' ? 'Owner Resident Full Name' : 'Tenant Full Name'}
+          label={
+            residentType === 'owner_occupant'
+              ? 'Owner Resident Full Name'
+              : residentType === 'guest'
+              ? 'Guest Full Name'
+              : 'Tenant Full Name'
+          }
           required
           placeholder="e.g. Ramesh Kumar"
           value={fullName}
@@ -122,5 +148,5 @@ export default function AddTenantStep2Screen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
-  container: { padding: 20, paddingBottom: 40 },
+  container: { padding: 20, paddingBottom: 100 },
 });

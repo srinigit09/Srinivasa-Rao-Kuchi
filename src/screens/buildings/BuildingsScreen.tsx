@@ -112,7 +112,9 @@ export default function BuildingsScreen({ navigation }: Props) {
 
                   <View style={styles.tags}>
                     <Tag label={`${item.total_units ?? 0} units`} />
-                    {(item.vacant_units ?? 0) > 0 ? (
+                    {(item.total_units ?? 0) === 0 ? (
+                      <Tag label="No Units Added" color={COLORS.muted} />
+                    ) : (item.vacant_units ?? 0) > 0 ? (
                       <Tag label={`${item.vacant_units} vacant`} color={COLORS.warning} />
                     ) : (
                       <Tag label="Fully Occupied" color={COLORS.success} />

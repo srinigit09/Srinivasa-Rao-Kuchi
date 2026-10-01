@@ -123,7 +123,11 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
     : 'Loading…';
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 20}
+    >
       <BlueBannerHeader
         title={isOwner ? 'Record Maintenance Dues' : 'Record Rent & Dues'}
         subtitle={subtitle}
@@ -245,7 +249,7 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
-  container: { padding: 20, paddingBottom: 40 },
+  container: { padding: 20, paddingBottom: 100 },
   sectionHeader: {
     backgroundColor: COLORS.bg,
     borderRadius: 8,

@@ -49,6 +49,7 @@ export default function TenantProfileScreen({ navigation, route }: Props) {
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const isOwner = tenant?.resident_type === 'owner_occupant';
+  const isGuest = tenant?.resident_type === 'guest';
 
   const sendReminder = () => {
     if (!tenant) return;
@@ -91,15 +92,23 @@ export default function TenantProfileScreen({ navigation, route }: Props) {
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <Text style={styles.tenantName}>{tenant.full_name}</Text>
-            <View style={[styles.typeBadge, isOwner ? styles.ownerBadge : styles.tenantBadge]}>
-              <Text style={isOwner ? styles.ownerBadgeText : styles.tenantBadgeText}>
-                {isOwner ? '👑 Owner' : 'Tenant'}
+            <View style={[styles.typeBadge, isOwner ? styles.ownerBadge : isGuest ? styles.guestBadge : styles.tenantBadge]}>
+              <Text style={isOwner ? styles.ownerBadgeText : isGuest ? styles.guestBadgeText : styles.tenantBadgeText}>
+                {isOwner ? '👑 Owner' : isGuest ? '🏖️ Guest' : 'Tenant'}
               </Text>
             </View>
           </View>
           <Text style={styles.tenantMeta}>📞 {tenant.phone}</Text>
           <Text style={styles.tenantMeta}>📍 {tenant.building_name} · Unit {tenant.unit_number}</Text>
-          <Text style={styles.tenantMeta}>📅 Active since {formatDate(tenant.move_in_date)}</Text>
+          <Text style={styles.tenantMeta}>
+            📅 Active since {formatDate(tenant.move_in_date)}
+            {tenant.stay_type && !isOwner ? ` · ${tenant.stay_type.toUpperCase()} STAY` : ''}
+          </Text>
+          {tenant.expected_vacate_date && (
+            <Text style={[styles.tenantMeta, { color: '#D97706', fontWeight: '700' }]}>
+              ⏳ Notice Period: Vacating on {formatDate(tenant.expected_vacate_date)}
+            </Text>
+          )}
         </View>
       </View>
 
@@ -130,12 +139,15 @@ export default function TenantProfileScreen({ navigation, route }: Props) {
       </View>
 
       {/* Dues / Rent & Deposit */}
-      <Card title={isOwner ? 'Maintenance & Society Dues' : 'Rent & Deposit Details'}>
+      <Card title={isOwner ? 'Maintenance & Society Dues' : isGuest ? 'Guest Tariff & Deposit' : 'Rent & Deposit Details'}>
         {!isOwner && (
           <Row
-            label={tenant.building_type === 'pg' ? 'Rent / Bed' : 'Monthly Base Rent'}
+            label={tenant.building_type === 'pg' ? 'Rent / Bed' : tenant.stay_type === 'day' ? 'Daily Tariff' : tenant.stay_type === 'week' ? 'Weekly Tariff' : 'Monthly Base Rent'}
             value={formatCurrency(effectiveRent)}
           />
+        )}
+        {!isOwner && tenant.stay_type && (
+          <Row label="Stay Duration Type" value={tenant.stay_type === 'day' ? 'Day Wise' : tenant.stay_type === 'week' ? 'Week Wise' : 'Month Wise'} />
         )}
         <Row label="Security Deposit" value={formatCurrency(tenant.deposit_amount)} />
         {tenant.deposit_returned > 0 && <Row label="Deposit Returned" value={formatCurrency(tenant.deposit_returned)} />}
@@ -226,6 +238,8 @@ const styles = StyleSheet.create({
   tenantBadgeText: { fontSize: 10, fontWeight: '700', color: COLORS.primary },
   ownerBadge: { backgroundColor: '#FEF3C7' },
   ownerBadgeText: { fontSize: 10, fontWeight: '700', color: '#B45309' },
+  guestBadge: { backgroundColor: '#E0E7FF' },
+  guestBadgeText: { fontSize: 10, fontWeight: '700', color: '#4338CA' },
   tenantMeta: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
   actionsRow: {
     flexDirection: 'row',

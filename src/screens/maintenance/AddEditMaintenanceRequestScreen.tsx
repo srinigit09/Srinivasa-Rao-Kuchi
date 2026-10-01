@@ -99,6 +99,10 @@ export default function AddEditMaintenanceRequestScreen({ navigation, route }: P
     if (!buildingId) e.buildingId = 'Please select a property';
     if (!title.trim()) e.title = 'Title / Issue summary is required';
     if (!description.trim()) e.description = 'Description is required';
+    if (vendorPhone.trim()) {
+      const cleanVPhone = vendorPhone.replace(/\D/g, '');
+      if (cleanVPhone.length < 10) e.vendorPhone = 'Enter a valid 10-digit phone number';
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -139,7 +143,11 @@ export default function AddEditMaintenanceRequestScreen({ navigation, route }: P
   };
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 20}
+    >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         {buildings.length > 0 && (
           <SelectField
@@ -245,8 +253,10 @@ export default function AddEditMaintenanceRequestScreen({ navigation, route }: P
           label="Vendor Phone Number"
           placeholder="e.g. 9876543210"
           keyboardType="phone-pad"
+          maxLength={10}
           value={vendorPhone}
           onChangeText={setVendorPhone}
+          error={errors.vendorPhone}
         />
 
         <FormField
@@ -302,7 +312,7 @@ export default function AddEditMaintenanceRequestScreen({ navigation, route }: P
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
-  container: { padding: 18, paddingBottom: 40 },
+  container: { padding: 18, paddingBottom: 100 },
   sectionHeading: {
     fontSize: 13,
     fontWeight: '700',

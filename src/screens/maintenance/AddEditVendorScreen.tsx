@@ -49,7 +49,12 @@ export default function AddEditVendorScreen({ navigation, route }: Props) {
   const validate = () => {
     const e: Record<string, string> = {};
     if (!name.trim()) e.name = 'Technician or Vendor name is required';
-    if (!phone.trim()) e.phone = 'Phone number is required';
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (!phone.trim() || cleanPhone.length < 10) e.phone = 'Enter a valid 10-digit phone number';
+    if (alternatePhone.trim()) {
+      const cleanAlt = alternatePhone.replace(/\D/g, '');
+      if (cleanAlt.length < 10) e.alternatePhone = 'Enter a valid 10-digit phone number';
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -77,7 +82,11 @@ export default function AddEditVendorScreen({ navigation, route }: Props) {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 20}
+    >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <FormField
           label="Technician / Business Name"
@@ -101,6 +110,7 @@ export default function AddEditVendorScreen({ navigation, route }: Props) {
           required
           placeholder="e.g. 9876543210"
           keyboardType="phone-pad"
+          maxLength={10}
           value={phone}
           onChangeText={setPhone}
           error={errors.phone}
@@ -110,8 +120,10 @@ export default function AddEditVendorScreen({ navigation, route }: Props) {
           label="Alternate Phone Number (Optional)"
           placeholder="e.g. 9123456780"
           keyboardType="phone-pad"
+          maxLength={10}
           value={alternatePhone}
           onChangeText={setAlternatePhone}
+          error={errors.alternatePhone}
         />
 
         <FormField
@@ -145,5 +157,5 @@ export default function AddEditVendorScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
-  container: { padding: 18, paddingBottom: 40 },
+  container: { padding: 18, paddingBottom: 100 },
 });

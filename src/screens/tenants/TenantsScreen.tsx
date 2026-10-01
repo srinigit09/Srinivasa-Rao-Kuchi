@@ -24,9 +24,9 @@ interface BuildingSummary {
 export default function TenantsScreen({ navigation }: Props) {
   const { user } = useAuth();
   const [buildings, setBuildings] = useState<BuildingSummary[]>([]);
-  const [selectedBuildingId, setSelectedBuildingId] = useState<string>('ALL');
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [filterType, setFilterType] = useState<'ALL' | 'tenant' | 'owner_occupant'>('ALL');
+  const [filterType, setFilterType] = useState<'ALL' | 'tenant' | 'owner_occupant' | 'guest'>('ALL');
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [filtered, setFiltered] = useState<Tenant[]>([]);
@@ -50,6 +50,14 @@ export default function TenantsScreen({ navigation }: Props) {
     }));
     setBuildings(blds);
 
+    const activeBuildingId = selectedBuildingId && blds.find(b => b.id === selectedBuildingId)
+      ? selectedBuildingId
+      : (blds[0]?.id ?? '');
+
+    if (!selectedBuildingId && activeBuildingId) {
+      setSelectedBuildingId(activeBuildingId);
+    }
+
     const { data } = await supabase
       .from('tenants')
       .select(`*, units(unit_number, rent_per_bed, building_id, buildings(name, building_type))`)
@@ -66,8 +74,8 @@ export default function TenantsScreen({ navigation }: Props) {
       rent_per_bed: t.units?.rent_per_bed,
     }));
 
-    if (selectedBuildingId && selectedBuildingId !== 'ALL') {
-      enriched = enriched.filter((t: any) => t.building_id === selectedBuildingId);
+    if (activeBuildingId) {
+      enriched = enriched.filter((t: any) => t.building_id === activeBuildingId);
     }
 
     setTenants(enriched);
@@ -75,7 +83,7 @@ export default function TenantsScreen({ navigation }: Props) {
     setLoading(false);
   }, [user, selectedBuildingId]);
 
-  const applyFilters = (list: Tenant[], q: string, fType: 'ALL' | 'tenant' | 'owner_occupant') => {
+  const applyFilters = (list: Tenant[], q: string, fType: 'ALL' | 'tenant' | 'owner_occupant' | 'guest') => {
     let result = list;
     if (fType !== 'ALL') {
       result = result.filter(t => (t.resident_type ?? 'tenant') === fType);
@@ -103,15 +111,13 @@ export default function TenantsScreen({ navigation }: Props) {
     applyFilters(tenants, q, filterType);
   };
 
-  const handleTypeFilter = (type: 'ALL' | 'tenant' | 'owner_occupant') => {
+  const handleTypeFilter = (type: 'ALL' | 'tenant' | 'owner_occupant' | 'guest') => {
     setFilterType(type);
     applyFilters(tenants, search, type);
   };
 
   const selectedBuilding = buildings.find(b => b.id === selectedBuildingId);
-  const dropdownLabel = selectedBuildingId === 'ALL'
-    ? 'All Properties / Communities'
-    : (selectedBuilding?.name ?? 'Select Property');
+  const dropdownLabel = selectedBuilding?.name ?? 'Select Property / Community';
 
   const bannerSubtitle = `${filtered.length} active resident${filtered.length !== 1 ? 's' : ''}`;
 
@@ -129,7 +135,7 @@ export default function TenantsScreen({ navigation }: Props) {
         <Ionicons name="chevron-down" size={16} color={COLORS.muted} />
       </TouchableOpacity>
 
-      {/* Resident Type Segmented Filter (All, Tenants, Owners) */}
+      {/* Resident Type Segmented Filter (All, Tenants, Owners, Guests) */}
       <View style={styles.segmentRow}>
         <TouchableOpacity
           style={[styles.segmentBtn, filterType === 'ALL' && styles.segmentBtnActive]}
@@ -152,7 +158,15 @@ export default function TenantsScreen({ navigation }: Props) {
           onPress={() => handleTypeFilter('owner_occupant')}
         >
           <Text style={[styles.segmentText, filterType === 'owner_occupant' && styles.segmentTextActive]}>
-            👑 Owner Residents
+            👑 Owners
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.segmentBtn, filterType === 'guest' && styles.segmentBtnActive]}
+          onPress={() => handleTypeFilter('guest')}
+        >
+          <Text style={[styles.segmentText, filterType === 'guest' && styles.segmentTextActive]}>
+            🏖️ Guests
           </Text>
         </TouchableOpacity>
       </View>
@@ -194,23 +208,24 @@ export default function TenantsScreen({ navigation }: Props) {
         )}
         renderItem={({ item }) => {
           const isOwner = item.resident_type === 'owner_occupant';
+          const isGuest = item.resident_type === 'guest';
           return (
             <TouchableOpacity
               style={styles.card}
               onPress={() => navigation.navigate('TenantProfile', { tenantId: item.id })}
               activeOpacity={0.7}
             >
-              <View style={[styles.avatar, isOwner && styles.avatarOwner]}>
-                <Text style={[styles.avatarText, isOwner && styles.avatarTextOwner]}>
+              <View style={[styles.avatar, isOwner ? styles.avatarOwner : isGuest ? styles.avatarGuest : null]}>
+                <Text style={[styles.avatarText, isOwner ? styles.avatarTextOwner : isGuest ? styles.avatarTextGuest : null]}>
                   {item.full_name ? item.full_name[0].toUpperCase() : 'U'}
                 </Text>
               </View>
               <View style={styles.cardBody}>
                 <View style={styles.nameRow}>
                   <Text style={styles.name}>{item.full_name}</Text>
-                  <View style={[styles.typeBadge, isOwner ? styles.ownerBadge : styles.tenantBadge]}>
-                    <Text style={isOwner ? styles.ownerBadgeText : styles.tenantBadgeText}>
-                      {isOwner ? '👑 Owner' : 'Tenant'}
+                  <View style={[styles.typeBadge, isOwner ? styles.ownerBadge : isGuest ? styles.guestBadge : styles.tenantBadge]}>
+                    <Text style={isOwner ? styles.ownerBadgeText : isGuest ? styles.guestBadgeText : styles.tenantBadgeText}>
+                      {isOwner ? '👑 Owner' : isGuest ? '🏖️ Guest' : 'Tenant'}
                     </Text>
                   </View>
                 </View>
@@ -223,22 +238,11 @@ export default function TenantsScreen({ navigation }: Props) {
         }}
       />
 
-      {/* Property Filter Modal */}
+      {/* Property Selector Modal */}
       <Modal visible={dropdownOpen} transparent animationType="fade" onRequestClose={() => setDropdownOpen(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDropdownOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet}>
-            <Text style={styles.dropdownTitle}>Filter by Property / Society</Text>
-
-            <TouchableOpacity
-              style={[styles.dropdownItem, selectedBuildingId === 'ALL' && styles.dropdownItemActive]}
-              onPress={() => { setSelectedBuildingId('ALL'); setDropdownOpen(false); }}
-            >
-              <Ionicons name="globe-outline" size={18} color={selectedBuildingId === 'ALL' ? COLORS.primary : COLORS.muted} />
-              <Text style={[styles.dropdownItemText, selectedBuildingId === 'ALL' && { color: COLORS.primary }]}>
-                All Properties / Societies
-              </Text>
-              {selectedBuildingId === 'ALL' && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
-            </TouchableOpacity>
+            <Text style={styles.dropdownTitle}>Select Property / Society</Text>
 
             {buildings.map(b => (
               <TouchableOpacity
@@ -338,6 +342,10 @@ const styles = StyleSheet.create({
   tenantBadgeText: { fontSize: 10, fontWeight: '700', color: COLORS.primary },
   ownerBadge: { backgroundColor: '#FEF3C7' },
   ownerBadgeText: { fontSize: 10, fontWeight: '700', color: '#B45309' },
+  avatarGuest: { backgroundColor: '#E0E7FF' },
+  avatarTextGuest: { color: '#4338CA' },
+  guestBadge: { backgroundColor: '#E0E7FF' },
+  guestBadgeText: { fontSize: 10, fontWeight: '700', color: '#4338CA' },
   meta: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
   empty: { alignItems: 'center', paddingTop: 60, gap: 8 },
   emptyIcon: { fontSize: 44 },
