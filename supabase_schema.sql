@@ -1,13 +1,16 @@
 -- ============================================================
 -- RentEase — Supabase PostgreSQL Schema
 -- Run this in your Supabase SQL Editor (Dashboard → SQL Editor)
+-- Supports: Individual Houses, Multi-storied Flats, PG/Hostels,
+-- Standalone Apartments, and Gated Communities / Societies.
+-- Includes: Maintenance Requests, Society Notices, Service Vendors, Owner/Tenant management.
 -- ============================================================
 
 -- Enable UUID extension
 create extension if not exists "uuid-ossp";
 
 -- ============================================================
--- PROFILES (one per authenticated landlord)
+-- PROFILES (one per authenticated landlord / property manager)
 -- ============================================================
 create table if not exists public.profiles (
   id           uuid primary key references auth.users(id) on delete cascade,
@@ -24,7 +27,6 @@ create table if not exists public.profiles (
   bank_ifsc    text,
   created_at   timestamptz default now()
 );
--- Ensure all columns exist on pre-existing tables (safe no-ops if already present)
 alter table public.profiles add column if not exists email        text;
 alter table public.profiles add column if not exists dob          date;
 alter table public.profiles add column if not exists upi_id       text;
@@ -32,11 +34,9 @@ alter table public.profiles add column if not exists bank_name    text;
 alter table public.profiles add column if not exists bank_account text;
 alter table public.profiles add column if not exists bank_ifsc    text;
 alter table public.profiles enable row level security;
--- Reload PostgREST schema cache
 notify pgrst, 'reload schema';
 
 -- Helper function: returns current user's role WITHOUT triggering RLS
--- (security definer runs as the function owner, bypassing row-level policies)
 create or replace function public.get_my_role()
 returns text
 language sql
@@ -46,7 +46,7 @@ as $$
   select role from public.profiles where id = auth.uid();
 $$;
 
--- Profiles policies: user can view/update their own, admin can view/update all
+-- Profiles policies
 drop policy if exists "Owner only" on public.profiles;
 drop policy if exists "Allow select own or admin" on public.profiles;
 drop policy if exists "Allow update own or admin" on public.profiles;
@@ -66,42 +66,67 @@ create policy "Allow delete admin" on public.profiles
   for delete using (public.get_my_role() = 'admin');
 
 -- ============================================================
--- BUILDINGS
+-- BUILDINGS / PROPERTIES / COMMUNITIES
 -- ============================================================
 create table if not exists public.buildings (
-  id           uuid primary key default uuid_generate_v4(),
-  owner_id     uuid not null references public.profiles(id) on delete cascade,
-  name         text not null,
-  address      text,
-  building_type text not null check (building_type in ('residential','pg')),
-  created_at   timestamptz default now()
+  id                          uuid primary key default uuid_generate_v4(),
+  owner_id                    uuid not null references public.profiles(id) on delete cascade,
+  name                        text not null,
+  address                     text,
+  building_type               text not null default 'residential',
+  society_name                text,
+  monthly_maintenance_charge numeric(10,2) default 0,
+  maintenance_due_day         int default 5,
+  amenities                   text[] default '{}',
+  gate_phone                  text,
+  rules                       text,
+  created_at                  timestamptz default now()
 );
+
+-- Upgrade existing buildings table columns safely
+alter table public.buildings drop constraint if exists buildings_building_type_check;
+alter table public.buildings add column if not exists society_name text;
+alter table public.buildings add column if not exists monthly_maintenance_charge numeric(10,2) default 0;
+alter table public.buildings add column if not exists maintenance_due_day int default 5;
+alter table public.buildings add column if not exists amenities text[] default '{}';
+alter table public.buildings add column if not exists gate_phone text;
+alter table public.buildings add column if not exists rules text;
+alter table public.buildings add constraint buildings_building_type_check check (
+  building_type in ('residential', 'individual_house', 'pg', 'apartment', 'gated_community')
+);
+
 alter table public.buildings enable row level security;
 drop policy if exists "Owner only" on public.buildings;
 create policy "Owner only" on public.buildings using (auth.uid() = owner_id);
 
 -- ============================================================
--- UNITS  (Flats for residential / Rooms for PG)
+-- UNITS (Flats, Houses, Rooms, Villas)
 -- ============================================================
 create table if not exists public.units (
-  id           uuid primary key default uuid_generate_v4(),
-  building_id  uuid not null references public.buildings(id) on delete cascade,
-  owner_id     uuid not null references public.profiles(id) on delete cascade,
-  unit_number  text not null,
-  unit_type    text not null,
-  -- residential: 1RK | 1BHK | 2BHK | 3BHK | Villa
-  -- pg: Single | 2-Sharing | 3-Sharing | 4-Sharing | 5-Sharing
-  total_beds   int default 1,
-  rent_per_bed numeric(10,2) not null default 0,
-  is_vacant    boolean not null default true,
-  created_at   timestamptz default now()
+  id                  uuid primary key default uuid_generate_v4(),
+  building_id         uuid not null references public.buildings(id) on delete cascade,
+  owner_id            uuid not null references public.profiles(id) on delete cascade,
+  unit_number         text not null,
+  unit_type           text not null,
+  floor_number        text,
+  total_beds          int default 1,
+  rent_per_bed        numeric(10,2) not null default 0,
+  monthly_maintenance numeric(10,2) default 0,
+  resident_type       text default 'tenant' check (resident_type in ('tenant', 'owner_occupant')),
+  is_vacant           boolean not null default true,
+  created_at          timestamptz default now()
 );
+
+alter table public.units add column if not exists floor_number text;
+alter table public.units add column if not exists monthly_maintenance numeric(10,2) default 0;
+alter table public.units add column if not exists resident_type text default 'tenant' check (resident_type in ('tenant', 'owner_occupant'));
+
 alter table public.units enable row level security;
 drop policy if exists "Owner only" on public.units;
 create policy "Owner only" on public.units using (auth.uid() = owner_id);
 
 -- ============================================================
--- TENANTS
+-- TENANTS / OCCUPANTS / OWNERS
 -- ============================================================
 create table if not exists public.tenants (
   id               uuid primary key default uuid_generate_v4(),
@@ -110,8 +135,9 @@ create table if not exists public.tenants (
   full_name        text not null,
   phone            text not null,
   email            text,
-  id_type          text,  -- Aadhaar | PAN | Passport | DL
+  id_type          text,  -- Aadhaar | PAN | Passport | Driving License
   id_number        text,
+  resident_type    text default 'tenant' check (resident_type in ('tenant', 'owner_occupant')),
   move_in_date     date not null,
   move_out_date    date,
   rent_override    numeric(10,2),   -- if null use unit rent_per_bed
@@ -123,68 +149,135 @@ create table if not exists public.tenants (
   is_active        boolean not null default true,
   created_at       timestamptz default now()
 );
+
+alter table public.tenants add column if not exists resident_type text default 'tenant' check (resident_type in ('tenant', 'owner_occupant'));
+
 alter table public.tenants enable row level security;
 drop policy if exists "Owner only" on public.tenants;
 create policy "Owner only" on public.tenants using (auth.uid() = owner_id);
 
 -- ============================================================
--- PAYMENTS
+-- PAYMENTS & DUES (Rent, Maintenance, Electricity, Water)
 -- ============================================================
 create table if not exists public.payments (
-  id              uuid primary key default uuid_generate_v4(),
-  owner_id        uuid not null references public.profiles(id) on delete cascade,
-  tenant_id       uuid not null references public.tenants(id) on delete cascade,
-  payment_month   date not null,  -- always 1st of the month e.g. 2024-06-01
-  amount_due      numeric(10,2) not null,
-  amount_paid     numeric(10,2) not null default 0,
-  advance_paid    numeric(10,2) not null default 0,
-  payment_date    date,
-  payment_mode    text check (payment_mode in ('Cash','UPI','Bank Transfer','Cheque')),
-  electricity     numeric(10,2) default 0,
-  water           numeric(10,2) default 0,
-  other_charges   numeric(10,2) default 0,
-  other_label     text,
-  outstanding     numeric(10,2) generated always as (amount_due + coalesce(electricity,0) + coalesce(water,0) + coalesce(other_charges,0) - amount_paid - coalesce(advance_paid,0)) stored,
-  status          text generated always as (
-    case
-      when amount_paid = 0 and coalesce(advance_paid,0) = 0 then 'Pending'
-      when (amount_paid + coalesce(advance_paid,0)) >= (amount_due + coalesce(electricity,0) + coalesce(water,0) + coalesce(other_charges,0)) then 'Paid'
-      else 'Partial'
-    end
-  ) stored,
-  notes           text,
-  receipt_number  text unique,
-  created_at      timestamptz default now()
+  id                 uuid primary key default uuid_generate_v4(),
+  owner_id           uuid not null references public.profiles(id) on delete cascade,
+  tenant_id          uuid not null references public.tenants(id) on delete cascade,
+  payment_month      date not null,  -- 1st of the month e.g. 2025-01-01
+  amount_due         numeric(10,2) not null,
+  amount_paid        numeric(10,2) not null default 0,
+  advance_paid       numeric(10,2) not null default 0,
+  payment_date       date,
+  payment_mode       text check (payment_mode in ('Cash','UPI','Bank Transfer','Cheque')),
+  electricity        numeric(10,2) default 0,
+  water              numeric(10,2) default 0,
+  maintenance_charge numeric(10,2) default 0,
+  other_charges      numeric(10,2) default 0,
+  other_label        text,
+  notes              text,
+  receipt_number     text unique,
+  created_at         timestamptz default now()
 );
--- Safe migration: add advance_paid + regenerate computed columns
--- Step 1: drop the view that depends on outstanding (recreated at the bottom of this file)
+
+-- Safe migration for payments columns
 drop view if exists public.v_monthly_summary;
--- Step 2: add advance_paid (no-op if already present)
 alter table public.payments add column if not exists advance_paid numeric(10,2) not null default 0;
--- Step 3: drop old generated columns and recreate with advance_paid included
+alter table public.payments add column if not exists maintenance_charge numeric(10,2) default 0;
 alter table public.payments drop column if exists outstanding;
 alter table public.payments drop column if exists status;
 alter table public.payments
   add column outstanding numeric(10,2) generated always as (
-    amount_due + coalesce(electricity,0) + coalesce(water,0) + coalesce(other_charges,0) - amount_paid - coalesce(advance_paid,0)
+    amount_due + coalesce(electricity,0) + coalesce(water,0) + coalesce(maintenance_charge,0) + coalesce(other_charges,0) - amount_paid - coalesce(advance_paid,0)
   ) stored,
   add column status text generated always as (
     case
       when amount_paid = 0 and coalesce(advance_paid,0) = 0 then 'Pending'
-      when (amount_paid + coalesce(advance_paid,0)) >= (amount_due + coalesce(electricity,0) + coalesce(water,0) + coalesce(other_charges,0)) then 'Paid'
+      when (amount_paid + coalesce(advance_paid,0)) >= (amount_due + coalesce(electricity,0) + coalesce(water,0) + coalesce(maintenance_charge,0) + coalesce(other_charges,0)) then 'Paid'
       else 'Partial'
     end
   ) stored;
+
 alter table public.payments enable row level security;
 drop policy if exists "Owner only" on public.payments;
 create policy "Owner only" on public.payments using (auth.uid() = owner_id);
+
+-- ============================================================
+-- MAINTENANCE REQUESTS & SERVICE TRACKING
+-- ============================================================
+create table if not exists public.maintenance_requests (
+  id               uuid primary key default uuid_generate_v4(),
+  owner_id         uuid not null references public.profiles(id) on delete cascade,
+  building_id      uuid not null references public.buildings(id) on delete cascade,
+  unit_id          uuid references public.units(id) on delete set null,
+  tenant_id        uuid references public.tenants(id) on delete set null,
+  title            text not null,
+  description      text not null,
+  category         text not null default 'Plumbing',
+  priority         text not null default 'Medium' check (priority in ('Low', 'Medium', 'High', 'Emergency')),
+  status           text not null default 'Reported' check (status in ('Reported', 'In Progress', 'Scheduled', 'Resolved', 'Cancelled')),
+  estimated_cost   numeric(10,2),
+  actual_cost      numeric(10,2),
+  vendor_name      text,
+  vendor_phone     text,
+  reported_by      text,
+  scheduled_date   timestamptz,
+  resolved_date    timestamptz,
+  resolution_notes text,
+  created_at       timestamptz default now()
+);
+
+alter table public.maintenance_requests enable row level security;
+drop policy if exists "Owner only" on public.maintenance_requests;
+create policy "Owner only" on public.maintenance_requests using (auth.uid() = owner_id);
+
+-- ============================================================
+-- SERVICE VENDORS DIRECTORY (Plumbers, Electricians, Carpenters)
+-- ============================================================
+create table if not exists public.service_vendors (
+  id              uuid primary key default uuid_generate_v4(),
+  owner_id        uuid not null references public.profiles(id) on delete cascade,
+  name            text not null,
+  category        text not null default 'Plumbing',
+  phone           text not null,
+  alternate_phone text,
+  email           text,
+  address         text,
+  rating          numeric(2,1) default 5.0,
+  is_verified     boolean not null default true,
+  notes           text,
+  created_at      timestamptz default now()
+);
+
+alter table public.service_vendors enable row level security;
+drop policy if exists "Owner only" on public.service_vendors;
+create policy "Owner only" on public.service_vendors using (auth.uid() = owner_id);
+
+-- ============================================================
+-- SOCIETY NOTICES & ANNOUNCEMENTS
+-- ============================================================
+create table if not exists public.society_notices (
+  id           uuid primary key default uuid_generate_v4(),
+  owner_id     uuid not null references public.profiles(id) on delete cascade,
+  building_id  uuid not null references public.buildings(id) on delete cascade,
+  title        text not null,
+  content      text not null,
+  category     text not null default 'General',
+  priority     text not null default 'Normal' check (priority in ('Normal', 'Important', 'Urgent')),
+  publish_date date not null default current_date,
+  expiry_date  date,
+  created_at   timestamptz default now()
+);
+
+alter table public.society_notices enable row level security;
+drop policy if exists "Owner only" on public.society_notices;
+create policy "Owner only" on public.society_notices using (auth.uid() = owner_id);
 
 -- ============================================================
 -- RECEIPT SEQUENCE (per financial year per owner)
 -- ============================================================
 create table if not exists public.receipt_sequences (
   owner_id     uuid primary key references public.profiles(id) on delete cascade,
-  fiscal_year  int not null,   -- e.g. 2024 for Apr 2024 – Mar 2025
+  fiscal_year  int not null,
   last_seq     int not null default 0
 );
 alter table public.receipt_sequences enable row level security;
@@ -201,7 +294,6 @@ declare
   v_year int;
   v_seq  int;
 begin
-  -- Financial year starts in April
   v_year := case when extract(month from now()) >= 4
                  then extract(year from now())
                  else extract(year from now()) - 1
@@ -222,7 +314,7 @@ end;
 $$;
 
 -- ============================================================
--- APP SETTINGS (admin-controlled global flags)
+-- APP SETTINGS
 -- ============================================================
 create table if not exists public.app_settings (
   key        text primary key,
@@ -231,38 +323,34 @@ create table if not exists public.app_settings (
 );
 alter table public.app_settings enable row level security;
 
--- Anyone can read settings (needed by login screen before auth)
 drop policy if exists "Public read" on public.app_settings;
-create policy "Public read" on public.app_settings
-  for select using (true);
+create policy "Public read" on public.app_settings for select using (true);
 
--- Only admin can write
 drop policy if exists "Admin write" on public.app_settings;
-create policy "Admin write" on public.app_settings
-  for all using (public.get_my_role() = 'admin');
+create policy "Admin write" on public.app_settings for all using (public.get_my_role() = 'admin');
 
--- Seed defaults
 insert into public.app_settings (key, value) values
   ('default_otp', '123456'),
   ('use_supabase_otp', 'false')
 on conflict (key) do nothing;
 
 -- ============================================================
--- INDEXES for common queries
+-- INDEXES
 -- ============================================================
-create index if not exists idx_buildings_owner on public.buildings(owner_id);
-create index if not exists idx_units_building  on public.units(building_id);
-create index if not exists idx_tenants_unit    on public.tenants(unit_id);
-create index if not exists idx_tenants_owner   on public.tenants(owner_id);
-create index if not exists idx_payments_tenant on public.payments(tenant_id);
-create index if not exists idx_payments_month  on public.payments(payment_month);
-create index if not exists idx_payments_owner  on public.payments(owner_id);
+create index if not exists idx_buildings_owner     on public.buildings(owner_id);
+create index if not exists idx_units_building      on public.units(building_id);
+create index if not exists idx_tenants_unit        on public.tenants(unit_id);
+create index if not exists idx_tenants_owner       on public.tenants(owner_id);
+create index if not exists idx_payments_tenant     on public.payments(tenant_id);
+create index if not exists idx_payments_month      on public.payments(payment_month);
+create index if not exists idx_payments_owner      on public.payments(owner_id);
+create index if not exists idx_maintenance_bld     on public.maintenance_requests(building_id);
+create index if not exists idx_maintenance_status  on public.maintenance_requests(status);
+create index if not exists idx_notices_bld         on public.society_notices(building_id);
 
 -- ============================================================
 -- VIEWS
 -- ============================================================
-
--- Vacancy overview
 create or replace view public.v_vacant_units as
 select
   u.id, u.unit_number, u.unit_type, u.rent_per_bed, u.total_beds, u.owner_id,
@@ -271,7 +359,6 @@ from public.units u
 join public.buildings b on b.id = u.building_id
 where u.is_vacant = true;
 
--- Monthly collection summary
 create or replace view public.v_monthly_summary as
 select
   p.owner_id,

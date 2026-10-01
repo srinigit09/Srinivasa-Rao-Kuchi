@@ -108,6 +108,7 @@ export default function AddTenantStep3Screen({ navigation, route }: Props) {
       email: td.email || null,
       id_type: td.idType || null,
       id_number: td.idNumber || null,
+      resident_type: td.residentType || 'tenant',
       move_in_date: moveInDate,
       rent_override: rentOverride ? parseFloat(rentOverride) : null,
       deposit_amount: deposit ? parseFloat(deposit) : 0,

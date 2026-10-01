@@ -8,7 +8,8 @@ import { AppStackParamList } from '../../navigation/RootNavigator';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
 import SelectField from '../../components/common/SelectField';
-import { COLORS, ID_TYPES } from '../../constants';
+import { COLORS, ID_TYPES, RESIDENT_TYPES } from '../../constants';
+import { ResidentType } from '../../types';
 
 type Props = {
   navigation: NativeStackNavigationProp<AppStackParamList, 'AddTenantStep2'>;
@@ -30,6 +31,7 @@ export default function AddTenantStep2Screen({ navigation, route }: Props) {
     });
   }, [navigation]);
 
+  const [residentType, setResidentType] = useState<ResidentType>('tenant');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -39,7 +41,7 @@ export default function AddTenantStep2Screen({ navigation, route }: Props) {
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!fullName.trim()) e.fullName = 'Full name is required';
+    if (!fullName.trim()) e.fullName = 'Resident full name is required';
     if (!phone.trim() || phone.replace(/\D/, '').length < 10) e.phone = 'Enter a valid 10-digit mobile number';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -49,21 +51,70 @@ export default function AddTenantStep2Screen({ navigation, route }: Props) {
     if (!validate()) return;
     navigation.navigate('AddTenantStep3', {
       buildingId, unitId, buildingType,
-      tenantData: { fullName, phone, email, idType, idNumber },
+      tenantData: { residentType, fullName, phone, email, idType, idNumber },
     });
   };
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <FormField label="Full Name" required placeholder="Tenant's full name" value={fullName} onChangeText={setFullName} error={errors.fullName} />
-        <FormField label="Mobile Number" required placeholder="10-digit number" keyboardType="phone-pad" maxLength={10} value={phone} onChangeText={setPhone} error={errors.phone} />
-        <FormField label="Email (optional)" placeholder="email@example.com" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
-        <SelectField label="ID Proof Type" options={[...ID_TYPES]} value={idType} onChange={setIdType} />
+        <SelectField
+          label="Occupant Type"
+          required
+          options={RESIDENT_TYPES.map(r => r.label)}
+          value={RESIDENT_TYPES.find(r => r.id === residentType)?.label ?? 'Tenant (Rent Payer)'}
+          onChange={(val) => {
+            const found = RESIDENT_TYPES.find(r => r.label === val);
+            if (found) setResidentType(found.id);
+          }}
+        />
+
+        <FormField
+          label={residentType === 'owner_occupant' ? 'Owner Resident Full Name' : 'Tenant Full Name'}
+          required
+          placeholder="e.g. Ramesh Kumar"
+          value={fullName}
+          onChangeText={setFullName}
+          error={errors.fullName}
+        />
+        <FormField
+          label="Mobile Number"
+          required
+          placeholder="10-digit number"
+          keyboardType="phone-pad"
+          maxLength={10}
+          value={phone}
+          onChangeText={setPhone}
+          error={errors.phone}
+        />
+        <FormField
+          label="Email (optional)"
+          placeholder="email@example.com"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          value={email}
+          onChangeText={setEmail}
+        />
+        <SelectField
+          label="ID Proof Type"
+          options={[...ID_TYPES]}
+          value={idType}
+          onChange={setIdType}
+        />
         {idType ? (
-          <FormField label={`${idType} Number`} placeholder="ID number" value={idNumber} onChangeText={setIdNumber} autoCapitalize="characters" />
+          <FormField
+            label={`${idType} Number`}
+            placeholder="ID number"
+            value={idNumber}
+            onChangeText={setIdNumber}
+            autoCapitalize="characters"
+          />
         ) : null}
-        <Button title="Next: Rent & Deposit →" onPress={next} style={{ marginTop: 16 }} />
+        <Button
+          title={residentType === 'owner_occupant' ? 'Next: Maintenance & Details →' : 'Next: Rent & Deposit →'}
+          onPress={next}
+          style={{ marginTop: 16 }}
+        />
       </ScrollView>
     </KeyboardAvoidingView>
   );

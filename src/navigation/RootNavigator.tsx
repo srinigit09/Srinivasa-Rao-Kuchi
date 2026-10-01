@@ -6,6 +6,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { COLORS } from '../constants';
+import { BuildingType } from '../types';
 
 // Auth
 import LoginScreen from '../screens/auth/LoginScreen';
@@ -37,6 +38,14 @@ import MoveOutScreen from '../screens/tenants/MoveOutScreen';
 import AdminClientsScreen from '../screens/admin/AdminClientsScreen';
 import AddNewTenantScreen from '../screens/tenants/AddNewTenantScreen';
 
+// New Maintenance & Society Screens
+import MaintenanceScreen from '../screens/maintenance/MaintenanceScreen';
+import AddEditMaintenanceRequestScreen from '../screens/maintenance/AddEditMaintenanceRequestScreen';
+import VendorsDirectoryScreen from '../screens/maintenance/VendorsDirectoryScreen';
+import AddEditVendorScreen from '../screens/maintenance/AddEditVendorScreen';
+import SocietyNoticesScreen from '../screens/society/SocietyNoticesScreen';
+import AddEditNoticeScreen from '../screens/society/AddEditNoticeScreen';
+
 export type RootStackParamList = {
   Auth: undefined;
   Main: undefined;
@@ -52,6 +61,7 @@ export type MainTabParamList = {
   Dashboard: undefined;
   Buildings: undefined;
   Tenants: undefined;
+  MaintenanceTab: undefined;
   Reports: undefined;
   AdminClients?: undefined;
   Settings: undefined;
@@ -64,8 +74,8 @@ export type AppStackParamList = {
   AddEditUnit: { buildingId: string; unitId?: string };
   AddNewTenant: undefined;
   AddTenantStep1: { buildingId?: string; unitId?: string } | undefined;
-  AddTenantStep2: { buildingId: string; unitId: string; buildingType: 'residential' | 'pg' };
-  AddTenantStep3: { buildingId: string; unitId: string; buildingType: 'residential' | 'pg'; tenantData: Record<string, unknown> };
+  AddTenantStep2: { buildingId: string; unitId: string; buildingType: BuildingType };
+  AddTenantStep3: { buildingId: string; unitId: string; buildingType: BuildingType; tenantData: Record<string, unknown> };
   TenantProfile: { tenantId: string };
   RecordPayment: { tenantId: string; paymentId?: string };
   PaymentHistory: { tenantId: string };
@@ -77,6 +87,14 @@ export type AppStackParamList = {
   Outstanding: { buildingId?: string; buildingName?: string };
   MoveOut: { tenantId: string };
   AdminClients: undefined;
+
+  // Maintenance & Society routes
+  Maintenance: { buildingId?: string; buildingName?: string };
+  AddEditMaintenanceRequest: { requestId?: string; buildingId?: string };
+  VendorsDirectory: undefined;
+  AddEditVendor: { vendorId?: string };
+  SocietyNotices: { buildingId?: string; buildingName?: string };
+  AddEditNotice: { buildingId?: string };
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -99,6 +117,7 @@ const MainTabs = () => {
             Dashboard: 'grid-outline',
             Buildings: 'business-outline',
             Tenants: 'people-outline',
+            MaintenanceTab: 'construct-outline',
             Reports: 'bar-chart-outline',
             AdminClients: 'shield-checkmark-outline',
             Settings: 'settings-outline',
@@ -108,8 +127,9 @@ const MainTabs = () => {
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
-      <Tab.Screen name="Buildings" component={BuildingsScreen} />
-      <Tab.Screen name="Tenants" component={TenantsScreen} />
+      <Tab.Screen name="Buildings" component={BuildingsScreen} options={{ title: 'Properties' }} />
+      <Tab.Screen name="Tenants" component={TenantsScreen} options={{ title: 'Occupants' }} />
+      <Tab.Screen name="MaintenanceTab" component={MaintenanceScreen} options={{ title: 'Services' }} />
       <Tab.Screen name="Reports" component={ReportsScreen} />
       {isAdmin && (
         <Tab.Screen
@@ -135,14 +155,14 @@ const AppNavigator = () => (
     }}
   >
     <AppStack.Screen name="Tabs" component={MainTabs} options={{ headerShown: false }} />
-    <AppStack.Screen name="AddEditBuilding" component={AddEditBuildingScreen} options={{ title: 'Building' }} />
-    <AppStack.Screen name="BuildingDetail" component={BuildingDetailScreen} options={{ title: 'Building Details' }} />
-    <AppStack.Screen name="AddEditUnit" component={AddEditUnitScreen} options={{ title: 'Unit' }} />
+    <AppStack.Screen name="AddEditBuilding" component={AddEditBuildingScreen} options={{ title: 'Property / Society' }} />
+    <AppStack.Screen name="BuildingDetail" component={BuildingDetailScreen} options={{ title: 'Property Details' }} />
+    <AppStack.Screen name="AddEditUnit" component={AddEditUnitScreen} options={{ title: 'Unit / Flat' }} />
     <AppStack.Screen name="AddNewTenant" component={AddNewTenantScreen} options={{ headerShown: false }} />
-    <AppStack.Screen name="AddTenantStep1" component={AddTenantStep1Screen} options={{ title: 'Add Tenant (1/3)' }} />
-    <AppStack.Screen name="AddTenantStep2" component={AddTenantStep2Screen} options={{ title: 'Add Tenant (2/3)' }} />
-    <AppStack.Screen name="AddTenantStep3" component={AddTenantStep3Screen} options={{ title: 'Add Tenant (3/3)' }} />
-    <AppStack.Screen name="TenantProfile" component={TenantProfileScreen} options={{ title: 'Tenant Profile' }} />
+    <AppStack.Screen name="AddTenantStep1" component={AddTenantStep1Screen} options={{ title: 'Add Occupant (1/3)' }} />
+    <AppStack.Screen name="AddTenantStep2" component={AddTenantStep2Screen} options={{ title: 'Add Occupant (2/3)' }} />
+    <AppStack.Screen name="AddTenantStep3" component={AddTenantStep3Screen} options={{ title: 'Add Occupant (3/3)' }} />
+    <AppStack.Screen name="TenantProfile" component={TenantProfileScreen} options={{ title: 'Resident Profile' }} />
     <AppStack.Screen name="RecordPayment" component={RecordPaymentScreen} options={{ headerShown: false }} />
     <AppStack.Screen name="PaymentHistory" component={PaymentHistoryScreen} options={{ title: 'Payment History' }} />
     <AppStack.Screen name="Receipt" component={ReceiptScreen} options={{ title: 'Receipt' }} />
@@ -153,6 +173,14 @@ const AppNavigator = () => (
     <AppStack.Screen name="Outstanding" component={OutstandingScreen} options={{ headerShown: false }} />
     <AppStack.Screen name="MoveOut" component={MoveOutScreen} options={{ title: 'Move Out' }} />
     <AppStack.Screen name="AdminClients" component={AdminClientsScreen} options={{ title: 'Admin Clients' }} />
+
+    {/* Maintenance & Society Screens */}
+    <AppStack.Screen name="Maintenance" component={MaintenanceScreen} options={{ headerShown: false }} />
+    <AppStack.Screen name="AddEditMaintenanceRequest" component={AddEditMaintenanceRequestScreen} options={{ title: 'Service Request' }} />
+    <AppStack.Screen name="VendorsDirectory" component={VendorsDirectoryScreen} options={{ headerShown: false }} />
+    <AppStack.Screen name="AddEditVendor" component={AddEditVendorScreen} options={{ title: 'Technician Contact' }} />
+    <AppStack.Screen name="SocietyNotices" component={SocietyNoticesScreen} options={{ headerShown: false }} />
+    <AppStack.Screen name="AddEditNotice" component={AddEditNoticeScreen} options={{ title: 'Society Notice' }} />
   </AppStack.Navigator>
 );
 
@@ -165,7 +193,7 @@ const AuthNavigator = () => (
 );
 
 export default function RootNavigator() {
-  const { session, profile, loading } = useAuth();
+  const { session, loading } = useAuth();
 
   if (loading) {
     return (
@@ -175,12 +203,9 @@ export default function RootNavigator() {
     );
   }
 
-  // Session exists but profile setup not complete → stay in auth flow for ProfileSetup
-  const needsProfileSetup = !!session && !profile?.full_name;
-
   return (
     <NavigationContainer>
-      {session && !needsProfileSetup ? <AppNavigator /> : <AuthNavigator />}
+      {session ? <AppNavigator /> : <AuthNavigator />}
     </NavigationContainer>
   );
 }

@@ -2,7 +2,7 @@ name: Build RentEase APK
 
 on:
   push:
-    branches: [RentApp]
+    branches: [RentApp, RentApp_Upgrade, main]
   workflow_dispatch:
 
 jobs:

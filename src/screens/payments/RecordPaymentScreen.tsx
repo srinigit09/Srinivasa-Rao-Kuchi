@@ -30,6 +30,7 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
   const [advancePaid, setAdvancePaid] = useState('');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentMode, setPaymentMode] = useState('Cash');
+  const [maintenanceCharge, setMaintenanceCharge] = useState('');
   const [electricity, setElectricity] = useState('');
   const [water, setWater] = useState('');
   const [otherCharges, setOtherCharges] = useState('');
@@ -39,13 +40,16 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     supabase.from('tenants')
-      .select('full_name, rent_override, units(rent_per_bed, unit_number, buildings(name))')
+      .select('full_name, resident_type, rent_override, units(rent_per_bed, monthly_maintenance, unit_number, buildings(name, monthly_maintenance_charge))')
       .eq('id', tenantId).single()
       .then(({ data }) => {
         if (data) {
           setTenant(data);
-          const rent = data.rent_override ?? (data as any).units?.rent_per_bed ?? 0;
+          const isOwner = data.resident_type === 'owner_occupant';
+          const rent = isOwner ? 0 : (data.rent_override ?? (data as any).units?.rent_per_bed ?? 0);
+          const maint = (data as any).units?.monthly_maintenance ?? (data as any).units?.buildings?.monthly_maintenance_charge ?? 0;
           setAmountDue(String(rent));
+          if (maint > 0) setMaintenanceCharge(String(maint));
         }
       });
     if (paymentId) {
@@ -57,6 +61,7 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
           setAdvancePaid(String(data.advance_paid ?? ''));
           setPaymentDate(data.payment_date ?? '');
           setPaymentMode(data.payment_mode ?? 'Cash');
+          setMaintenanceCharge(String(data.maintenance_charge ?? ''));
           setElectricity(String(data.electricity ?? ''));
           setWater(String(data.water ?? ''));
           setOtherCharges(String(data.other_charges ?? ''));
@@ -68,6 +73,7 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
   }, [tenantId, paymentId]);
 
   const rentTotal = (parseFloat(amountDue) || 0)
+    + (parseFloat(maintenanceCharge) || 0)
     + (parseFloat(electricity) || 0)
     + (parseFloat(water) || 0)
     + (parseFloat(otherCharges) || 0);
@@ -82,7 +88,6 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
     }
     setLoading(true);
 
-    // Generate receipt number via RPC
     const { data: rcpNo } = await supabase.rpc('next_receipt_number', { p_owner_id: user!.id });
 
     const payload = {
@@ -94,6 +99,7 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
       advance_paid: parseFloat(advancePaid) || 0,
       payment_date: paymentDate || null,
       payment_mode: paymentMode,
+      maintenance_charge: parseFloat(maintenanceCharge) || 0,
       electricity: parseFloat(electricity) || 0,
       water: parseFloat(water) || 0,
       other_charges: parseFloat(otherCharges) || 0,
@@ -111,39 +117,83 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
     navigation.replace('Receipt', { paymentId: savedPayment.id });
   };
 
+  const isOwner = tenant?.resident_type === 'owner_occupant';
   const subtitle = tenant
-    ? `${tenant.full_name}  ·  ${(tenant as any).units?.buildings?.name ?? ''} ${(tenant as any).units?.unit_number ?? ''}`
+    ? `${isOwner ? '👑 ' : '👤 '}${tenant.full_name}  ·  ${(tenant as any).units?.buildings?.name ?? ''} ${(tenant as any).units?.unit_number ?? ''}`
     : 'Loading…';
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <BlueBannerHeader
-        title="Record Payment"
+        title={isOwner ? 'Record Maintenance Dues' : 'Record Rent & Dues'}
         subtitle={subtitle}
         onBack={() => navigation.goBack()}
       />
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-
         <FormField
           label="Payment Month (YYYY-MM-DD)"
           required
-          placeholder="2024-06-01"
+          placeholder="2025-01-01"
           value={paymentMonth}
           onChangeText={setPaymentMonth}
           keyboardType="numeric"
         />
-        <FormField label="Rent Due (₹)" required placeholder="Amount due" keyboardType="decimal-pad" value={amountDue} onChangeText={setAmountDue} />
-        <FormField label="Electricity Charges (₹)" placeholder="0" keyboardType="decimal-pad" value={electricity} onChangeText={setElectricity} />
-        <FormField label="Water Charges (₹)" placeholder="0" keyboardType="decimal-pad" value={water} onChangeText={setWater} />
-        <FormField label="Other Charges (₹)" placeholder="0" keyboardType="decimal-pad" value={otherCharges} onChangeText={setOtherCharges} />
+
+        {!isOwner && (
+          <FormField
+            label="Base Rent Due (₹)"
+            required
+            placeholder="Amount due"
+            keyboardType="decimal-pad"
+            value={amountDue}
+            onChangeText={setAmountDue}
+          />
+        )}
+
+        <FormField
+          label="Society Maintenance Charges (₹)"
+          placeholder="0"
+          keyboardType="decimal-pad"
+          value={maintenanceCharge}
+          onChangeText={setMaintenanceCharge}
+        />
+
+        <FormField
+          label="Electricity Charges (₹)"
+          placeholder="0"
+          keyboardType="decimal-pad"
+          value={electricity}
+          onChangeText={setElectricity}
+        />
+
+        <FormField
+          label="Water / Sinking Fund (₹)"
+          placeholder="0"
+          keyboardType="decimal-pad"
+          value={water}
+          onChangeText={setWater}
+        />
+
+        <FormField
+          label="Other Dues / Parking (₹)"
+          placeholder="0"
+          keyboardType="decimal-pad"
+          value={otherCharges}
+          onChangeText={setOtherCharges}
+        />
         {parseFloat(otherCharges) > 0 && (
-          <FormField label="Other Charges Label" placeholder="e.g. Parking, Internet" value={otherLabel} onChangeText={setOtherLabel} />
+          <FormField
+            label="Other Charges Label"
+            placeholder="e.g. Club House, Festival Contribution, Parking"
+            value={otherLabel}
+            onChangeText={setOtherLabel}
+          />
         )}
 
         {/* Total bill summary */}
         <Card>
           <View style={styles.billRow}>
-            <Text style={styles.billLabel}>Total Bill</Text>
+            <Text style={styles.billLabel}>Total Bill / Total Dues</Text>
             <Text style={styles.billValue}>{formatCurrency(rentTotal)}</Text>
           </View>
         </Card>
@@ -154,16 +204,16 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
         </View>
 
         <FormField
-          label="Rent Paid (₹)"
+          label="Amount Paid Now (₹)"
           required
-          placeholder="Amount paid against rent"
+          placeholder="Amount collected"
           keyboardType="decimal-pad"
           value={amountPaid}
           onChangeText={setAmountPaid}
         />
         <FormField
-          label="Advance / Deposit Paid (₹)"
-          placeholder="0  — extra amount collected as advance"
+          label="Advance / Buffer Paid (₹)"
+          placeholder="0  — extra amount collected in advance"
           keyboardType="decimal-pad"
           value={advancePaid}
           onChangeText={setAdvancePaid}
@@ -185,7 +235,7 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
 
         <SelectField label="Payment Mode" options={[...PAYMENT_MODES]} value={paymentMode} onChange={setPaymentMode} />
         <FormField label="Payment Date" placeholder="YYYY-MM-DD" value={paymentDate} onChangeText={setPaymentDate} keyboardType="numeric" />
-        <FormField label="Notes" placeholder="Optional notes" multiline numberOfLines={2} value={notes} onChangeText={setNotes} />
+        <FormField label="Notes" placeholder="Optional notes e.g. Transaction ID / Cheque No." multiline numberOfLines={2} value={notes} onChangeText={setNotes} />
 
         <Button title="💾 Save & Generate Receipt" onPress={save} loading={loading} style={{ marginTop: 16 }} />
       </ScrollView>

@@ -11,6 +11,7 @@ import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
 import SelectField from '../../components/common/SelectField';
 import { COLORS, RESIDENTIAL_UNIT_TYPES, PG_UNIT_TYPES } from '../../constants';
+import { BuildingType } from '../../types';
 
 type Props = {
   navigation: NativeStackNavigationProp<AppStackParamList, 'AddEditUnit'>;
@@ -20,36 +21,48 @@ type Props = {
 export default function AddEditUnitScreen({ navigation, route }: Props) {
   const { user } = useAuth();
   const { buildingId, unitId } = route.params;
-  const [buildingType, setBuildingType] = useState<'residential' | 'pg'>('residential');
+  const [buildingType, setBuildingType] = useState<BuildingType>('residential');
   const [unitNumber, setUnitNumber] = useState('');
   const [unitType, setUnitType] = useState('');
+  const [floorNumber, setFloorNumber] = useState('');
   const [totalBeds, setTotalBeds] = useState('1');
   const [rentPerBed, setRentPerBed] = useState('');
+  const [monthlyMaintenance, setMonthlyMaintenance] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    supabase.from('buildings').select('building_type').eq('id', buildingId).single()
-      .then(({ data }) => { if (data) setBuildingType(data.building_type as any); });
+    supabase.from('buildings').select('building_type, monthly_maintenance_charge').eq('id', buildingId).single()
+      .then(({ data }) => {
+        if (data) {
+          setBuildingType(data.building_type as any);
+          if (!unitId && data.monthly_maintenance_charge) {
+            setMonthlyMaintenance(String(data.monthly_maintenance_charge));
+          }
+        }
+      });
     if (unitId) {
       supabase.from('units').select('*').eq('id', unitId).single().then(({ data }) => {
         if (data) {
           setUnitNumber(data.unit_number);
           setUnitType(data.unit_type);
-          setTotalBeds(String(data.total_beds));
+          setFloorNumber(data.floor_number ?? '');
+          setTotalBeds(String(data.total_beds ?? 1));
           setRentPerBed(String(data.rent_per_bed));
+          setMonthlyMaintenance(data.monthly_maintenance ? String(data.monthly_maintenance) : '');
         }
       });
     }
   }, [buildingId, unitId]);
 
-  const typeOptions = buildingType === 'residential' ? [...RESIDENTIAL_UNIT_TYPES] : [...PG_UNIT_TYPES];
+  const isPG = buildingType === 'pg';
+  const typeOptions = isPG ? [...PG_UNIT_TYPES] : [...RESIDENTIAL_UNIT_TYPES];
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!unitNumber.trim()) e.unitNumber = 'Unit number is required';
-    if (!unitType) e.unitType = 'Please select a unit type';
-    if (!rentPerBed || isNaN(Number(rentPerBed))) e.rentPerBed = 'Enter valid rent amount';
+    if (!unitNumber.trim()) e.unitNumber = 'Unit / Flat number is required';
+    if (!unitType) e.unitType = 'Please select a unit configuration';
+    if (!rentPerBed || isNaN(Number(rentPerBed))) e.rentPerBed = 'Enter valid rent or expected charge';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -62,8 +75,10 @@ export default function AddEditUnitScreen({ navigation, route }: Props) {
       owner_id: user!.id,
       unit_number: unitNumber.trim(),
       unit_type: unitType,
-      total_beds: parseInt(totalBeds) || 1,
-      rent_per_bed: parseFloat(rentPerBed),
+      floor_number: floorNumber.trim() || null,
+      total_beds: isPG ? (parseInt(totalBeds) || 1) : 1,
+      rent_per_bed: parseFloat(rentPerBed) || 0,
+      monthly_maintenance: monthlyMaintenance ? parseFloat(monthlyMaintenance) : 0,
     };
     const { error } = unitId
       ? await supabase.from('units').update(payload).eq('id', unitId)
@@ -73,37 +88,77 @@ export default function AddEditUnitScreen({ navigation, route }: Props) {
     navigation.goBack();
   };
 
+  const unitLabel =
+    buildingType === 'individual_house'
+      ? 'House / Villa / Floor No.'
+      : isPG
+      ? 'Room Number'
+      : 'Flat / Unit Number';
+
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <FormField label="Unit Number" required placeholder="e.g. 101, A-2, Room 5" value={unitNumber} onChangeText={setUnitNumber} error={errors.unitNumber} />
+        <FormField
+          label={unitLabel}
+          required
+          placeholder={isPG ? 'e.g. Room 101, A-1' : 'e.g. 101, Flat 3B, Villa-5'}
+          value={unitNumber}
+          onChangeText={setUnitNumber}
+          error={errors.unitNumber}
+        />
+
+        {!isPG && (
+          <FormField
+            label="Floor Number (Optional)"
+            placeholder="e.g. Ground, 1st, 2nd, Penthouse"
+            value={floorNumber}
+            onChangeText={setFloorNumber}
+          />
+        )}
+
         <SelectField
-          label={buildingType === 'residential' ? 'Flat Type' : 'Room Type'}
+          label={isPG ? 'Room Sharing Type' : 'Unit Configuration'}
           required
           options={typeOptions}
           value={unitType}
           onChange={setUnitType}
           error={errors.unitType}
         />
-        {buildingType === 'pg' && (
+
+        {isPG && (
           <FormField
-            label="Number of Beds in this Room"
+            label="Total Beds in this Room"
             placeholder="e.g. 2"
             keyboardType="number-pad"
             value={totalBeds}
             onChangeText={setTotalBeds}
           />
         )}
+
         <FormField
-          label={buildingType === 'pg' ? 'Rent per Bed (₹)' : 'Monthly Rent (₹)'}
+          label={isPG ? 'Rent per Bed (₹)' : 'Monthly Expected Rent (₹)'}
           required
-          placeholder="e.g. 8000"
+          placeholder="e.g. 12000"
           keyboardType="decimal-pad"
           value={rentPerBed}
           onChangeText={setRentPerBed}
           error={errors.rentPerBed}
         />
-        <Button title={unitId ? 'Update Unit' : 'Add Unit'} onPress={save} loading={loading} style={{ marginTop: 24 }} />
+
+        <FormField
+          label="Monthly Maintenance / Society Dues (₹, Optional)"
+          placeholder="e.g. 2000"
+          keyboardType="decimal-pad"
+          value={monthlyMaintenance}
+          onChangeText={setMonthlyMaintenance}
+        />
+
+        <Button
+          title={unitId ? 'Update Unit' : 'Save Unit'}
+          onPress={save}
+          loading={loading}
+          style={{ marginTop: 24 }}
+        />
       </ScrollView>
     </KeyboardAvoidingView>
   );

@@ -7,12 +7,21 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { COLORS } from '../../constants';
-import { Building } from '../../types';
+import { COLORS, PROPERTY_TYPES } from '../../constants';
+import { Building, BuildingType } from '../../types';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
 type Props = { navigation: NativeStackNavigationProp<AppStackParamList> };
+
+const getPropertyMeta = (type: BuildingType) => {
+  return PROPERTY_TYPES.find(p => p.id === type) ?? {
+    id: type,
+    label: type,
+    icon: 'business',
+    badge: '🏢 Property',
+  };
+};
 
 export default function BuildingsScreen({ navigation }: Props) {
   const { user } = useAuth();
@@ -23,7 +32,7 @@ export default function BuildingsScreen({ navigation }: Props) {
     if (!user) return;
     const { data } = await supabase
       .from('buildings')
-      .select(`id, name, address, building_type, created_at, units(id, is_vacant)`)
+      .select(`id, name, address, building_type, society_name, monthly_maintenance_charge, created_at, units(id, is_vacant)`)
       .eq('owner_id', user.id)
       .order('created_at', { ascending: true });
 
@@ -39,7 +48,7 @@ export default function BuildingsScreen({ navigation }: Props) {
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const deleteBuilding = async (id: string) => {
-    Alert.alert('Delete Building', 'This will also delete all units and tenants. Are you sure?', [
+    Alert.alert('Delete Property', 'This will also delete all units and occupant data. Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete', style: 'destructive',
@@ -57,8 +66,8 @@ export default function BuildingsScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <BlueBannerHeader
-        title="All Buildings"
-        subtitle={`${buildings.length} building${buildings.length !== 1 ? 's' : ''}  ·  ${totalUnits} units  ·  ${totalVacant} vacant`}
+        title="Properties & Societies"
+        subtitle={`${buildings.length} propert${buildings.length !== 1 ? 'ies' : 'y'}  ·  ${totalUnits} units  ·  ${totalVacant} vacant`}
         onBack={navigation.canGoBack() ? () => navigation.goBack() : undefined}
       />
 
@@ -73,76 +82,111 @@ export default function BuildingsScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('AddEditBuilding', {})}
           >
             <Ionicons name="add-circle" size={22} color={COLORS.primary} />
-            <Text style={styles.addText}>Add New Building</Text>
+            <Text style={styles.addText}>Add New Property / Society</Text>
           </TouchableOpacity>
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>🏢</Text>
-            <Text style={styles.emptyTitle}>No buildings yet</Text>
-            <Text style={styles.emptyText}>Tap "Add New Building" to get started.</Text>
+            <Text style={styles.emptyIcon}>🏡</Text>
+            <Text style={styles.emptyTitle}>No properties added yet</Text>
+            <Text style={styles.emptyText}>Add Houses, Multi-story Flats, PG/Hostels, Standalone Apartments or Gated Communities.</Text>
           </View>
         }
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => navigation.navigate('BuildingDetail', { buildingId: item.id })}
-          >
-            <View style={styles.cardLeft}>
-              <Text style={styles.cardName}>{item.name}</Text>
-              {item.address ? <Text style={styles.cardAddress}>{item.address}</Text> : null}
-              <View style={styles.tags}>
-                <Tag label={item.building_type === 'residential' ? '🏠 Residential' : '🏨 PG/Hostel'} />
-                <Tag label={`${item.total_units ?? 0} units`} />
-                {(item.vacant_units ?? 0) > 0 && (
-                  <Tag label={`${item.vacant_units} vacant`} color={COLORS.warning} />
-                )}
+        renderItem={({ item }) => {
+          const meta = getPropertyMeta(item.building_type);
+          return (
+            <TouchableOpacity
+              style={styles.card}
+              onPress={() => navigation.navigate('BuildingDetail', { buildingId: item.id })}
+            >
+              <View style={styles.cardHeader}>
+                <View style={styles.cardLeft}>
+                  <View style={styles.titleRow}>
+                    <Text style={styles.cardName}>{item.name}</Text>
+                    <Tag label={meta.badge} color={COLORS.primary} />
+                  </View>
+                  {item.society_name ? (
+                    <Text style={styles.societyName}>🏛️ {item.society_name}</Text>
+                  ) : null}
+                  {item.address ? <Text style={styles.cardAddress}>{item.address}</Text> : null}
+
+                  <View style={styles.tags}>
+                    <Tag label={`${item.total_units ?? 0} units`} />
+                    {(item.vacant_units ?? 0) > 0 ? (
+                      <Tag label={`${item.vacant_units} vacant`} color={COLORS.warning} />
+                    ) : (
+                      <Tag label="Fully Occupied" color={COLORS.success} />
+                    )}
+                    {item.monthly_maintenance_charge && item.monthly_maintenance_charge > 0 ? (
+                      <Tag label={`₹${item.monthly_maintenance_charge}/mo Maint`} color={COLORS.accent} />
+                    ) : null}
+                  </View>
+                </View>
+
+                <View style={styles.cardRight}>
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('AddEditBuilding', { buildingId: item.id })}
+                    style={styles.iconBtn}
+                  >
+                    <Ionicons name="pencil-outline" size={18} color={COLORS.primary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => deleteBuilding(item.id)} style={styles.iconBtn}>
+                    <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-            <View style={styles.cardRight}>
-              <TouchableOpacity onPress={() => navigation.navigate('AddEditBuilding', { buildingId: item.id })} style={styles.iconBtn}>
-                <Ionicons name="pencil-outline" size={18} color={COLORS.primary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => deleteBuilding(item.id)} style={styles.iconBtn}>
-                <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        )}
+            </TouchableOpacity>
+          );
+        }}
       />
     </View>
   );
 }
 
 const Tag = ({ label, color = COLORS.primary }: { label: string; color?: string }) => (
-  <View style={[styles.tag, { backgroundColor: color + '20' }]}>
+  <View style={[styles.tag, { backgroundColor: color + '15', borderColor: color + '30', borderWidth: 0.5 }]}>
     <Text style={[styles.tagText, { color }]}>{label}</Text>
   </View>
 );
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  list: { padding: 16, gap: 10, paddingBottom: 32 },
+  list: { padding: 16, paddingBottom: 32 },
   addBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: COLORS.primaryLight, padding: 15, borderRadius: 12, marginBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    borderStyle: 'dashed',
+    marginBottom: 16,
+    gap: 8,
   },
-  addText: { color: COLORS.primary, fontWeight: '700', fontSize: 15 },
+  addText: { fontSize: 15, fontWeight: '600', color: COLORS.primary },
   card: {
-    backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
-    flexDirection: 'row', alignItems: 'center',
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  cardLeft: { flex: 1 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between' },
+  cardLeft: { flex: 1, marginRight: 8 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   cardName: { fontSize: 16, fontWeight: '700', color: COLORS.text },
-  cardAddress: { fontSize: 13, color: COLORS.muted, marginTop: 2 },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
-  tag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  tagText: { fontSize: 12, fontWeight: '600' },
-  cardRight: { gap: 8 },
-  iconBtn: { padding: 6 },
-  empty: { alignItems: 'center', paddingTop: 80, gap: 8 },
-  emptyIcon: { fontSize: 48 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
-  emptyText: { fontSize: 14, color: COLORS.muted },
+  societyName: { fontSize: 13, fontWeight: '500', color: COLORS.secondary, marginBottom: 4 },
+  cardAddress: { fontSize: 12, color: COLORS.muted, marginBottom: 8 },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  tag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  tagText: { fontSize: 11, fontWeight: '600' },
+  cardRight: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+  iconBtn: { padding: 8, borderRadius: 8, backgroundColor: COLORS.surface },
+  empty: { alignItems: 'center', paddingVertical: 48, paddingHorizontal: 20 },
+  emptyIcon: { fontSize: 44, marginBottom: 12 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
+  emptyText: { fontSize: 13, color: COLORS.muted, textAlign: 'center', lineHeight: 18 },
 });
