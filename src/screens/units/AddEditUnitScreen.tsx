@@ -10,7 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
 import SelectField from '../../components/common/SelectField';
-import { COLORS, RESIDENTIAL_UNIT_TYPES, PG_UNIT_TYPES } from '../../constants';
+import { COLORS, RESIDENTIAL_UNIT_TYPES, COMMERCIAL_UNIT_TYPES, PG_UNIT_TYPES } from '../../constants';
 import { BuildingType } from '../../types';
 
 type Props = {
@@ -56,13 +56,18 @@ export default function AddEditUnitScreen({ navigation, route }: Props) {
   }, [buildingId, unitId]);
 
   const isPG = buildingType === 'pg';
-  const typeOptions = isPG ? [...PG_UNIT_TYPES] : [...RESIDENTIAL_UNIT_TYPES];
+  const isCommercial = buildingType === 'commercial';
+  const typeOptions = isPG
+    ? [...PG_UNIT_TYPES]
+    : isCommercial
+    ? [...COMMERCIAL_UNIT_TYPES]
+    : [...RESIDENTIAL_UNIT_TYPES];
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!unitNumber.trim()) e.unitNumber = 'Unit / Flat number is required';
-    if (!unitType) e.unitType = 'Please select a unit configuration';
-    if (!rentPerBed || isNaN(Number(rentPerBed))) e.rentPerBed = 'Enter valid rent or expected charge';
+    if (!unitNumber.trim()) e.unitNumber = isCommercial ? 'Shop / Office / Unit number is required' : 'Unit number is required';
+    if (!unitType) e.unitType = 'Please select a unit type';
+    if (!rentPerBed || isNaN(Number(rentPerBed))) e.rentPerBed = 'Enter valid monthly rent amount';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -91,9 +96,18 @@ export default function AddEditUnitScreen({ navigation, route }: Props) {
   const unitLabel =
     buildingType === 'individual_house'
       ? 'House / Villa / Floor No.'
+      : isCommercial
+      ? 'Shop / Office / Unit Number'
       : isPG
       ? 'Room Number'
       : 'Flat / Unit Number';
+
+  const unitTypeLabel =
+    isPG
+      ? 'Room Sharing Type'
+      : isCommercial
+      ? 'Commercial Space Type'
+      : 'Residential Unit Type';
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -101,7 +115,13 @@ export default function AddEditUnitScreen({ navigation, route }: Props) {
         <FormField
           label={unitLabel}
           required
-          placeholder={isPG ? 'e.g. Room 101, A-1' : 'e.g. 101, Flat 3B, Villa-5'}
+          placeholder={
+            isCommercial
+              ? 'e.g. Shop 12, Office 404, Bay B-1'
+              : isPG
+              ? 'e.g. Room 101, A-1'
+              : 'e.g. 101, Flat 3B, Villa-5'
+          }
           value={unitNumber}
           onChangeText={setUnitNumber}
           error={errors.unitNumber}
@@ -117,7 +137,7 @@ export default function AddEditUnitScreen({ navigation, route }: Props) {
         )}
 
         <SelectField
-          label={isPG ? 'Room Sharing Type' : 'Unit Configuration'}
+          label={unitTypeLabel}
           required
           options={typeOptions}
           value={unitType}

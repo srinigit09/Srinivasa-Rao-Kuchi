@@ -39,6 +39,13 @@ export const PROPERTY_TYPES: { id: BuildingType; label: string; icon: string; su
     badge: '🏢 Multi-story',
   },
   {
+    id: 'commercial',
+    label: 'Commercial Property',
+    icon: 'briefcase',
+    subtitle: 'Shops, Offices, Showrooms, Warehouses, Complexes',
+    badge: '💼 Commercial',
+  },
+  {
     id: 'pg',
     label: 'PG / Hostel',
     icon: 'bed',
@@ -61,7 +68,34 @@ export const PROPERTY_TYPES: { id: BuildingType; label: string; icon: string; su
   },
 ];
 
-export const RESIDENTIAL_UNIT_TYPES = ['1RK', '1BHK', '2BHK', '3BHK', '4BHK', 'Villa', 'Duplex', 'Penthouse'] as const;
+export const RESIDENTIAL_UNIT_TYPES = [
+  'Room',
+  '1RK',
+  '1BHK',
+  '2BHK',
+  '3BHK',
+  '4BHK',
+  '5BHK',
+  'Villa',
+  'Duplex',
+  'Penthouse',
+  'Entire Floor',
+  'Entire Building',
+] as const;
+
+export const COMMERCIAL_UNIT_TYPES = [
+  'Shop / Retail Store',
+  'Office Space',
+  'Showroom',
+  'Warehouse / Godown',
+  'Co-working Desk',
+  'Commercial Floor',
+  'Entire Building / Complex',
+  'Restaurant / Cafe',
+  'Clinic / Pharmacy',
+  'Industrial Shed',
+] as const;
+
 export const PG_UNIT_TYPES = ['Single', '2-Sharing', '3-Sharing', '4-Sharing', '5-Sharing'] as const;
 export const PAYMENT_MODES = ['Cash', 'UPI', 'Bank Transfer', 'Cheque'] as const;
 export const ID_TYPES = ['Aadhaar', 'PAN', 'Passport', 'Driving License'] as const;

@@ -223,39 +223,6 @@ export default function DashboardScreen({ navigation }: Props) {
           <StatCard label="Vacant" value={displayVacant} icon="key-outline" color="#D97706" onPress={() => navigation.navigate('AddNewTenant')} loading={loading} />
         </View>
 
-        {/* ── Society & Services Summary Widget ── */}
-        <Card title="Society, Maintenance & Services">
-          <View style={styles.serviceRow}>
-            <TouchableOpacity
-              style={styles.serviceBox}
-              onPress={() => navigation.navigate('Maintenance' as any, buildingParam)}
-            >
-              <View style={[styles.serviceIconWrap, { backgroundColor: COLORS.primaryLight }]}>
-                <Ionicons name="construct" size={20} color={COLORS.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.serviceTitle}>Active Requests</Text>
-                <Text style={styles.serviceCount}>{data?.openMaintenanceCount ?? 0} Pending / Scheduled</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={COLORS.muted} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.serviceBox, { marginTop: 10 }]}
-              onPress={() => navigation.navigate('VendorsDirectory' as any, {})}
-            >
-              <View style={[styles.serviceIconWrap, { backgroundColor: COLORS.secondaryLight }]}>
-                <Ionicons name="people" size={20} color={COLORS.secondary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.serviceTitle}>Technicians & Vendors</Text>
-                <Text style={styles.serviceCount}>Plumber, Electrician, Painter directory</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={COLORS.muted} />
-            </TouchableOpacity>
-          </View>
-        </Card>
-
         {/* ── This Month's Payment Summary ── */}
         <Card title="This Month's Dues & Collections">
           <View style={styles.row}>
@@ -272,20 +239,22 @@ export default function DashboardScreen({ navigation }: Props) {
           </View>
         </Card>
 
-        {/* ── Overdue list ── */}
-        {overduePayments.length > 0 && (
-          <Card title="Overdue Dues & Rents">
-            {overduePayments.map((p, i) => (
-              <View key={i} style={[styles.overdueRow, i > 0 && styles.topBorder]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.overdueName}>{p.tenant_name}</Text>
-                  <Text style={styles.overdueSub}>{p.building_name} · {p.unit_number} · {formatMonth(p.month)}</Text>
-                </View>
-                <StatusBadge status="Pending" />
-              </View>
-            ))}
-          </Card>
-        )}
+        {/* ── Active Service Requests Quick Box ── */}
+        <Card title="Services & Maintenance Status">
+          <TouchableOpacity
+            style={styles.serviceBox}
+            onPress={() => navigation.navigate('Maintenance' as any, buildingParam)}
+          >
+            <View style={[styles.serviceIconWrap, { backgroundColor: COLORS.primaryLight }]}>
+              <Ionicons name="construct" size={20} color={COLORS.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.serviceTitle}>Active Service Requests</Text>
+              <Text style={styles.serviceCount}>{data?.openMaintenanceCount ?? 0} Pending / In Progress</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={COLORS.muted} />
+          </TouchableOpacity>
+        </Card>
       </ScrollView>
 
       {/* ── Building picker modal ── */}

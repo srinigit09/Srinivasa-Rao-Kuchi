@@ -29,7 +29,7 @@ interface UnitItem {
 interface BuildingItem {
   id: string;
   name: string;
-  building_type: 'residential' | 'pg';
+  building_type: any;
   units: UnitItem[];
 }
 
@@ -101,9 +101,8 @@ export default function AddTenantStep1Screen({ navigation, route }: Props) {
         const availableUnits = (b.units ?? [])
           .map((u: any) => ({ ...u, active_tenant_count: tenantCountMap[u.id] ?? 0 }))
           .filter((u: any) => {
-            // Only show units that can accept a new tenant
-            if (b.building_type === 'residential') return u.active_tenant_count === 0;
-            return u.active_tenant_count < u.total_beds;
+            if (b.building_type === 'pg') return u.active_tenant_count < u.total_beds;
+            return u.active_tenant_count === 0;
           });
         return { ...b, units: availableUnits };
       })
@@ -131,7 +130,7 @@ export default function AddTenantStep1Screen({ navigation, route }: Props) {
   const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 
   const proceed = () => {
-    if (!selected) { Alert.alert('Select a unit', 'Please select a unit to add a tenant.'); return; }
+    if (!selected) { Alert.alert('Select a unit', 'Please select a unit to add a resident.'); return; }
     const building = buildings.find(b => b.id === selected.buildingId);
     navigation.navigate('AddTenantStep2', {
       ...selected,

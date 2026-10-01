@@ -10,6 +10,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { COLORS } from '../../constants';
 import { formatCurrency } from '../../utils';
+import { BuildingType } from '../../types';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
@@ -24,12 +25,13 @@ interface VacantUnit {
   active_count: number;
   building_id: string;
   building_name: string;
-  building_type: 'residential' | 'pg';
+  building_type: BuildingType;
 }
 
 export default function AddNewTenantScreen({ navigation }: Props) {
   const { user } = useAuth();
   const [units, setUnits] = useState<VacantUnit[]>([]);
+  const [totalUnitsCount, setTotalUnitsCount] = useState<number>(0);
   const [filtered, setFiltered] = useState<VacantUnit[]>([]);
   const [selected, setSelected] = useState<VacantUnit | null>(null);
   const [search, setSearch] = useState('');
@@ -49,8 +51,9 @@ export default function AddNewTenantScreen({ navigation }: Props) {
       .order('unit_number');
 
     if (!unitData) { setLoading(false); return; }
+    setTotalUnitsCount(unitData.length);
 
-    // Fetch active tenant counts
+    // Fetch active occupant counts
     const allIds = unitData.map((u: any) => u.id);
     let countMap: Record<string, number> = {};
     if (allIds.length > 0) {
@@ -61,7 +64,7 @@ export default function AddNewTenantScreen({ navigation }: Props) {
       });
     }
 
-    // Keep only units that can accept a tenant
+    // Keep only units that have capacity for an occupant
     const vacantUnits: VacantUnit[] = (unitData ?? [])
       .map((u: any) => ({
         id: u.id,
@@ -75,9 +78,9 @@ export default function AddNewTenantScreen({ navigation }: Props) {
         building_type: u.buildings?.building_type ?? 'residential',
       }))
       .filter((u: VacantUnit) =>
-        u.building_type === 'residential'
-          ? u.active_count === 0
-          : u.active_count < u.total_beds
+        u.building_type === 'pg'
+          ? u.active_count < u.total_beds
+          : u.active_count === 0
       );
 
     setUnits(vacantUnits);
@@ -120,7 +123,7 @@ export default function AddNewTenantScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <BlueBannerHeader
-        title="Add New Tenant"
+        title="Add Resident"
         subtitle={bannerSubtitle}
         onBack={() => navigation.goBack()}
       />
@@ -180,14 +183,24 @@ export default function AddNewTenantScreen({ navigation }: Props) {
               disabled={!selected}
             >
               <Ionicons name="person-add-outline" size={20} color="#fff" />
-              <Text style={styles.proceedText}>Add New Tenant →</Text>
+              <Text style={styles.proceedText}>Continue to Resident Details →</Text>
             </TouchableOpacity>
 
             {units.length === 0 && !loading && (
               <View style={styles.empty}>
-                <Ionicons name="checkmark-circle" size={48} color={COLORS.success} />
-                <Text style={styles.emptyTitle}>All units occupied!</Text>
-                <Text style={styles.emptyText}>No vacant units available right now.</Text>
+                <Ionicons
+                  name={totalUnitsCount === 0 ? "business-outline" : "checkmark-circle"}
+                  size={48}
+                  color={totalUnitsCount === 0 ? COLORS.primary : COLORS.success}
+                />
+                <Text style={styles.emptyTitle}>
+                  {totalUnitsCount === 0 ? 'No Units Added Yet' : 'All Units Occupied!'}
+                </Text>
+                <Text style={styles.emptyText}>
+                  {totalUnitsCount === 0
+                    ? 'Add properties and units first before assigning residents.'
+                    : 'All your units are currently assigned to active residents.'}
+                </Text>
               </View>
             )}
           </View>

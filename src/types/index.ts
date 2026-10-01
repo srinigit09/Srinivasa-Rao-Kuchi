@@ -3,13 +3,39 @@ export type BuildingType =
   | 'individual_house'     // Individual House / Independent Villa
   | 'pg'                   // PG / Hostel
   | 'apartment'            // Standalone Apartment (Owner + Tenant mixed)
-  | 'gated_community';     // Gated Community / Society
+  | 'gated_community'      // Gated Community / Society
+  | 'commercial';          // Commercial Property (Shops, Offices, Warehouses, Showrooms)
 
 export type ResidentType = 'tenant' | 'owner_occupant';
 
-export type ResidentialUnitType = '1RK' | '1BHK' | '2BHK' | '3BHK' | '4BHK' | 'Villa' | 'Duplex' | 'Penthouse' | 'Plot';
+export type ResidentialUnitType =
+  | 'Room'
+  | '1RK'
+  | '1BHK'
+  | '2BHK'
+  | '3BHK'
+  | '4BHK'
+  | '5BHK'
+  | 'Villa'
+  | 'Duplex'
+  | 'Penthouse'
+  | 'Entire Floor'
+  | 'Entire Building';
+
+export type CommercialUnitType =
+  | 'Shop / Retail Store'
+  | 'Office Space'
+  | 'Showroom'
+  | 'Warehouse / Godown'
+  | 'Co-working Desk'
+  | 'Commercial Floor'
+  | 'Entire Building / Complex'
+  | 'Restaurant / Cafe'
+  | 'Clinic / Pharmacy'
+  | 'Industrial Shed';
+
 export type PGUnitType = 'Single' | '2-Sharing' | '3-Sharing' | '4-Sharing' | '5-Sharing';
-export type UnitType = ResidentialUnitType | PGUnitType;
+export type UnitType = ResidentialUnitType | CommercialUnitType | PGUnitType;
 
 export type PaymentMode = 'Cash' | 'UPI' | 'Bank Transfer' | 'Cheque';
 export type PaymentStatus = 'Paid' | 'Partial' | 'Pending';

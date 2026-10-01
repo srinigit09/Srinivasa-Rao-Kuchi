@@ -19,20 +19,31 @@ export default function VacantUnitsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
   const { buildingId, buildingName } = route.params ?? {};
   const [units, setUnits] = useState<VacantUnit[]>([]);
+  const [totalUnitsCount, setTotalUnitsCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async (silent = false) => {
     if (!user) return;
     if (!silent) setLoading(true);
+
     let query = supabase
       .from('v_vacant_units')
       .select('*')
       .eq('owner_id', user.id)
       .order('building_name');
     if (buildingId) query = query.eq('building_id', buildingId);
-    const { data } = await query;
+
+    let totalQuery = supabase
+      .from('units')
+      .select('id', { count: 'exact', head: true })
+      .eq('owner_id', user.id);
+    if (buildingId) totalQuery = totalQuery.eq('building_id', buildingId);
+
+    const [{ data }, { count }] = await Promise.all([query, totalQuery]);
+
     setUnits((data ?? []) as VacantUnit[]);
+    setTotalUnitsCount(count ?? 0);
     setLoading(false);
   }, [user, buildingId]);
 
@@ -59,9 +70,15 @@ export default function VacantUnitsScreen({ navigation, route }: Props) {
         contentContainerStyle={styles.list}
         ListEmptyComponent={loading ? null : (
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>🎉</Text>
-            <Text style={styles.emptyTitle}>All units occupied!</Text>
-            <Text style={styles.emptyText}>You have no vacant units right now.</Text>
+            <Text style={styles.emptyIcon}>{totalUnitsCount === 0 ? '🏢' : '🎉'}</Text>
+            <Text style={styles.emptyTitle}>
+              {totalUnitsCount === 0 ? 'No Units Added Yet' : 'All Units Occupied!'}
+            </Text>
+            <Text style={styles.emptyText}>
+              {totalUnitsCount === 0
+                ? 'Add units/flats to your properties to see vacancies here.'
+                : 'All your units are currently assigned to active residents.'}
+            </Text>
           </View>
         )}
         renderItem={({ item }) => {
@@ -82,7 +99,7 @@ export default function VacantUnitsScreen({ navigation, route }: Props) {
                 onPress={() => navigation.navigate('AddNewTenant')}
               >
                 <Ionicons name="person-add-outline" size={16} color={COLORS.primary} />
-                <Text style={styles.addTenantText}>Add New Tenant</Text>
+                <Text style={styles.addTenantText}>Add Resident</Text>
               </TouchableOpacity>
             </View>
           );

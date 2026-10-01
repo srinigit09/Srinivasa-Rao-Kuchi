@@ -49,7 +49,7 @@ export default function AddEditBuildingScreen({ navigation, route }: Props) {
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!name.trim()) e.name = 'Property / Building name is required';
+    if (!name.trim()) e.name = 'Property name is required';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -115,11 +115,23 @@ export default function AddEditBuildingScreen({ navigation, route }: Props) {
           })}
         </View>
 
-        <Text style={[styles.sectionHeading, { marginTop: 18 }]}>Basic Details</Text>
+        <Text style={[styles.sectionHeading, { marginTop: 18 }]}>Property Details</Text>
         <FormField
-          label={type === 'individual_house' ? 'House / Villa Name' : 'Building / Complex Name'}
+          label={
+            type === 'individual_house'
+              ? 'House / Villa Name'
+              : type === 'commercial'
+              ? 'Commercial Property / Complex Name'
+              : 'Property / Building Name'
+          }
           required
-          placeholder={type === 'individual_house' ? 'e.g. Green Villa No. 14' : 'e.g. Sunrise Heights'}
+          placeholder={
+            type === 'individual_house'
+              ? 'e.g. Green Villa No. 14'
+              : type === 'commercial'
+              ? 'e.g. Apex Commercial Plaza / City Mall'
+              : 'e.g. Sunrise Heights'
+          }
           value={name}
           onChangeText={setName}
           error={errors.name}

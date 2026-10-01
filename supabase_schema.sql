@@ -92,7 +92,7 @@ alter table public.buildings add column if not exists amenities text[] default '
 alter table public.buildings add column if not exists gate_phone text;
 alter table public.buildings add column if not exists rules text;
 alter table public.buildings add constraint buildings_building_type_check check (
-  building_type in ('residential', 'individual_house', 'pg', 'apartment', 'gated_community')
+  building_type in ('residential', 'individual_house', 'commercial', 'pg', 'apartment', 'gated_community')
 );
 
 alter table public.buildings enable row level security;
