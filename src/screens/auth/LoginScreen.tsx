@@ -18,6 +18,7 @@ import { showAlert } from '../../utils';
 const PHONE_RE = /^\d{10}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const BIOMETRIC_KEY = 'rentease_biometric_enabled';
+const ADMIN_PHONE = '8247873377';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LOGIN MODE — controlled from app_settings table (admin can change in Settings)
@@ -186,16 +187,18 @@ export default function LoginScreen({ navigation }: Props) {
         return;
       }
 
-      // Upsert profile with name + phone (create if new, update name if changed)
+      // Upsert profile — admin phone always gets admin role
+      const isAdminPhone = cleanPhone === ADMIN_PHONE;
+      const isNewProfile = !existingProfile?.full_name;
       await supabase.from('profiles').upsert({
         id: userId,
         full_name: bypassName.trim(),
         phone_number: cleanPhone,
-        role: existingProfile?.full_name ? undefined : 'client',
-        is_active: existingProfile?.full_name ? undefined : true,
-        valid_until: existingProfile?.full_name
-          ? undefined
-          : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        role: isAdminPhone ? 'admin' : (isNewProfile ? 'client' : undefined),
+        is_active: isAdminPhone ? true : (isNewProfile ? true : undefined),
+        valid_until: isNewProfile && !isAdminPhone
+          ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+          : undefined,
       }, { onConflict: 'id' });
 
       setBypassLoading(false);
