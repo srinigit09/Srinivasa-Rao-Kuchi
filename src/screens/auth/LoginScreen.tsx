@@ -190,7 +190,7 @@ export default function LoginScreen({ navigation }: Props) {
       // Upsert profile — admin phone always gets admin role
       const isAdminPhone = cleanPhone === ADMIN_PHONE;
       const isNewProfile = !existingProfile?.full_name;
-      await supabase.from('profiles').upsert({
+      const upsertPayload = {
         id: userId,
         full_name: bypassName.trim(),
         phone_number: cleanPhone,
@@ -199,7 +199,15 @@ export default function LoginScreen({ navigation }: Props) {
         valid_until: isNewProfile && !isAdminPhone
           ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
           : undefined,
-      }, { onConflict: 'id' });
+      };
+      const { error: upsertErr } = await supabase.from('profiles').upsert(
+        upsertPayload, { onConflict: 'id' }
+      );
+      if (upsertErr) {
+        setBypassLoading(false);
+        setBypassError(`Profile save failed: ${upsertErr.message}`);
+        return;
+      }
 
       setBypassLoading(false);
       // RootNavigator detects the session and navigates automatically
