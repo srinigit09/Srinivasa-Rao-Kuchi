@@ -18,7 +18,6 @@ import { showAlert } from '../../utils';
 const PHONE_RE = /^\d{10}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const BIOMETRIC_KEY = 'rentease_biometric_enabled';
-const ADMIN_PHONE = '8247873377';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LOGIN MODE — controlled from app_settings table (admin can change in Settings)
@@ -55,7 +54,6 @@ export default function LoginScreen({ navigation }: Props) {
   // Bypass fields
   const [bypassPhone, setBypassPhone] = useState('');
   const [bypassName, setBypassName] = useState('');
-  const [bypassPassword, setBypassPassword] = useState('');
   const [bypassLoading, setBypassLoading] = useState(false);
   const [bypassError, setBypassError] = useState<string | null>(null);
 
@@ -110,10 +108,9 @@ export default function LoginScreen({ navigation }: Props) {
     } catch (e: any) { showAlert('Biometric Error', e.message); }
   };
 
-  // ── BYPASS MODE: phone + name (or password for admin) ────────────────────
-  // Uses a deterministic password derived from phone number.
-  // The account is created silently on first login.
-  // If phone matches ADMIN_PHONE, use password field and admin email for login.
+  // ── BYPASS MODE: phone + name, no OTP ────────────────────────────────────
+  // Uses a deterministic synthetic email+password from the phone number.
+  // Account is created silently on first login. Admin role is set in profile.
   const handleBypassLogin = async () => {
     setBypassError(null);
     const cleanPhone = bypassPhone.replace(/\D/g, '');
@@ -121,68 +118,6 @@ export default function LoginScreen({ navigation }: Props) {
       setBypassError('Please enter a valid 10-digit mobile number.');
       return;
     }
-
-    const isAdmin = cleanPhone === ADMIN_PHONE;
-
-    if (isAdmin) {
-      // Admin path: use synthetic admin email + password entered by user
-      if (!bypassPassword.trim()) {
-        setBypassError('Please enter the admin password.');
-        return;
-      }
-      setBypassLoading(true);
-      const adminEmail = `${ADMIN_PHONE}@rentease.app`;
-      const { data, error: signInErr } = await supabase.auth.signInWithPassword({
-        email: adminEmail,
-        password: bypassPassword.trim(),
-      });
-      if (signInErr) {
-        // First-time setup: create admin account
-        if (signInErr.message.toLowerCase().includes('invalid login credentials')) {
-          const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
-            email: adminEmail,
-            password: bypassPassword.trim(),
-            options: { emailRedirectTo: undefined },
-          });
-          if (signUpErr || !signUpData?.user) {
-            setBypassLoading(false);
-            setBypassError(friendlyError(signUpErr?.message ?? 'Could not create admin account.'));
-            return;
-          }
-          const reSignIn = await supabase.auth.signInWithPassword({
-            email: adminEmail, password: bypassPassword.trim(),
-          });
-          if (reSignIn.error || !reSignIn.data?.session) {
-            setBypassLoading(false);
-            setBypassError(friendlyError(reSignIn.error?.message ?? 'Login failed.'));
-            return;
-          }
-          await supabase.from('profiles').upsert({
-            id: reSignIn.data.session.user.id,
-            email: adminEmail,
-            full_name: 'Super Admin',
-            phone_number: ADMIN_PHONE,
-            role: 'admin',
-            is_active: true,
-          }, { onConflict: 'id' });
-        } else {
-          setBypassLoading(false);
-          setBypassError(friendlyError(signInErr.message));
-          return;
-        }
-      } else if (data?.user) {
-        await supabase.from('profiles').upsert({
-          id: data.user.id,
-          email: adminEmail,
-          role: 'admin',
-          is_active: true,
-        }, { onConflict: 'id' });
-      }
-      setBypassLoading(false);
-      return;
-    }
-
-    // Regular client path
     if (!bypassName.trim()) {
       setBypassError('Please enter your name.');
       return;
@@ -316,9 +251,6 @@ export default function LoginScreen({ navigation }: Props) {
     );
   }
 
-  // Derived: is admin phone entered in bypass mode?
-  const isAdminPhone = bypassPhone.replace(/\D/g, '') === ADMIN_PHONE;
-
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primaryDark} />
@@ -352,24 +284,13 @@ export default function LoginScreen({ navigation }: Props) {
 
             <View style={{ height: 12 }} />
 
-            {isAdminPhone ? (
-              <FormField
-                label="Admin Password"
-                required
-                placeholder="Enter admin password"
-                secureTextEntry
-                value={bypassPassword}
-                onChangeText={(t) => { setBypassPassword(t); setBypassError(null); }}
-              />
-            ) : (
-              <FormField
-                label="Your Name"
-                required
-                placeholder="Enter your full name"
-                value={bypassName}
-                onChangeText={(t) => { setBypassName(t); setBypassError(null); }}
-              />
-            )}
+            <FormField
+              label="Your Name"
+              required
+              placeholder="Enter your full name"
+              value={bypassName}
+              onChangeText={(t) => { setBypassName(t); setBypassError(null); }}
+            />
 
             <Button title="Continue →" onPress={handleBypassLogin} loading={bypassLoading} style={{ marginTop: 4 }} />
 
