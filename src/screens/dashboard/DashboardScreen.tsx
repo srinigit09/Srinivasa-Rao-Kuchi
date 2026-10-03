@@ -73,7 +73,7 @@ export default function DashboardScreen({ navigation }: Props) {
         .eq('owner_id', user.id),
       supabase
         .from('payments')
-        .select('amount_paid, advance_paid, outstanding, status, payment_month, tenant_id, tenants(full_name, units(unit_number, building_id, buildings(name, id)))')
+        .select('amount_paid, advance_paid, outstanding, status, payment_month, tenant_id, tenants(full_name, is_active, units(unit_number, building_id, buildings(name, id)))')
         .eq('owner_id', user.id),
       supabase
         .from('tenants')
@@ -165,8 +165,12 @@ export default function DashboardScreen({ navigation }: Props) {
   });
 
   const thisMonthPayments = filteredPayments.filter(p => p.payment_month === thisMonth);
+  // Collected this month includes all payments (including moved-out tenants)
   const collectedThisMonth = thisMonthPayments.reduce((s, p) => s + (p.amount_paid ?? 0) + (p.advance_paid ?? 0), 0);
-  const pendingThisMonth   = thisMonthPayments.reduce((s, p) => s + (p.outstanding ?? 0), 0);
+  // Outstanding only for active tenants (exclude moved-out tenants from pending)
+  const pendingThisMonth = thisMonthPayments
+    .filter(p => (p.tenants as any)?.is_active !== false)
+    .reduce((s, p) => s + (p.outstanding ?? 0), 0);
 
   const overduePayments = filteredPayments
     .filter(p => isOverdue(p.payment_month) && p.status !== 'Paid')
@@ -235,11 +239,9 @@ export default function DashboardScreen({ navigation }: Props) {
 
       {/* ── Quick Actions ── */}
       <View style={styles.quickActionsPanel}>
-        <QuickActionBtn label="Add Resident" icon="person-add-outline" onPress={() => navigation.navigate('AddNewTenant')} />
+        <QuickActionBtn label="Add Resident" icon="person-add-outline" onPress={() => navigation.navigate('AddNewTenant', { preselectedBuildingId: selectedBuildingId })} />
         <QuickActionBtn label="Record Payment" icon="cash-outline" onPress={() => navigation.navigate('OccupiedTenants', {})} />
-        <QuickActionBtn label="Services" icon="construct-outline" onPress={() => navigation.navigate('Maintenance' as any, buildingParam)} />
         <QuickActionBtn label="Notices" icon="megaphone-outline" onPress={() => navigation.navigate('SocietyNotices' as any, buildingParam)} />
-        <QuickActionBtn label="Reports" icon="bar-chart-outline" onPress={() => navigation.navigate('Tabs', { screen: 'Reports' } as any)} />
       </View>
 
       {/* ── Scrollable body ── */}

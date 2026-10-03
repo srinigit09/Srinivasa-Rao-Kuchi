@@ -43,7 +43,7 @@ export default function AddTenantStep2Screen({ navigation, route }: Props) {
   const validate = () => {
     const e: Record<string, string> = {};
     if (!fullName.trim()) e.fullName = 'Resident full name is required';
-    if (!phone.trim() || phone.replace(/\D/, '').length < 10) e.phone = 'Enter a valid 10-digit mobile number';
+    if (!phone.trim() || phone.replace(/\D/g, '').length < 10) e.phone = 'Enter a valid 10-digit mobile number';
     setErrors(e);
     return Object.keys(e).length === 0;
   };

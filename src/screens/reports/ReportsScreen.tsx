@@ -45,7 +45,6 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'custom',       label: 'Custom'        },
 ];
 
-const HEADER_BLUE = '#1D4ED8';
 
 function getDateRange(filter: FilterKey, customFrom: string, customTo: string) {
   const now = new Date();
@@ -64,7 +63,7 @@ function getDateRange(filter: FilterKey, customFrom: string, customTo: string) {
 export default function ReportsScreen({ navigation }: Props) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const [selectedFilter, setSelectedFilter] = useState<FilterKey>('6months');
+  const [selectedFilter, setSelectedFilter] = useState<FilterKey>('thisMonth');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -235,7 +234,7 @@ export default function ReportsScreen({ navigation }: Props) {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: HEADER_BLUE }}>
+    <View style={{ flex: 1, backgroundColor: COLORS.primaryDark }}>
       {/* Blue Header */}
       <View style={[styles.headerPanel, { paddingTop: insets.top + 8 }]}>
         <View style={styles.appNameRow}>
@@ -470,7 +469,7 @@ export default function ReportsScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   headerPanel: {
-    backgroundColor: HEADER_BLUE,
+    backgroundColor: COLORS.primaryDark,
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
@@ -516,7 +515,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.85)',
   },
   filterTabTextActive: {
-    color: HEADER_BLUE,
+    color: COLORS.primaryDark,
     fontWeight: '800',
   },
   body: {

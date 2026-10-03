@@ -20,18 +20,16 @@ type Props = {
 export default function ProfileSetupScreen({ navigation, route }: Props) {
   const { refreshProfile } = useAuth();
   const [email, setEmail] = useState(route.params?.email ?? '');
+  // Pre-fill phone from route params when coming from WhatsApp OTP flow
+  const [phone, setPhone] = useState(route.params?.phone ?? '');
+  const isPhoneVerified = !!route.params?.phone;
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
   const [dob, setDob] = useState('');
   const [upi, setUpi] = useState('');
   const [loading, setLoading] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Always try to fill email/phone from the active session.
-    // route.params?.email may be undefined when this screen is mounted
-    // directly by RootNavigator (needsProfileSetup path) rather than via
-    // a navigate() call, so we always fall back to the live session.
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user?.email) setEmail(session.user.email);
       else if (session?.user?.phone && !phone) setPhone(session.user.phone);
@@ -111,12 +109,14 @@ export default function ProfileSetupScreen({ navigation, route }: Props) {
           </View>
         ) : null}
 
-        <FormField
-          label="Email Address"
-          value={email}
-          placeholder="your.email@example.com"
-          editable={false}
-        />
+        {email ? (
+          <FormField
+            label="Email Address"
+            value={email}
+            placeholder="your.email@example.com"
+            editable={false}
+          />
+        ) : null}
 
         <FormField
           label="Full Name"
@@ -127,13 +127,14 @@ export default function ProfileSetupScreen({ navigation, route }: Props) {
         />
 
         <FormField
-          label="Mobile Number"
-          required
+          label={isPhoneVerified ? 'Verified Mobile Number ✓' : 'Mobile Number'}
+          required={!isPhoneVerified}
           placeholder="10-digit mobile number"
           keyboardType="phone-pad"
           maxLength={10}
           value={phone}
-          onChangeText={(t) => { setPhone(t); setFeedbackError(null); }}
+          onChangeText={isPhoneVerified ? undefined : (t) => { setPhone(t); setFeedbackError(null); }}
+          editable={!isPhoneVerified}
         />
 
         <FormField

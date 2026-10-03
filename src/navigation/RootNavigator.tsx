@@ -35,6 +35,7 @@ import OutstandingScreen from '../screens/payments/OutstandingScreen';
 import ReportsScreen from '../screens/reports/ReportsScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import MoveOutScreen from '../screens/tenants/MoveOutScreen';
+import EditTenantScreen from '../screens/tenants/EditTenantScreen';
 import AdminClientsScreen from '../screens/admin/AdminClientsScreen';
 import AddNewTenantScreen from '../screens/tenants/AddNewTenantScreen';
 
@@ -54,13 +55,13 @@ export type RootStackParamList = {
 export type AuthStackParamList = {
   Login: undefined;
   OTP: { email?: string; phone?: string };
-  ProfileSetup: { email?: string };
+  ProfileSetup: { email?: string; phone?: string };
 };
 
 export type MainTabParamList = {
   Dashboard: undefined;
   Buildings: undefined;
-  Tenants: undefined;
+  Tenants: { preselectedBuildingId?: string } | undefined;
   MaintenanceTab: undefined;
   Reports: undefined;
   AdminClients?: undefined;
@@ -72,7 +73,7 @@ export type AppStackParamList = {
   AddEditBuilding: { buildingId?: string };
   BuildingDetail: { buildingId: string };
   AddEditUnit: { buildingId: string; unitId?: string };
-  AddNewTenant: undefined;
+  AddNewTenant: { preselectedBuildingId?: string } | undefined;
   AddTenantStep1: { buildingId?: string; unitId?: string } | undefined;
   AddTenantStep2: { buildingId: string; unitId: string; buildingType: BuildingType };
   AddTenantStep3: { buildingId: string; unitId: string; buildingType: BuildingType; tenantData: Record<string, unknown> };
@@ -85,6 +86,7 @@ export type AppStackParamList = {
   OccupiedTenants: { buildingId?: string; buildingName?: string };
   CollectedPayments: { buildingId?: string; buildingName?: string };
   Outstanding: { buildingId?: string; buildingName?: string };
+  EditTenant: { tenantId: string };
   MoveOut: { tenantId: string };
   AdminClients: undefined;
 
@@ -143,12 +145,10 @@ const MainTabs = () => {
   );
 };
 
-const HEADER_BLUE = '#1D4ED8';
-
 const AppNavigator = () => (
   <AppStack.Navigator
     screenOptions={{
-      headerStyle: { backgroundColor: HEADER_BLUE },
+      headerStyle: { backgroundColor: COLORS.primaryDark },
       headerTintColor: '#FFFFFF',
       headerTitleStyle: { fontWeight: '700', fontSize: 17 },
       contentStyle: { backgroundColor: COLORS.bg },
@@ -171,6 +171,7 @@ const AppNavigator = () => (
     <AppStack.Screen name="OccupiedTenants" component={OccupiedTenantsScreen} options={{ headerShown: false }} />
     <AppStack.Screen name="CollectedPayments" component={CollectedPaymentsScreen} options={{ headerShown: false }} />
     <AppStack.Screen name="Outstanding" component={OutstandingScreen} options={{ headerShown: false }} />
+    <AppStack.Screen name="EditTenant" component={EditTenantScreen} options={{ title: 'Edit Resident Details' }} />
     <AppStack.Screen name="MoveOut" component={MoveOutScreen} options={{ title: 'Move Out' }} />
     <AppStack.Screen name="AdminClients" component={AdminClientsScreen} options={{ title: 'Admin Clients' }} />
 

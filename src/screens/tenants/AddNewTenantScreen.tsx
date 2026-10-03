@@ -28,9 +28,21 @@ interface VacantUnit {
   building_type: BuildingType;
 }
 
-export default function AddNewTenantScreen({ navigation }: Props) {
+interface BuildingSummary {
+  id: string;
+  name: string;
+  building_type: BuildingType;
+}
+
+export default function AddNewTenantScreen({ navigation, route }: Props) {
   const { user } = useAuth();
+  const preselectedBuildingId = route.params?.preselectedBuildingId ?? '';
+
+  const [allUnits, setAllUnits] = useState<VacantUnit[]>([]);
   const [units, setUnits] = useState<VacantUnit[]>([]);
+  const [buildings, setBuildings] = useState<BuildingSummary[]>([]);
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>(preselectedBuildingId);
+  const [buildingDropdownOpen, setBuildingDropdownOpen] = useState(false);
   const [totalUnitsCount, setTotalUnitsCount] = useState<number>(0);
   const [filtered, setFiltered] = useState<VacantUnit[]>([]);
   const [selected, setSelected] = useState<VacantUnit | null>(null);
@@ -42,6 +54,17 @@ export default function AddNewTenantScreen({ navigation }: Props) {
   const load = useCallback(async (silent = false) => {
     if (!user) return;
     if (!silent) setLoading(true);
+
+    // Fetch buildings list
+    const { data: bldData } = await supabase
+      .from('buildings')
+      .select('id, name, building_type')
+      .eq('owner_id', user.id)
+      .order('name');
+    const blds: BuildingSummary[] = (bldData ?? []).map((b: any) => ({
+      id: b.id, name: b.name, building_type: b.building_type,
+    }));
+    setBuildings(blds);
 
     // Fetch all units with building info
     const { data: unitData } = await supabase
@@ -83,12 +106,30 @@ export default function AddNewTenantScreen({ navigation }: Props) {
           : u.active_count === 0
       );
 
-    setUnits(vacantUnits);
-    setFiltered(vacantUnits);
-    setLoading(false);
-  }, [user]);
+    setAllUnits(vacantUnits);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+    // Filter by selected building
+    const buildingId = selectedBuildingId || preselectedBuildingId || blds[0]?.id || '';
+    if (buildingId && buildingId !== selectedBuildingId) {
+      setSelectedBuildingId(buildingId);
+    }
+    const filtered = buildingId
+      ? vacantUnits.filter(u => u.building_id === buildingId)
+      : vacantUnits;
+    setUnits(filtered);
+    setFiltered(filtered);
+    setLoading(false);
+  }, [user, selectedBuildingId, preselectedBuildingId]);
+
+  useFocusEffect(useCallback(() => {
+    // Reset to preselected building on focus
+    if (preselectedBuildingId) {
+      setSelectedBuildingId(preselectedBuildingId);
+      setSelected(null);
+      setSearch('');
+    }
+    load();
+  }, [load]));
   const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 
   const handleSearch = (q: string) => {
@@ -107,6 +148,16 @@ export default function AddNewTenantScreen({ navigation }: Props) {
     setDropdownOpen(false);
   };
 
+  const handleBuildingSelect = (id: string) => {
+    setSelectedBuildingId(id);
+    setSelected(null);
+    setSearch('');
+    setBuildingDropdownOpen(false);
+    const newUnits = allUnits.filter(u => u.building_id === id);
+    setUnits(newUnits);
+    setFiltered(newUnits);
+  };
+
   const proceed = () => {
     if (!selected) return;
     navigation.navigate('AddTenantStep2', {
@@ -116,6 +167,7 @@ export default function AddNewTenantScreen({ navigation }: Props) {
     });
   };
 
+  const selectedBuilding = buildings.find(b => b.id === selectedBuildingId);
   const bannerSubtitle = loading
     ? 'Loading...'
     : `${units.length} vacant unit${units.length !== 1 ? 's' : ''} available`;
@@ -127,6 +179,19 @@ export default function AddNewTenantScreen({ navigation }: Props) {
         subtitle={bannerSubtitle}
         onBack={() => navigation.goBack()}
       />
+
+      {/* Property selector bar */}
+      <TouchableOpacity
+        style={styles.buildingBar}
+        onPress={() => setBuildingDropdownOpen(true)}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="business" size={16} color={COLORS.primary} />
+        <Text style={styles.buildingBarLabel} numberOfLines={1}>
+          {selectedBuilding?.name ?? 'Select Property / Community'}
+        </Text>
+        <Ionicons name="chevron-down" size={16} color={COLORS.muted} />
+      </TouchableOpacity>
 
       <FlatList
         data={[]}
@@ -207,6 +272,37 @@ export default function AddNewTenantScreen({ navigation }: Props) {
         }
       />
 
+      {/* ── Building Picker Modal ── */}
+      <Modal
+        visible={buildingDropdownOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBuildingDropdownOpen(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setBuildingDropdownOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Select Property / Society</Text>
+            {buildings.map(b => (
+              <TouchableOpacity
+                key={b.id}
+                style={[styles.buildingItem, selectedBuildingId === b.id && styles.buildingItemActive]}
+                onPress={() => handleBuildingSelect(b.id)}
+              >
+                <Ionicons
+                  name="business-outline"
+                  size={18}
+                  color={selectedBuildingId === b.id ? COLORS.primary : COLORS.muted}
+                />
+                <Text style={[styles.buildingItemText, selectedBuildingId === b.id && { color: COLORS.primary }]}>
+                  {b.name}
+                </Text>
+                {selectedBuildingId === b.id && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
+              </TouchableOpacity>
+            ))}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {/* ── Searchable Unit Picker Modal ── */}
       <Modal
         visible={dropdownOpen}
@@ -282,6 +378,12 @@ export default function AddNewTenantScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
+  buildingBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    paddingHorizontal: 16, paddingVertical: 12,
+  },
+  buildingBarLabel: { flex: 1, fontSize: 14, fontWeight: '700', color: COLORS.text },
   body: { padding: 20, gap: 16 },
   sectionLabel: { fontSize: 13, fontWeight: '700', color: COLORS.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
 
@@ -341,4 +443,7 @@ const styles = StyleSheet.create({
   unitItemSub: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
   emptyModal: { alignItems: 'center', paddingVertical: 32 },
   emptyModalText: { fontSize: 14, color: COLORS.muted },
+  buildingItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 13 },
+  buildingItemActive: { backgroundColor: COLORS.primaryLight },
+  buildingItemText: { flex: 1, fontSize: 15, fontWeight: '600', color: COLORS.text },
 });

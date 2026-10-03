@@ -22,7 +22,6 @@ interface OutstandingRow extends Payment {
   _building_id?: string;
 }
 
-const ORANGE = '#D97706';
 
 export default function OutstandingScreen({ navigation, route }: Props) {
   const { user } = useAuth();
@@ -209,12 +208,12 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabActive: {
-    borderBottomColor: ORANGE,
+    borderBottomColor: COLORS.warning,
   },
   tabText: { fontSize: 14, fontWeight: '600', color: COLORS.muted },
-  tabTextActive: { color: ORANGE },
+  tabTextActive: { color: COLORS.warning },
   badge: {
-    backgroundColor: ORANGE,
+    backgroundColor: COLORS.warning,
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -228,14 +227,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white, borderRadius: 12, padding: 14,
     flexDirection: 'row', alignItems: 'center', gap: 12,
     shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
-    borderLeftWidth: 3, borderLeftColor: ORANGE,
+    borderLeftWidth: 3, borderLeftColor: COLORS.warning,
   },
   tenantName: { fontSize: 15, fontWeight: '700', color: COLORS.text },
   meta: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
   period: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
   dueRow: { fontSize: 11, color: COLORS.muted, marginTop: 3 },
   advanceRow: { fontSize: 11, color: '#7C3AED', fontWeight: '600', marginTop: 2 },
-  outstanding: { fontSize: 17, fontWeight: '700', color: ORANGE },
+  outstanding: { fontSize: 17, fontWeight: '700', color: COLORS.warning },
   reminderBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: '#E8FFF0', paddingHorizontal: 8, paddingVertical: 5,

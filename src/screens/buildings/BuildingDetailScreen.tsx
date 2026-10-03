@@ -34,9 +34,11 @@ export default function BuildingDetailScreen({ navigation, route }: Props) {
   const [units, setUnits] = useState<UnitWithTenants[]>([]);
   const [requestsCount, setRequestsCount] = useState<number>(0);
   const [noticesCount, setNoticesCount] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
     const [{ data: b }, { data: u }, { count: rCount }, { count: nCount }] = await Promise.all([
       supabase.from('buildings').select('*').eq('id', buildingId).single(),
       supabase.from('units').select('*, tenants(id, full_name, is_active, resident_type)').eq('building_id', buildingId).order('unit_number'),
@@ -47,10 +49,11 @@ export default function BuildingDetailScreen({ navigation, route }: Props) {
     if (u) setUnits(u as any);
     setRequestsCount(rCount ?? 0);
     setNoticesCount(nCount ?? 0);
+    setLoading(false);
   }, [buildingId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
-  const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
+  const onRefresh = async () => { setRefreshing(true); setLoading(false); await load(); setRefreshing(false); };
 
   const deleteUnit = async (id: string) => {
     Alert.alert('Delete Unit?', 'This will remove the unit and any resident data.', [
@@ -173,13 +176,13 @@ export default function BuildingDetailScreen({ navigation, route }: Props) {
             </TouchableOpacity>
           </View>
         }
-        ListEmptyComponent={
+        ListEmptyComponent={loading ? null : (
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>🚪</Text>
             <Text style={styles.emptyTitle}>No units yet</Text>
             <Text style={styles.emptyText}>Add flats, rooms, or sections for this property.</Text>
           </View>
-        }
+        )}
         renderItem={({ item }) => {
           const activeTenants = item.tenants?.filter(t => t.is_active) ?? [];
           const isVacant = item.is_vacant;

@@ -14,6 +14,7 @@ import { COLORS, PAYMENT_MODES } from '../../constants';
 import { formatCurrency, currentMonthDate } from '../../utils';
 import Card from '../../components/common/Card';
 import BlueBannerHeader from '../../components/common/BlueBannerHeader';
+import DatePickerField from '../../components/common/DatePickerField';
 
 type Props = {
   navigation: NativeStackNavigationProp<AppStackParamList, 'RecordPayment'>;
@@ -134,13 +135,11 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
         onBack={() => navigation.goBack()}
       />
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <FormField
-          label="Payment Month (YYYY-MM-DD)"
+        <DatePickerField
+          label="Payment Month"
           required
-          placeholder="2025-01-01"
           value={paymentMonth}
-          onChangeText={setPaymentMonth}
-          keyboardType="numeric"
+          onChange={setPaymentMonth}
         />
 
         {!isOwner && (
@@ -238,7 +237,7 @@ export default function RecordPaymentScreen({ navigation, route }: Props) {
         </Card>
 
         <SelectField label="Payment Mode" options={[...PAYMENT_MODES]} value={paymentMode} onChange={setPaymentMode} />
-        <FormField label="Payment Date" placeholder="YYYY-MM-DD" value={paymentDate} onChangeText={setPaymentDate} keyboardType="numeric" />
+        <DatePickerField label="Payment Date" value={paymentDate} onChange={setPaymentDate} />
         <FormField label="Notes" placeholder="Optional notes e.g. Transaction ID / Cheque No." multiline numberOfLines={2} value={notes} onChangeText={setNotes} />
 
         <Button title="💾 Save & Generate Receipt" onPress={save} loading={loading} style={{ marginTop: 16 }} />

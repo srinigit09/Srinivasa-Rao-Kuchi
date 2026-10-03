@@ -32,15 +32,33 @@ export default function BuildingsScreen({ navigation }: Props) {
     if (!user) return;
     const { data } = await supabase
       .from('buildings')
-      .select(`id, name, address, building_type, society_name, monthly_maintenance_charge, created_at, units(id, is_vacant)`)
+      .select(`id, name, address, building_type, society_name, monthly_maintenance_charge, created_at, units(id, is_vacant, total_beds, tenants(id, is_active))`)
       .eq('owner_id', user.id)
       .order('created_at', { ascending: true });
 
-    const enriched = (data ?? []).map((b: any) => ({
-      ...b,
-      total_units: b.units?.length ?? 0,
-      vacant_units: b.units?.filter((u: any) => u.is_vacant).length ?? 0,
-    }));
+    const enriched = (data ?? []).map((b: any) => {
+      const units = b.units ?? [];
+      const isPG = b.building_type === 'pg';
+      let totalCapacity = 0;
+      let occupiedCount = 0;
+      if (isPG) {
+        // For PG: capacity = sum of total_beds, occupied = active tenants across all units
+        units.forEach((u: any) => {
+          totalCapacity += u.total_beds ?? 1;
+          occupiedCount += (u.tenants ?? []).filter((t: any) => t.is_active).length;
+        });
+      } else {
+        totalCapacity = units.length;
+        occupiedCount = units.filter((u: any) => !u.is_vacant).length;
+      }
+      return {
+        ...b,
+        total_units: units.length,
+        vacant_units: Math.max(0, totalCapacity - occupiedCount),
+        _totalCapacity: totalCapacity,
+        _occupiedCount: occupiedCount,
+      };
+    });
     setBuildings(enriched);
   }, [user]);
 
@@ -113,12 +131,14 @@ export default function BuildingsScreen({ navigation }: Props) {
                   <View style={styles.tags}>
                     <Tag label={`${item.total_units ?? 0} units`} />
                     {(item.total_units ?? 0) === 0 ? (
-                      <Tag label="No Units Added" color={COLORS.muted} />
-                    ) : (item.vacant_units ?? 0) > 0 ? (
-                      <Tag label={`${item.vacant_units} vacant`} color={COLORS.warning} />
-                    ) : (
-                      <Tag label="Fully Occupied" color={COLORS.success} />
-                    )}
+                        <Tag label="No Units Added" color={COLORS.muted} />
+                      ) : ((item as any)._totalCapacity ?? 0) === 0 ? (
+                        <Tag label="No Capacity" color={COLORS.muted} />
+                      ) : (item.vacant_units ?? 0) > 0 ? (
+                        <Tag label={`${item.vacant_units} vacant`} color={COLORS.warning} />
+                      ) : (
+                        <Tag label="Fully Occupied" color={COLORS.success} />
+                      )}
                     {item.monthly_maintenance_charge && item.monthly_maintenance_charge > 0 ? (
                       <Tag label={`₹${item.monthly_maintenance_charge}/mo Maint`} color={COLORS.accent} />
                     ) : null}

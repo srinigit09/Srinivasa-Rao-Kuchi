@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
+import DatePickerField from '../../components/common/DatePickerField';
 import { COLORS } from '../../constants';
 import { formatCurrency } from '../../utils';
 
@@ -162,10 +163,6 @@ export default function AddTenantStep3Screen({ navigation, route }: Props) {
         }),
       }],
     );
-    navigation.reset({
-      index: 1,
-      routes: [{ name: 'Tabs' }, { name: 'BuildingDetail', params: { buildingId } }],
-    });
   };
 
   const effectiveRent = rentOverride ? parseFloat(rentOverride) || 0 : unitRent;
@@ -202,13 +199,11 @@ export default function AddTenantStep3Screen({ navigation, route }: Props) {
           value={deposit}
           onChangeText={setDeposit}
         />
-        <FormField
+        <DatePickerField
           label="Move-in Date"
           required
-          placeholder="YYYY-MM-DD"
           value={moveInDate}
-          onChangeText={setMoveInDate}
-          keyboardType="numeric"
+          onChange={setMoveInDate}
         />
         <FormField
           label="Emergency Contact Name"

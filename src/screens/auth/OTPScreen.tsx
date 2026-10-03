@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, TextInput, KeyboardAvoidingView,
-  Platform, TouchableOpacity, ScrollView,
+  Platform, TouchableOpacity, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
@@ -21,31 +21,18 @@ type Props = {
 const HEADER_BLUE = '#1D4ED8';
 
 export default function OTPScreen({ navigation, route }: Props) {
-  const { email, phone } = route.params;
-  const target = email || phone || '';
+  const { phone, email } = route.params;
+  const isPhoneFlow = !!phone;
+  const target = phone
+    ? `+91 ${phone.slice(0, 5)} ${phone.slice(5)}`
+    : (email ?? '');
   const insets = useSafeAreaInsets();
 
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [defaultOtp, setDefaultOtp] = useState<string | null>(null);
-  const [useSupabaseOtp, setUseSupabaseOtp] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
   const inputs = useRef<(TextInput | null)[]>([]);
-
-  useEffect(() => {
-    supabase.from('app_settings').select('key, value')
-      .in('key', ['default_otp', 'use_supabase_otp'])
-      .then(({ data }) => {
-        const map: Record<string, string> = {};
-        (data ?? []).forEach((r: any) => { map[r.key] = r.value; });
-        setDefaultOtp(map['default_otp'] ?? '123456');
-        setUseSupabaseOtp(map['use_supabase_otp'] === 'true');
-        if (map['use_supabase_otp'] !== 'true') {
-          const pre = (map['default_otp'] ?? '123456').split('').slice(0, 6);
-          setOtp(pre);
-        }
-      });
-  }, []);
 
   const handleChange = (text: string, index: number) => {
     setError(null);
@@ -63,61 +50,106 @@ export default function OTPScreen({ navigation, route }: Props) {
     setError(null);
 
     try {
-      let authUser = null;
-
-      if (useSupabaseOtp) {
-        const { data, error: verifyErr } = await supabase.auth.verifyOtp({
-          email: target,
-          token,
-          type: 'email',
+      if (isPhoneFlow) {
+        // ── MSG91 OTP verification via Edge Function ──────────────────────────
+        const { data, error: fnErr } = await supabase.functions.invoke('verify-otp', {
+          body: { phone, otp: token },
         });
-        if (verifyErr || !data?.user) {
-          setLoading(false);
-          setError(verifyErr?.message ?? 'Invalid OTP. Please try again.');
+
+        setLoading(false);
+
+        if (fnErr || data?.error) {
+          setError(data?.error ?? fnErr?.message ?? 'Invalid OTP. Please try again.');
           return;
         }
-        authUser = data.user;
+
+        // Set the Supabase session returned from the Edge Function
+        await supabase.auth.setSession({
+          access_token:  data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+
+        // Account status checks
+        if (data.profile?.is_active === false) {
+          await supabase.auth.signOut();
+          showAlert('Account Inactive', 'Your account has been deactivated. Please contact the administrator.');
+          return;
+        }
+        if (data.profile?.valid_until && new Date(data.profile.valid_until) < new Date()) {
+          await supabase.auth.signOut();
+          showAlert('Subscription Expired', 'Your validity period has expired. Please contact admin.');
+          return;
+        }
+
+        // New user — go to profile setup
+        if (data.isNewUser || !data.profile?.full_name) {
+          navigation.navigate('ProfileSetup', { phone });
+        }
+        // Existing user — RootNavigator detects session and redirects automatically
+
       } else {
-        if (token !== (defaultOtp ?? '123456')) {
-          setLoading(false);
-          setError(`Invalid OTP. Default is ${defaultOtp ?? '123456'}.`);
+        // ── Legacy email/default OTP flow ─────────────────────────────────────
+        const { data: settings } = await supabase
+          .from('app_settings')
+          .select('key, value')
+          .in('key', ['default_otp', 'use_supabase_otp']);
+        const map: Record<string, string> = {};
+        (settings ?? []).forEach((r: any) => { map[r.key] = r.value; });
+        const useSupabaseOtp = map['use_supabase_otp'] === 'true';
+        const defaultOtp = map['default_otp'] ?? '123456';
+
+        let authUser = null;
+        if (useSupabaseOtp) {
+          const { data, error: verifyErr } = await supabase.auth.verifyOtp({
+            email: email!,
+            token,
+            type: 'email',
+          });
+          if (verifyErr || !data?.user) {
+            setLoading(false);
+            setError(verifyErr?.message ?? 'Invalid OTP. Please try again.');
+            return;
+          }
+          authUser = data.user;
+        } else {
+          if (token !== defaultOtp) {
+            setLoading(false);
+            setError(`Invalid OTP. Default is ${defaultOtp}.`);
+            return;
+          }
+          const pwd = `Pass#${email!.replace(/[^a-zA-Z0-9]/g, '')}!2026`;
+          await supabase.auth.signUp({ email: email!, password: pwd });
+          const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+            email: email!, password: pwd,
+          });
+          if (signInErr || !signInData?.user) {
+            setLoading(false);
+            setError(signInErr?.message ?? 'Login failed. Please try again.');
+            return;
+          }
+          authUser = signInData.user;
+        }
+
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('id, full_name, is_active, valid_until')
+          .eq('id', authUser.id)
+          .single();
+
+        setLoading(false);
+        if (profileData?.is_active === false) {
+          await supabase.auth.signOut();
+          showAlert('Account Inactive', 'Your account has been deactivated. Please contact the administrator.');
           return;
         }
-        const pwd = `Pass#${target.replace(/[^a-zA-Z0-9]/g, '')}!2026`;
-        await supabase.auth.signUp({ email: target, password: pwd });
-        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
-          email: target,
-          password: pwd,
-        });
-        if (signInErr || !signInData?.user) {
-          setLoading(false);
-          setError(signInErr?.message ?? 'Login failed. Please try again.');
+        if (profileData?.valid_until && new Date(profileData.valid_until) < new Date()) {
+          await supabase.auth.signOut();
+          showAlert('Subscription Expired', 'Your validity period has expired. Please contact admin.');
           return;
         }
-        authUser = signInData.user;
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id, full_name, is_active, valid_until')
-        .eq('id', authUser.id)
-        .single();
-
-      setLoading(false);
-
-      if (profile?.is_active === false) {
-        await supabase.auth.signOut();
-        showAlert('Account Inactive', 'Your account has been deactivated. Please contact the administrator.');
-        return;
-      }
-      if (profile?.valid_until && new Date(profile.valid_until) < new Date()) {
-        await supabase.auth.signOut();
-        showAlert('Subscription Expired', 'Your validity period has expired. Please contact admin.');
-        return;
-      }
-
-      if (!profile?.full_name) {
-        navigation.navigate('ProfileSetup', { email: email || undefined });
+        if (!profileData?.full_name) {
+          navigation.navigate('ProfileSetup', { email: email || undefined });
+        }
       }
     } catch (e: any) {
       setLoading(false);
@@ -125,18 +157,37 @@ export default function OTPScreen({ navigation, route }: Props) {
     }
   };
 
-  const resend = () => navigation.goBack();
+  const handleResend = async () => {
+    setResendLoading(true);
+    setError(null);
+    setOtp(['', '', '', '', '', '']);
+    try {
+      if (isPhoneFlow) {
+        const { data, error: fnErr } = await supabase.functions.invoke('send-otp', {
+          body: { phone },
+        });
+        if (fnErr || data?.error) setError(data?.error ?? fnErr?.message ?? 'Failed to resend OTP.');
+      } else {
+        navigation.goBack();
+      }
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to resend OTP.');
+    }
+    setResendLoading(false);
+    inputs.current[0]?.focus();
+  };
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      {/* Blue banner */}
       <View style={[styles.banner, { paddingTop: insets.top + 16 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.bannerTitle}>Enter OTP</Text>
-          <Text style={styles.bannerSub} numberOfLines={1}>Sent to {target}</Text>
+          <Text style={styles.bannerSub} numberOfLines={1}>
+            {isPhoneFlow ? '📱 SMS sent to ' : '📧 Sent to '}{target}
+          </Text>
         </View>
       </View>
 
@@ -144,11 +195,11 @@ export default function OTPScreen({ navigation, route }: Props) {
         contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 32 }]}
         keyboardShouldPersistTaps="handled"
       >
-        {!useSupabaseOtp && defaultOtp && (
+        {isPhoneFlow && (
           <View style={styles.hintBox}>
-            <Ionicons name="information-circle-outline" size={18} color={COLORS.primary} />
+            <Ionicons name="chatbubble-outline" size={18} color={COLORS.primary} />
             <Text style={styles.hintText}>
-              Default OTP: <Text style={styles.hintBold}>{defaultOtp}</Text>
+              Check your <Text style={styles.hintBold}>SMS messages</Text> for the 6-digit OTP from Supabase / your service provider.
             </Text>
           </View>
         )}
@@ -159,7 +210,7 @@ export default function OTPScreen({ navigation, route }: Props) {
           </View>
         ) : null}
 
-        <Text style={styles.label}>6-digit code</Text>
+        <Text style={styles.label}>6-digit OTP</Text>
         <View style={styles.otpRow}>
           {otp.map((digit, i) => (
             <TextInput
@@ -181,8 +232,13 @@ export default function OTPScreen({ navigation, route }: Props) {
 
         <Button title="Verify & Continue" onPress={handleVerify} loading={loading} style={{ marginTop: 28 }} />
 
-        <TouchableOpacity style={styles.resendBtn} onPress={resend}>
-          <Text style={styles.resendText}>← Change email / Resend OTP</Text>
+        <TouchableOpacity style={styles.resendBtn} onPress={handleResend} disabled={resendLoading}>
+          {resendLoading
+            ? <ActivityIndicator size="small" color={COLORS.primary} />
+            : <Text style={styles.resendText}>
+                {isPhoneFlow ? '🔄 Resend OTP' : '← Change email / Resend OTP'}
+              </Text>
+          }
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -193,11 +249,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
   banner: {
     backgroundColor: HEADER_BLUE,
-    paddingHorizontal: 16,
-    paddingBottom: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    paddingHorizontal: 16, paddingBottom: 20,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
   },
   backBtn: {
     width: 36, height: 36, borderRadius: 10,
@@ -205,27 +258,27 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   bannerTitle: { fontSize: 22, fontWeight: '800', color: '#fff' },
-  bannerSub:   { fontSize: 13, color: 'rgba(255,255,255,0.78)', marginTop: 2 },
+  bannerSub: { fontSize: 13, color: 'rgba(255,255,255,0.78)', marginTop: 2 },
   body: { paddingHorizontal: 24, paddingTop: 32 },
   hintBox: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
     backgroundColor: COLORS.primaryLight, borderRadius: 10,
-    padding: 12, marginBottom: 20,
+    padding: 14, marginBottom: 20,
   },
-  hintText:  { fontSize: 14, color: COLORS.primary },
-  hintBold:  { fontWeight: '800' },
+  hintText: { flex: 1, fontSize: 14, color: COLORS.primary, lineHeight: 20 },
+  hintBold: { fontWeight: '800' },
   errorBox: {
     backgroundColor: COLORS.dangerLight, padding: 12, borderRadius: 8,
     marginBottom: 16, borderWidth: 1, borderColor: '#FCA5A5',
   },
   errorText: { color: COLORS.danger, fontSize: 13, fontWeight: '500' },
-  label:    { fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 12 },
-  otpRow:   { flexDirection: 'row', gap: 8 },
-  otpBox:   {
+  label: { fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 12 },
+  otpRow: { flexDirection: 'row', gap: 8 },
+  otpBox: {
     flex: 1, height: 58, borderWidth: 1.5, borderColor: COLORS.border,
     borderRadius: 10, textAlign: 'center', fontSize: 24, fontWeight: '700',
     color: COLORS.text, backgroundColor: COLORS.surface,
   },
   resendBtn: { alignItems: 'center', marginTop: 20, paddingVertical: 8 },
-  resendText:{ color: COLORS.primary, fontSize: 14, fontWeight: '600' },
+  resendText: { color: COLORS.primary, fontSize: 14, fontWeight: '600' },
 });

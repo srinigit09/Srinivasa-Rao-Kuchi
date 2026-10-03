@@ -125,8 +125,14 @@ export default function TenantProfileScreen({ navigation, route }: Props) {
           onPress={() => navigation.navigate('PaymentHistory', { tenantId })}
         />
         <ActionBtn
+          icon="create-outline"
+          label="Edit Details"
+          onPress={() => navigation.navigate('EditTenant', { tenantId })}
+          color="#7C3AED"
+        />
+        <ActionBtn
           icon="logo-whatsapp"
-          label="Send Reminder"
+          label="Reminder"
           onPress={sendReminder}
           color="#25D366"
         />
@@ -246,18 +252,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 14,
     marginBottom: 10,
-    gap: 8,
+    gap: 6,
   },
   actionBtn: {
     flex: 1,
     backgroundColor: COLORS.white,
-    paddingVertical: 12,
-    paddingHorizontal: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
     borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.border,
-    gap: 6,
+    gap: 4,
   },
   actionIconWrap: {
     width: 38,

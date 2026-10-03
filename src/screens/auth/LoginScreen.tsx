@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, KeyboardAvoidingView, Platform,
-  ScrollView, TouchableOpacity, TextInput, StatusBar,
+  ScrollView, TouchableOpacity, TextInput, StatusBar, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -15,69 +15,83 @@ import FormField from '../../components/common/FormField';
 import { COLORS } from '../../constants';
 import { showAlert } from '../../utils';
 
-const HEADER_BLUE = '#1D4ED8';
+const PHONE_RE = /^\d{10}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const BIOMETRIC_KEY = 'rentease_biometric_enabled';
+const ADMIN_EMAIL = 'srinivas06in@gmail.com';
 
-/** Converts raw Supabase/network errors into user-friendly messages */
+// ─────────────────────────────────────────────────────────────────────────────
+// LOGIN MODE — controlled from app_settings table (admin can change in Settings)
+// ─────────────────────────────────────────────────────────────────────────────
+//  'bypass' (DEFAULT) — phone + name, no OTP, free forever
+//  'email'            — email + OTP via email (free via Supabase)
+//  'phone'            — mobile + OTP via SMS (MSG91, paid)
+//
+// Admin changes this inside the app: Settings → Login Mode
+// No code change or app update needed to switch modes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type LoginMode = 'bypass' | 'email' | 'phone';
+
 const friendlyError = (msg: string): string => {
   const m = msg.toLowerCase();
-  if (m.includes('fetch') || m.includes('network') || m.includes('failed to fetch') || m.includes('networkerror') || m.includes('timeout') || m.includes('abort')) {
+  if (m.includes('fetch') || m.includes('network') || m.includes('networkerror') || m.includes('timeout') || m.includes('abort'))
     return 'No internet connection. Please check your network and try again.';
-  }
-  if (m.includes('invalid login credentials') || m.includes('invalid email') || m.includes('invalid password')) {
+  if (m.includes('invalid login credentials') || m.includes('invalid email') || m.includes('invalid password'))
     return 'Incorrect email or password. Please try again.';
-  }
-  if (m.includes('email not confirmed')) {
-    return 'Please verify your email address before signing in.';
-  }
-  if (m.includes('too many requests') || m.includes('rate limit')) {
+  if (m.includes('too many requests') || m.includes('rate limit'))
     return 'Too many attempts. Please wait a moment and try again.';
-  }
-  return msg; // fallback to original if no match
+  return msg;
 };
 
 type Props = { navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'> };
 
-const ADMIN_EMAIL = 'srinivas06in@gmail.com';
-const BIOMETRIC_KEY = 'rentease_biometric_enabled';
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 export default function LoginScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+
+  const [loginMode, setLoginMode] = useState<LoginMode>('bypass');
+  const [modeLoaded, setModeLoaded] = useState(false);
+
+  // Bypass fields
+  const [bypassPhone, setBypassPhone] = useState('');
+  const [bypassName, setBypassName] = useState('');
+  const [bypassLoading, setBypassLoading] = useState(false);
+  const [bypassError, setBypassError] = useState<string | null>(null);
+
+  // Email OTP fields
   const [email, setEmail] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+
+  // Phone OTP fields
+  const [phone, setPhone] = useState('');
+  const [phoneLoading, setPhoneLoading] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+
+  // Admin fields
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [adminEmail, setAdminEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
+
   const [hasBiometrics, setHasBiometrics] = useState(false);
-
-  // OTP inline state (client flow only)
-  const [otpVisible, setOtpVisible] = useState(false);
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [defaultOtp, setDefaultOtp] = useState<string | null>(null);  // null = not loaded yet
-  const [useSupabaseOtp, setUseSupabaseOtp] = useState(false);
-  const inputs = useRef<(TextInput | null)[]>([]);
-
-  const isAdmin = email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
   useEffect(() => {
     checkBiometrics();
-    loadOtpSettings();
+    loadSettings();
   }, []);
 
-  const loadOtpSettings = async () => {
+  const loadSettings = async () => {
     const { data } = await supabase
       .from('app_settings')
       .select('key, value')
-      .in('key', ['default_otp', 'use_supabase_otp']);
-
-    if (data) {
-      const map: Record<string, string> = {};
-      data.forEach((r: { key: string; value: string }) => { map[r.key] = r.value; });
-      setDefaultOtp(map['default_otp'] ?? '123456');
-      setUseSupabaseOtp(map['use_supabase_otp'] === 'true');
-    } else {
-      setDefaultOtp('123456');
-    }
+      .in('key', ['login_mode', 'default_otp', 'use_supabase_otp']);
+    const map: Record<string, string> = {};
+    (data ?? []).forEach((r: any) => { map[r.key] = r.value; });
+    const mode = (map['login_mode'] as LoginMode) || 'bypass';
+    setLoginMode(mode);
+    setModeLoaded(true);
   };
 
   const checkBiometrics = async () => {
@@ -93,149 +107,306 @@ export default function LoginScreen({ navigation }: Props) {
     try {
       const res = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Unlock RentEase with Biometrics',
-        fallbackLabel: 'Use Email / Password',
+        fallbackLabel: 'Use Email / Phone',
       });
       if (res.success) {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) {
-          showAlert('Session Expired', 'Please log in with your email to refresh your session.');
-        }
+        if (!session?.user) showAlert('Session Expired', 'Please log in again.');
       }
-    } catch (e: any) {
-      showAlert('Biometric Error', e.message);
-    }
+    } catch (e: any) { showAlert('Biometric Error', e.message); }
   };
 
-  // ── Admin login ────────────────────────────────────────────
-  const handleAdminLogin = async () => {
-    setError(null);
-    const cleanEmail = email.trim().toLowerCase();
-    if (!EMAIL_RE.test(cleanEmail)) { setError('Please enter a valid email address.'); return; }
-    if (!password.trim()) { setError('Please enter the admin password.'); return; }
+  // ── BYPASS MODE: phone + name, no OTP ────────────────────────────────────
+  // Uses a deterministic password derived from phone number.
+  // The account is created silently on first login.
+  const handleBypassLogin = async () => {
+    setBypassError(null);
+    const cleanPhone = bypassPhone.replace(/\D/g, '');
+    if (!PHONE_RE.test(cleanPhone)) {
+      setBypassError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    if (!bypassName.trim()) {
+      setBypassError('Please enter your name.');
+      return;
+    }
+    setBypassLoading(true);
 
-    setLoading(true);
-    const { data, error: signInErr } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
-      password: password.trim(),
-    });
+    // Deterministic synthetic credentials from phone number
+    const syntheticEmail = `${cleanPhone}@rentease.app`;
+    const syntheticPwd   = `Ph#${cleanPhone}!RE2026`;
 
-    if (signInErr) {
-      // First-time admin — auto create
-      if (signInErr.message.toLowerCase().includes('invalid login credentials')) {
+    try {
+      // Try signing in first (returning user)
+      let { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+        email: syntheticEmail,
+        password: syntheticPwd,
+      });
+
+      if (signInErr) {
+        // New user — create account silently
         const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
-          email: cleanEmail,
-          password: password.trim(),
+          email: syntheticEmail,
+          password: syntheticPwd,
+          options: { emailRedirectTo: undefined },
         });
-        if (signUpErr) {
-          setLoading(false);
-          setError(friendlyError(signUpErr.message));
+        if (signUpErr || !signUpData?.user) {
+          setBypassLoading(false);
+          setBypassError(friendlyError(signUpErr?.message ?? 'Could not create account.'));
           return;
         }
-        if (signUpData.user) {
-          await supabase.from('profiles').upsert({
-            id: signUpData.user.id,
-            email: cleanEmail,
-            full_name: 'Super Admin',
-            role: 'admin',
-            is_active: true,
-          });
+        // Sign in the new account
+        const reSignIn = await supabase.auth.signInWithPassword({
+          email: syntheticEmail, password: syntheticPwd,
+        });
+        if (reSignIn.error || !reSignIn.data?.session) {
+          setBypassLoading(false);
+          setBypassError(friendlyError(reSignIn.error?.message ?? 'Login failed.'));
+          return;
         }
-      } else {
-        setLoading(false);
-        setError(friendlyError(signInErr.message));
+        signInData = reSignIn.data;
+      }
+
+      const userId = signInData?.session?.user?.id;
+      if (!userId) {
+        setBypassLoading(false);
+        setBypassError('Login failed. Please try again.');
         return;
       }
-    } else if (data.user) {
+
+      // Check / create profile
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id, full_name, is_active, valid_until')
+        .eq('id', userId)
+        .single();
+
+      if (existingProfile?.is_active === false) {
+        await supabase.auth.signOut();
+        setBypassLoading(false);
+        showAlert('Account Inactive', 'Your account has been deactivated. Please contact the administrator.');
+        return;
+      }
+      if (existingProfile?.valid_until && new Date(existingProfile.valid_until) < new Date()) {
+        await supabase.auth.signOut();
+        setBypassLoading(false);
+        showAlert('Subscription Expired', 'Your validity period has expired. Please contact admin.');
+        return;
+      }
+
+      // Upsert profile with name + phone (create if new, update name if changed)
       await supabase.from('profiles').upsert({
-        id: data.user.id,
-        email: cleanEmail,
-        role: 'admin',
-      });
+        id: userId,
+        full_name: bypassName.trim(),
+        phone_number: cleanPhone,
+        role: existingProfile?.full_name ? undefined : 'client',
+        is_active: existingProfile?.full_name ? undefined : true,
+        valid_until: existingProfile?.full_name
+          ? undefined
+          : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      }, { onConflict: 'id' });
+
+      setBypassLoading(false);
+      // RootNavigator detects the session and navigates automatically
+    } catch (e: any) {
+      setBypassLoading(false);
+      setBypassError(friendlyError(e.message ?? 'Login failed.'));
     }
-    setLoading(false);
   };
 
-  // ── Client: "Get OTP" pressed — navigate to OTP screen ────
-  const handleGetOtp = async () => {
-    setError(null);
-    const cleanEmail = email.trim().toLowerCase();
-    if (!EMAIL_RE.test(cleanEmail)) { setError('Please enter a valid email address.'); return; }
-
-    setLoading(true);
-
-    if (useSupabaseOtp) {
-      const { error: otpErr } = await supabase.auth.signInWithOtp({
-        email: cleanEmail,
-        options: { shouldCreateUser: true },
-      });
-      setLoading(false);
-      if (otpErr) { setError(friendlyError(otpErr.message)); return; }
-    } else {
-      setLoading(false);
+  // ── EMAIL OTP ─────────────────────────────────────────────────────────────
+  const handleEmailOtp = async () => {
+    setEmailError(null);
+    const clean = email.trim().toLowerCase();
+    if (!EMAIL_RE.test(clean)) { setEmailError('Please enter a valid email address.'); return; }
+    setEmailLoading(true);
+    try {
+      const { data: s } = await supabase.from('app_settings').select('key, value').eq('key', 'use_supabase_otp').single();
+      if ((s as any)?.value === 'true') {
+        const { error: otpErr } = await supabase.auth.signInWithOtp({ email: clean, options: { shouldCreateUser: true } });
+        if (otpErr) { setEmailLoading(false); setEmailError(friendlyError(otpErr.message)); return; }
+      }
+      setEmailLoading(false);
+      navigation.navigate('OTP', { email: clean });
+    } catch (e: any) {
+      setEmailLoading(false);
+      setEmailError(friendlyError(e.message ?? 'Failed. Please try again.'));
     }
-
-    navigation.navigate('OTP', { email: cleanEmail });
   };
+
+  // ── PHONE OTP (MSG91) ─────────────────────────────────────────────────────
+  const handlePhoneOtp = async () => {
+    setPhoneError(null);
+    const clean = phone.replace(/\D/g, '');
+    if (!PHONE_RE.test(clean)) { setPhoneError('Please enter a valid 10-digit mobile number.'); return; }
+    setPhoneLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-otp', { body: { phone: clean } });
+      setPhoneLoading(false);
+      if (error || data?.error) { setPhoneError(data?.error ?? friendlyError(error?.message ?? 'Failed to send OTP.')); return; }
+      navigation.navigate('OTP', { phone: clean });
+    } catch (e: any) {
+      setPhoneLoading(false);
+      setPhoneError(friendlyError(e.message ?? 'Failed to send OTP.'));
+    }
+  };
+
+  // ── ADMIN LOGIN ───────────────────────────────────────────────────────────
+  const handleAdminLogin = async () => {
+    setAdminError(null);
+    const clean = adminEmail.trim().toLowerCase();
+    if (!EMAIL_RE.test(clean)) { setAdminError('Please enter a valid email address.'); return; }
+    if (!password.trim()) { setAdminError('Please enter the admin password.'); return; }
+    setAdminLoading(true);
+    const { data, error: signInErr } = await supabase.auth.signInWithPassword({ email: clean, password: password.trim() });
+    if (signInErr) {
+      if (signInErr.message.toLowerCase().includes('invalid login credentials')) {
+        const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({ email: clean, password: password.trim() });
+        if (signUpErr) { setAdminLoading(false); setAdminError(friendlyError(signUpErr.message)); return; }
+        if (signUpData.user) {
+          await supabase.from('profiles').upsert({ id: signUpData.user.id, email: clean, full_name: 'Super Admin', role: 'admin', is_active: true });
+        }
+      } else { setAdminLoading(false); setAdminError(friendlyError(signInErr.message)); return; }
+    } else if (data.user) {
+      await supabase.from('profiles').upsert({ id: data.user.id, email: clean, role: 'admin' });
+    }
+    setAdminLoading(false);
+  };
+
+  if (!modeLoaded) {
+    return (
+      <View style={[styles.flex, { justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.primaryDark }]}>
+        <ActivityIndicator color="#fff" size="large" />
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <StatusBar barStyle="light-content" backgroundColor={HEADER_BLUE} />
-
-      {/* Blue banner header */}
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primaryDark} />
       <View style={[styles.banner, { paddingTop: insets.top + 20 }]}>
         <Text style={styles.bannerLogo}>🏠</Text>
         <Text style={styles.bannerAppName}>RentEase</Text>
         <Text style={styles.bannerTagline}>Property & Tenant Management</Text>
       </View>
 
-      <ScrollView
-        contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + 32 }]}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Error */}
-        {error ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>⚠️ {error}</Text>
-          </View>
-        ) : null}
+      <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + 32 }]} keyboardShouldPersistTaps="handled">
 
-        {/* Email field */}
-        <FormField
-          label="Email Address"
-          required
-          placeholder="Enter your email"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          value={email}
-          onChangeText={(t) => { setEmail(t); setError(null); setOtpVisible(false); setOtp(['', '', '', '', '', '']); }}
-        />
-
-        {/* Admin: password + login button */}
-        {isAdmin ? (
+        {/* ── BYPASS MODE ── */}
+        {!showAdmin && loginMode === 'bypass' && (
           <View>
+            <Text style={styles.sectionTitle}>Welcome to RentEase</Text>
+            <Text style={styles.sectionSub}>Enter your mobile number and name to continue.</Text>
+
+            {bypassError ? <View style={styles.errorBox}><Text style={styles.errorText}>⚠️ {bypassError}</Text></View> : null}
+
+            <View style={styles.phoneRow}>
+              <View style={styles.countryCode}><Text style={styles.countryCodeText}>🇮🇳 +91</Text></View>
+              <TextInput
+                style={styles.phoneInput}
+                placeholder="10-digit mobile number"
+                placeholderTextColor={COLORS.muted}
+                keyboardType="phone-pad"
+                maxLength={10}
+                value={bypassPhone}
+                onChangeText={(t) => { setBypassPhone(t.replace(/\D/g, '')); setBypassError(null); }}
+              />
+            </View>
+
+            <View style={{ height: 12 }} />
+
             <FormField
-              label="Admin Password"
+              label="Your Name"
               required
-              placeholder="Enter admin password"
-              secureTextEntry
-              value={password}
-              onChangeText={(t) => { setPassword(t); setError(null); }}
+              placeholder="Enter your full name"
+              value={bypassName}
+              onChangeText={(t) => { setBypassName(t); setBypassError(null); }}
             />
-            <Text style={styles.adminHint}>🔒 Admin access detected</Text>
-            <Button title="Sign In as Admin" onPress={handleAdminLogin} loading={loading} style={{ marginTop: 8 }} />
-          </View>
-        ) : (
-          <View>
-            <Button title="Get OTP →" onPress={handleGetOtp} loading={loading} style={{ marginTop: 4 }} />
+
+            <Button title="Continue →" onPress={handleBypassLogin} loading={bypassLoading} style={{ marginTop: 4 }} />
+
+            {hasBiometrics && (
+              <TouchableOpacity style={styles.biometricBtn} onPress={handleBiometricAuth}>
+                <Ionicons name="finger-print" size={24} color={COLORS.primary} />
+                <Text style={styles.biometricText}>Login with Fingerprint / FaceID</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.adminLink} onPress={() => setShowAdmin(true)}>
+              <Ionicons name="shield-outline" size={14} color={COLORS.muted} />
+              <Text style={styles.adminLinkText}>Admin Login</Text>
+            </TouchableOpacity>
           </View>
         )}
 
-        {/* Biometric login */}
-        {hasBiometrics && (
-          <TouchableOpacity style={styles.biometricBtn} onPress={handleBiometricAuth}>
-            <Ionicons name="finger-print" size={24} color={COLORS.primary} />
-            <Text style={styles.biometricText}>Login with Fingerprint / FaceID</Text>
-          </TouchableOpacity>
+        {/* ── EMAIL OTP MODE ── */}
+        {!showAdmin && loginMode === 'email' && (
+          <View>
+            <Text style={styles.sectionTitle}>Login with OTP</Text>
+            <Text style={styles.sectionSub}>Enter your email — we'll send you a one-time password.</Text>
+            {emailError ? <View style={styles.errorBox}><Text style={styles.errorText}>⚠️ {emailError}</Text></View> : null}
+            <FormField label="Email Address" required placeholder="Enter your email" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={(t) => { setEmail(t); setEmailError(null); }} />
+            <Button title="Get OTP →" onPress={handleEmailOtp} loading={emailLoading} style={{ marginTop: 4 }} />
+            {hasBiometrics && (
+              <TouchableOpacity style={styles.biometricBtn} onPress={handleBiometricAuth}>
+                <Ionicons name="finger-print" size={24} color={COLORS.primary} />
+                <Text style={styles.biometricText}>Login with Fingerprint / FaceID</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.adminLink} onPress={() => setShowAdmin(true)}>
+              <Ionicons name="shield-outline" size={14} color={COLORS.muted} />
+              <Text style={styles.adminLinkText}>Admin Login</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── PHONE OTP MODE ── */}
+        {!showAdmin && loginMode === 'phone' && (
+          <View>
+            <Text style={styles.sectionTitle}>Login with Mobile OTP</Text>
+            <Text style={styles.sectionSub}>Enter your mobile number — we'll send you an OTP via SMS.</Text>
+            {phoneError ? <View style={styles.errorBox}><Text style={styles.errorText}>⚠️ {phoneError}</Text></View> : null}
+            <View style={styles.phoneRow}>
+              <View style={styles.countryCode}><Text style={styles.countryCodeText}>🇮🇳 +91</Text></View>
+              <TextInput
+                style={styles.phoneInput}
+                placeholder="10-digit mobile number"
+                placeholderTextColor={COLORS.muted}
+                keyboardType="phone-pad"
+                maxLength={10}
+                value={phone}
+                onChangeText={(t) => { setPhone(t.replace(/\D/g, '')); setPhoneError(null); }}
+                returnKeyType="done"
+                onSubmitEditing={handlePhoneOtp}
+              />
+            </View>
+            <Button title="Send OTP →" onPress={handlePhoneOtp} loading={phoneLoading} style={{ marginTop: 12 }} />
+            {hasBiometrics && (
+              <TouchableOpacity style={styles.biometricBtn} onPress={handleBiometricAuth}>
+                <Ionicons name="finger-print" size={24} color={COLORS.primary} />
+                <Text style={styles.biometricText}>Login with Fingerprint / FaceID</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.adminLink} onPress={() => setShowAdmin(true)}>
+              <Ionicons name="shield-outline" size={14} color={COLORS.muted} />
+              <Text style={styles.adminLinkText}>Admin Login</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── ADMIN LOGIN ── */}
+        {showAdmin && (
+          <View>
+            <TouchableOpacity style={styles.backLink} onPress={() => { setShowAdmin(false); setAdminError(null); }}>
+              <Ionicons name="arrow-back" size={16} color={COLORS.primary} />
+              <Text style={styles.backLinkText}>Back to Login</Text>
+            </TouchableOpacity>
+            <Text style={styles.sectionTitle}>Admin Login</Text>
+            {adminError ? <View style={styles.errorBox}><Text style={styles.errorText}>⚠️ {adminError}</Text></View> : null}
+            <FormField label="Admin Email" required placeholder="Enter admin email" keyboardType="email-address" autoCapitalize="none" value={adminEmail} onChangeText={(t) => { setAdminEmail(t); setAdminError(null); }} />
+            <FormField label="Admin Password" required placeholder="Enter admin password" secureTextEntry value={password} onChangeText={(t) => { setPassword(t); setAdminError(null); }} />
+            {adminEmail.trim().toLowerCase() === ADMIN_EMAIL && <Text style={styles.adminHint}>🔒 Admin access</Text>}
+            <Button title="Sign In as Admin" onPress={handleAdminLogin} loading={adminLoading} style={{ marginTop: 8 }} />
+          </View>
         )}
 
       </ScrollView>
@@ -245,51 +416,24 @@ export default function LoginScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
-  banner: {
-    backgroundColor: HEADER_BLUE,
-    alignItems: 'center',
-    paddingBottom: 28,
-    paddingHorizontal: 24,
-  },
+  banner: { backgroundColor: COLORS.primaryDark, alignItems: 'center', paddingBottom: 28, paddingHorizontal: 24 },
   bannerLogo: { fontSize: 48, marginBottom: 8 },
   bannerAppName: { fontSize: 32, fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.5 },
   bannerTagline: { fontSize: 14, color: 'rgba(255,255,255,0.78)', marginTop: 4 },
   container: { paddingHorizontal: 24, paddingTop: 28 },
-  errorBox: {
-    backgroundColor: COLORS.dangerLight,
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-  },
+  sectionTitle: { fontSize: 20, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
+  sectionSub: { fontSize: 13, color: COLORS.muted, marginBottom: 20, lineHeight: 18 },
+  errorBox: { backgroundColor: COLORS.dangerLight, padding: 12, borderRadius: 8, marginBottom: 16, borderWidth: 1, borderColor: '#FCA5A5' },
   errorText: { color: COLORS.danger, fontSize: 13, fontWeight: '500', lineHeight: 18 },
-  adminHint: { fontSize: 12, color: COLORS.primary, fontWeight: '600', marginTop: 2, marginBottom: 4 },
-  otpSection: {
-    marginTop: 20,
-    padding: 16,
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  otpHeader: { marginBottom: 14 },
-  otpLabel: { fontSize: 13, color: COLORS.text, fontWeight: '600' },
-  otpHint: { fontSize: 12, color: COLORS.muted, marginTop: 4 },
-  otpHintBold: { fontWeight: '700', color: COLORS.primary },
-  otpRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
-  otpBox: {
-    flex: 1, height: 52, borderWidth: 1.5, borderColor: COLORS.border,
-    borderRadius: 10, textAlign: 'center', fontSize: 22, fontWeight: '700',
-    color: COLORS.text, backgroundColor: COLORS.white,
-  },
-  resendBtn: { alignItems: 'center', marginTop: 14 },
-  resendText: { color: COLORS.primary, fontSize: 14, fontWeight: '600' },
-  biometricBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, marginTop: 20, paddingVertical: 12,
-    borderWidth: 1, borderColor: COLORS.primaryLight,
-    borderRadius: 10, backgroundColor: COLORS.surface,
-  },
+  phoneRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 10, backgroundColor: COLORS.white, overflow: 'hidden' },
+  countryCode: { paddingHorizontal: 12, paddingVertical: 14, backgroundColor: COLORS.surface, borderRightWidth: 1, borderRightColor: COLORS.border },
+  countryCodeText: { fontSize: 15, fontWeight: '600', color: COLORS.text },
+  phoneInput: { flex: 1, padding: 14, fontSize: 18, fontWeight: '600', color: COLORS.text, letterSpacing: 2 },
+  biometricBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16, paddingVertical: 12, borderWidth: 1, borderColor: COLORS.primaryLight, borderRadius: 10, backgroundColor: COLORS.surface },
   biometricText: { color: COLORS.primary, fontSize: 14, fontWeight: '600' },
+  adminLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 24, paddingVertical: 8 },
+  adminLinkText: { color: COLORS.muted, fontSize: 13 },
+  backLink: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 20 },
+  backLinkText: { color: COLORS.primary, fontSize: 14, fontWeight: '600' },
+  adminHint: { fontSize: 12, color: COLORS.primary, fontWeight: '600', marginTop: 2, marginBottom: 4 },
 });

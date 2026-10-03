@@ -2,8 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-
-const HEADER_BLUE = '#1D4ED8';
+import { COLORS } from '../../constants';
 
 interface Props {
   title: string;
@@ -15,7 +14,7 @@ export default function BlueBannerHeader({ title, subtitle, onBack }: Props) {
   const insets = useSafeAreaInsets();
   return (
     <>
-      <StatusBar barStyle="light-content" backgroundColor={HEADER_BLUE} />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primaryDark} />
       <View style={[styles.banner, { paddingTop: insets.top + 10 }]}>
         <View style={styles.row}>
           {onBack ? (
@@ -35,7 +34,7 @@ export default function BlueBannerHeader({ title, subtitle, onBack }: Props) {
 
 const styles = StyleSheet.create({
   banner: {
-    backgroundColor: HEADER_BLUE,
+    backgroundColor: COLORS.primaryDark,
     paddingHorizontal: 16,
     paddingBottom: 16,
   },

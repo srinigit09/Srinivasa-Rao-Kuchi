@@ -1,3 +1,5 @@
+import { Linking, Platform, Alert } from 'react-native';
+
 // ── Native date helpers (no date-fns dependency) ─────────────────────────────
 
 /** Parse an ISO date string — same as date-fns parseISO */
@@ -52,7 +54,6 @@ export const openWhatsApp = (phone: string, message: string) => {
   const cleaned = phone.replace(/\D/g, '');
   const intl = cleaned.startsWith('91') ? cleaned : `91${cleaned}`;
   const encoded = encodeURIComponent(message);
-  const { Linking } = require('react-native');
   Linking.openURL(`https://wa.me/${intl}?text=${encoded}`);
 };
 
@@ -75,7 +76,6 @@ export const buildReceiptMessage = (receiptNumber: string, tenantName: string, m
   `Dear ${tenantName},\n\nPlease find attached your rent receipt *${receiptNumber}* for *${month}*.\n\nThank you!`;
 
 export const showAlert = (title: string, message?: string, buttons?: { text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }[]) => {
-  const { Platform, Alert } = require('react-native');
   if (Platform.OS === 'web') {
     const fullMsg = message ? `${title}\n\n${message}` : title;
     if (buttons && buttons.length > 1) {

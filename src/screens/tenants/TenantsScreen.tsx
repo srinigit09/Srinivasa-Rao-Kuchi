@@ -1,15 +1,15 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl, Modal,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { COLORS, PROPERTY_TYPES } from '../../constants';
 import { Tenant, BuildingType } from '../../types';
-import { AppStackParamList } from '../../navigation/RootNavigator';
+import { AppStackParamList, MainTabParamList } from '../../navigation/RootNavigator';
 import { formatDate } from '../../utils';
 import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
@@ -23,6 +23,8 @@ interface BuildingSummary {
 
 export default function TenantsScreen({ navigation }: Props) {
   const { user } = useAuth();
+  const route = useRoute<RouteProp<MainTabParamList, 'Tenants'>>();
+
   const [buildings, setBuildings] = useState<BuildingSummary[]>([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -34,7 +36,10 @@ export default function TenantsScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async (silent = false) => {
+  // Track whether we've initialised from a route param already
+  const initialised = useRef(false);
+
+  const load = useCallback(async (silent = false, forceBuildingId?: string) => {
     if (!user) return;
     if (!silent) setLoading(true);
 
@@ -50,11 +55,18 @@ export default function TenantsScreen({ navigation }: Props) {
     }));
     setBuildings(blds);
 
-    const activeBuildingId = selectedBuildingId && blds.find(b => b.id === selectedBuildingId)
-      ? selectedBuildingId
-      : (blds[0]?.id ?? '');
+    // Determine which building to show:
+    // 1. forceBuildingId (from route params when screen is focused)
+    // 2. existing selectedBuildingId if still valid
+    // 3. first building
+    let activeBuildingId = forceBuildingId ?? '';
+    if (!activeBuildingId) {
+      activeBuildingId = selectedBuildingId && blds.find(b => b.id === selectedBuildingId)
+        ? selectedBuildingId
+        : (blds[0]?.id ?? '');
+    }
 
-    if (!selectedBuildingId && activeBuildingId) {
+    if (activeBuildingId !== selectedBuildingId) {
       setSelectedBuildingId(activeBuildingId);
     }
 
@@ -101,8 +113,14 @@ export default function TenantsScreen({ navigation }: Props) {
   };
 
   useFocusEffect(useCallback(() => {
-    load();
-  }, [load]));
+    // On every focus, if a preselected building was passed from Dashboard, use it
+    const preselected = (route.params as any)?.preselectedBuildingId;
+    if (preselected) {
+      load(false, preselected);
+    } else {
+      load();
+    }
+  }, [load, route.params]));
 
   const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 
@@ -114,6 +132,13 @@ export default function TenantsScreen({ navigation }: Props) {
   const handleTypeFilter = (type: 'ALL' | 'tenant' | 'owner_occupant' | 'guest') => {
     setFilterType(type);
     applyFilters(tenants, search, type);
+  };
+
+  const handleBuildingSelect = (id: string) => {
+    setSelectedBuildingId(id);
+    setDropdownOpen(false);
+    // Reload for newly selected building
+    load(false, id);
   };
 
   const selectedBuilding = buildings.find(b => b.id === selectedBuildingId);
@@ -193,7 +218,10 @@ export default function TenantsScreen({ navigation }: Props) {
                 </TouchableOpacity>
               )}
             </View>
-            <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('AddNewTenant')}>
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={() => navigation.navigate('AddNewTenant', { preselectedBuildingId: selectedBuildingId })}
+            >
               <Ionicons name="person-add" size={18} color={COLORS.primary} />
               <Text style={styles.addText}>Add New Resident / Tenant</Text>
             </TouchableOpacity>
@@ -248,7 +276,7 @@ export default function TenantsScreen({ navigation }: Props) {
               <TouchableOpacity
                 key={b.id}
                 style={[styles.dropdownItem, selectedBuildingId === b.id && styles.dropdownItemActive]}
-                onPress={() => { setSelectedBuildingId(b.id); setDropdownOpen(false); }}
+                onPress={() => handleBuildingSelect(b.id)}
               >
                 <Ionicons
                   name="business-outline"

@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
+import DatePickerField from '../../components/common/DatePickerField';
 import { COLORS } from '../../constants';
 import { formatCurrency, formatDate } from '../../utils';
 import Card from '../../components/common/Card';
@@ -44,11 +45,10 @@ export default function MoveOutScreen({ navigation, route }: Props) {
 
   const setNoticePeriod = async () => {
     if (!noticeVacateDate) {
-      Alert.alert('Required', 'Please enter the expected vacating date.');
+      Alert.alert('Required', 'Please select the expected vacating date.');
       return;
     }
     const today = new Date().toISOString().split('T')[0];
-    const isFuture = noticeVacateDate > today;
 
     const { error } = await supabase.from('tenants').update({
       notice_date: today,
@@ -190,12 +190,10 @@ export default function MoveOutScreen({ navigation, route }: Props) {
           <Text style={{ fontSize: 13, color: COLORS.muted, marginBottom: 8 }}>
             If the resident is currently serving notice period, set their expected vacating date here. The unit stays Occupied until final move-out.
           </Text>
-          <FormField
+          <DatePickerField
             label="Expected Vacating Date (Notice Period)"
-            placeholder="YYYY-MM-DD"
             value={noticeVacateDate}
-            onChangeText={setNoticeVacateDate}
-            keyboardType="numeric"
+            onChange={setNoticeVacateDate}
           />
           <Button
             title="⏳ Save Notice Period Only"
@@ -206,13 +204,11 @@ export default function MoveOutScreen({ navigation, route }: Props) {
         </Card>
 
         <Card title="Immediate Final Move-Out">
-          <FormField
+          <DatePickerField
             label="Actual Move-Out Date"
             required
-            placeholder="YYYY-MM-DD"
             value={moveOutDate}
-            onChangeText={setMoveOutDate}
-            keyboardType="numeric"
+            onChange={setMoveOutDate}
           />
           <FormField
             label="Notes (optional)"

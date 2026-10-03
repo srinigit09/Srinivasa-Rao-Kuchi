@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Switch,
+  View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity, Linking,
 } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,6 +15,7 @@ import { formatDate, showAlert } from '../../utils';
 import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
 const BIOMETRIC_KEY = 'rentease_biometric_enabled';
+type LoginMode = 'bypass' | 'email' | 'phone';
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
@@ -30,6 +31,10 @@ export default function SettingsScreen() {
   const [bankIFSC, setBankIFSC] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Login mode (admin only)
+  const [loginMode, setLoginMode] = useState<LoginMode>('bypass');
+  const [loginModeSaving, setLoginModeSaving] = useState(false);
 
   // Biometric state
   const [biometricAvailable, setBiometricAvailable] = useState(false);
@@ -47,7 +52,25 @@ export default function SettingsScreen() {
       setBankIFSC(profile.bank_ifsc ?? '');
     }
     checkBiometricSupport();
+    if (isAdmin) loadLoginMode();
   }, [profile]);
+
+  const loadLoginMode = async () => {
+    const { data } = await supabase
+      .from('app_settings').select('value').eq('key', 'login_mode').single();
+    if (data) setLoginMode(((data as any).value as LoginMode) || 'bypass');
+  };
+
+  const saveLoginMode = async (mode: LoginMode) => {
+    setLoginModeSaving(true);
+    setLoginMode(mode);
+    await supabase.from('app_settings').upsert(
+      { key: 'login_mode', value: mode },
+      { onConflict: 'key' }
+    );
+    setLoginModeSaving(false);
+    showAlert('✅ Saved', `Login mode changed to "${mode}". Takes effect on next app open.`);
+  };
 
   const checkBiometricSupport = async () => {
     try {
@@ -205,6 +228,102 @@ export default function SettingsScreen() {
         <FormField label="IFSC Code" value={bankIFSC} onChangeText={setBankIFSC} placeholder="e.g. SBIN0001234" autoCapitalize="characters" />
       </Card>
 
+      {/* ── Admin: Login Mode Control ── */}
+      {isAdmin && (
+        <Card title="🔐 Login Mode (Admin Control)">
+          <Text style={styles.loginModeDesc}>
+            Controls how users log in. Change this when you're ready to enable OTP.
+          </Text>
+
+          {(['bypass', 'email', 'phone'] as LoginMode[]).map((mode) => {
+            const labels = {
+              bypass: { title: 'Bypass (No OTP)', sub: 'Phone + Name only. Free forever. Current default.' },
+              email:  { title: 'Email OTP',       sub: 'OTP sent to email. Free via Supabase.' },
+              phone:  { title: 'Mobile SMS OTP',  sub: 'OTP via SMS (MSG91). ~₹0.20/SMS. Complete setup below first.' },
+            };
+            const isActive = loginMode === mode;
+            return (
+              <TouchableOpacity
+                key={mode}
+                style={[styles.modeOption, isActive && styles.modeOptionActive]}
+                onPress={() => !isActive && !loginModeSaving && saveLoginMode(mode)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.modeRadio, isActive && styles.modeRadioActive]}>
+                  {isActive && <View style={styles.modeRadioDot} />}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.modeTitle, isActive && { color: COLORS.primary }]}>
+                    {labels[mode].title}
+                    {isActive ? '  ✓ Active' : ''}
+                  </Text>
+                  <Text style={styles.modeSub}>{labels[mode].sub}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+
+          {loginModeSaving && (
+            <Text style={styles.modeSaving}>Saving…</Text>
+          )}
+
+          {/* ── Phone OTP Setup Checklist ── */}
+          <View style={styles.guideBox}>
+            <Text style={styles.guideTitle}>📋 Complete these steps before switching to Mobile SMS OTP</Text>
+
+            <View style={styles.guideStep}>
+              <Text style={styles.guideNum}>1</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.guideStepTitle}>Register on DLT Portal (India mandatory)</Text>
+                <Text style={styles.guideStepSub}>Individual OK — need PAN + Aadhaar. Takes 1–3 days. You will get a PE ID and Template ID.</Text>
+                <View style={styles.linkRow}>
+                  <TouchableOpacity onPress={() => Linking.openURL('https://smsheader.trai.gov.in')}>
+                    <Text style={styles.link}>TRAI DLT Portal (smsheader.trai.gov.in) →</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.guideStep}>
+              <Text style={styles.guideNum}>2</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.guideStepTitle}>Create OTP Template on MSG91</Text>
+                <Text style={styles.guideStepSub}>
+                  Sender ID: RENTEASE · OTP Length: 6 · Expiry: 10 min{'\n'}
+                  Template body:{'\n'}
+                  <Text style={styles.guideCode}>Your RentEase OTP is ##OTP##. Valid for 10 minutes.</Text>{'\n'}
+                  Enter DLT PE ID + DLT Template ID when asked. Note down the MSG91 Template ID.
+                </Text>
+                <TouchableOpacity onPress={() => Linking.openURL('https://msg91.com/in/otp')}>
+                  <Text style={styles.link}>Open MSG91 OTP Templates →</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.guideStep}>
+              <Text style={styles.guideNum}>3</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.guideStepTitle}>Deploy Edge Functions (one-time terminal)</Text>
+                <View style={styles.codeBox}>
+                  <Text style={styles.codeText}>{'supabase functions deploy send-otp\nsupabase functions deploy verify-otp\nsupabase secrets set MSG91_AUTH_KEY=<your_key>\nsupabase secrets set MSG91_TEMPLATE_ID=<msg91_template_id>'}</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.guideStep}>
+              <Text style={styles.guideNum}>4</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.guideStepTitle}>Add credits on MSG91 & switch above ✓</Text>
+                <Text style={styles.guideStepSub}>No subscription needed. ~₹0.20/SMS. Min recharge ₹100. Charged only when tenants log in via SMS OTP.</Text>
+                <TouchableOpacity onPress={() => Linking.openURL('https://msg91.com')}>
+                  <Text style={styles.link}>Open MSG91 Dashboard →</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Card>
+      )}
+
       <View style={styles.btnGroup}>
         <Button title="💾 Save Changes" onPress={save} loading={loading} />
         <Button title="Sign Out" onPress={handleSignOut} variant="ghost" />
@@ -244,4 +363,83 @@ const styles = StyleSheet.create({
   switchSub: { fontSize: 12, color: COLORS.muted, marginTop: 2, paddingRight: 8 },
   btnGroup: { marginHorizontal: 16, marginTop: 8, gap: 8 },
   version: { textAlign: 'center', fontSize: 12, color: COLORS.muted, marginTop: 24 },
+  loginModeDesc: { fontSize: 13, color: COLORS.muted, marginBottom: 12, lineHeight: 18 },
+  modeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 8,
+    backgroundColor: COLORS.bg,
+  },
+  modeOptionActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: '#EEF2FF',
+  },
+  modeRadio: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modeRadioActive: { borderColor: COLORS.primary },
+  modeRadioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.primary,
+  },
+  modeTitle: { fontSize: 14, fontWeight: '600', color: COLORS.text },
+  modeSub: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
+  modeSaving: { fontSize: 12, color: COLORS.muted, textAlign: 'center', marginTop: 4 },
+  guideBox: {
+    marginTop: 16,
+    backgroundColor: '#F0F4FF',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  guideTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 12,
+  },
+  guideStep: {
+    flexDirection: 'row',
+    marginBottom: 14,
+    gap: 10,
+  },
+  guideNum: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: COLORS.primary,
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 22,
+    overflow: 'hidden',
+  },
+  guideStepTitle: { fontSize: 13, fontWeight: '600', color: COLORS.text, marginBottom: 3 },
+  guideStepSub: { fontSize: 12, color: COLORS.muted, lineHeight: 17, marginBottom: 5 },
+  guideCode: { fontFamily: 'monospace', fontSize: 11, color: '#1e40af' },
+  linkRow: { flexDirection: 'row', gap: 12, marginTop: 4, flexWrap: 'wrap' },
+  link: { fontSize: 12, color: COLORS.primary, fontWeight: '600', textDecorationLine: 'underline' },
+  codeBox: {
+    backgroundColor: '#1e293b',
+    borderRadius: 6,
+    padding: 10,
+    marginTop: 6,
+  },
+  codeText: { fontSize: 11, color: '#e2e8f0', fontFamily: 'monospace', lineHeight: 18 },
 });
