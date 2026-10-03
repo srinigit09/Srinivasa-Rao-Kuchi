@@ -38,6 +38,7 @@ import MoveOutScreen from '../screens/tenants/MoveOutScreen';
 import EditTenantScreen from '../screens/tenants/EditTenantScreen';
 import AdminClientsScreen from '../screens/admin/AdminClientsScreen';
 import AddNewTenantScreen from '../screens/tenants/AddNewTenantScreen';
+import ActivateScreen from '../screens/settings/ActivateScreen';
 
 // New Maintenance & Society Screens
 import MaintenanceScreen from '../screens/maintenance/MaintenanceScreen';
@@ -89,6 +90,7 @@ export type AppStackParamList = {
   EditTenant: { tenantId: string };
   MoveOut: { tenantId: string };
   AdminClients: undefined;
+  Activate: undefined;
 
   // Maintenance & Society routes
   Maintenance: { buildingId?: string; buildingName?: string };
@@ -174,6 +176,7 @@ const AppNavigator = () => (
     <AppStack.Screen name="EditTenant" component={EditTenantScreen} options={{ title: 'Edit Resident Details' }} />
     <AppStack.Screen name="MoveOut" component={MoveOutScreen} options={{ title: 'Move Out' }} />
     <AppStack.Screen name="AdminClients" component={AdminClientsScreen} options={{ title: 'Admin Clients' }} />
+    <AppStack.Screen name="Activate" component={ActivateScreen} options={{ headerShown: false }} />
 
     {/* Maintenance & Society Screens */}
     <AppStack.Screen name="Maintenance" component={MaintenanceScreen} options={{ headerShown: false }} />

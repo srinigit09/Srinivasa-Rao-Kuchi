@@ -18,7 +18,7 @@ import { showAlert } from '../../utils';
 const PHONE_RE = /^\d{10}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const BIOMETRIC_KEY = 'rentease_biometric_enabled';
-const ADMIN_EMAIL = 'srinivas06in@gmail.com';
+const ADMIN_PHONE = '8247873377';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LOGIN MODE — controlled from app_settings table (admin can change in Settings)
@@ -55,6 +55,7 @@ export default function LoginScreen({ navigation }: Props) {
   // Bypass fields
   const [bypassPhone, setBypassPhone] = useState('');
   const [bypassName, setBypassName] = useState('');
+  const [bypassPassword, setBypassPassword] = useState('');
   const [bypassLoading, setBypassLoading] = useState(false);
   const [bypassError, setBypassError] = useState<string | null>(null);
 
@@ -67,13 +68,6 @@ export default function LoginScreen({ navigation }: Props) {
   const [phone, setPhone] = useState('');
   const [phoneLoading, setPhoneLoading] = useState(false);
   const [phoneError, setPhoneError] = useState<string | null>(null);
-
-  // Admin fields
-  const [showAdmin, setShowAdmin] = useState(false);
-  const [adminEmail, setAdminEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [adminLoading, setAdminLoading] = useState(false);
-  const [adminError, setAdminError] = useState<string | null>(null);
 
   const [hasBiometrics, setHasBiometrics] = useState(false);
 
@@ -116,9 +110,10 @@ export default function LoginScreen({ navigation }: Props) {
     } catch (e: any) { showAlert('Biometric Error', e.message); }
   };
 
-  // ── BYPASS MODE: phone + name, no OTP ────────────────────────────────────
+  // ── BYPASS MODE: phone + name (or password for admin) ────────────────────
   // Uses a deterministic password derived from phone number.
   // The account is created silently on first login.
+  // If phone matches ADMIN_PHONE, use password field and admin email for login.
   const handleBypassLogin = async () => {
     setBypassError(null);
     const cleanPhone = bypassPhone.replace(/\D/g, '');
@@ -126,6 +121,68 @@ export default function LoginScreen({ navigation }: Props) {
       setBypassError('Please enter a valid 10-digit mobile number.');
       return;
     }
+
+    const isAdmin = cleanPhone === ADMIN_PHONE;
+
+    if (isAdmin) {
+      // Admin path: use synthetic admin email + password entered by user
+      if (!bypassPassword.trim()) {
+        setBypassError('Please enter the admin password.');
+        return;
+      }
+      setBypassLoading(true);
+      const adminEmail = `${ADMIN_PHONE}@rentease.app`;
+      const { data, error: signInErr } = await supabase.auth.signInWithPassword({
+        email: adminEmail,
+        password: bypassPassword.trim(),
+      });
+      if (signInErr) {
+        // First-time setup: create admin account
+        if (signInErr.message.toLowerCase().includes('invalid login credentials')) {
+          const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+            email: adminEmail,
+            password: bypassPassword.trim(),
+            options: { emailRedirectTo: undefined },
+          });
+          if (signUpErr || !signUpData?.user) {
+            setBypassLoading(false);
+            setBypassError(friendlyError(signUpErr?.message ?? 'Could not create admin account.'));
+            return;
+          }
+          const reSignIn = await supabase.auth.signInWithPassword({
+            email: adminEmail, password: bypassPassword.trim(),
+          });
+          if (reSignIn.error || !reSignIn.data?.session) {
+            setBypassLoading(false);
+            setBypassError(friendlyError(reSignIn.error?.message ?? 'Login failed.'));
+            return;
+          }
+          await supabase.from('profiles').upsert({
+            id: reSignIn.data.session.user.id,
+            email: adminEmail,
+            full_name: 'Super Admin',
+            phone_number: ADMIN_PHONE,
+            role: 'admin',
+            is_active: true,
+          }, { onConflict: 'id' });
+        } else {
+          setBypassLoading(false);
+          setBypassError(friendlyError(signInErr.message));
+          return;
+        }
+      } else if (data?.user) {
+        await supabase.from('profiles').upsert({
+          id: data.user.id,
+          email: adminEmail,
+          role: 'admin',
+          is_active: true,
+        }, { onConflict: 'id' });
+      }
+      setBypassLoading(false);
+      return;
+    }
+
+    // Regular client path
     if (!bypassName.trim()) {
       setBypassError('Please enter your name.');
       return;
@@ -251,28 +308,6 @@ export default function LoginScreen({ navigation }: Props) {
     }
   };
 
-  // ── ADMIN LOGIN ───────────────────────────────────────────────────────────
-  const handleAdminLogin = async () => {
-    setAdminError(null);
-    const clean = adminEmail.trim().toLowerCase();
-    if (!EMAIL_RE.test(clean)) { setAdminError('Please enter a valid email address.'); return; }
-    if (!password.trim()) { setAdminError('Please enter the admin password.'); return; }
-    setAdminLoading(true);
-    const { data, error: signInErr } = await supabase.auth.signInWithPassword({ email: clean, password: password.trim() });
-    if (signInErr) {
-      if (signInErr.message.toLowerCase().includes('invalid login credentials')) {
-        const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({ email: clean, password: password.trim() });
-        if (signUpErr) { setAdminLoading(false); setAdminError(friendlyError(signUpErr.message)); return; }
-        if (signUpData.user) {
-          await supabase.from('profiles').upsert({ id: signUpData.user.id, email: clean, full_name: 'Super Admin', role: 'admin', is_active: true });
-        }
-      } else { setAdminLoading(false); setAdminError(friendlyError(signInErr.message)); return; }
-    } else if (data.user) {
-      await supabase.from('profiles').upsert({ id: data.user.id, email: clean, role: 'admin' });
-    }
-    setAdminLoading(false);
-  };
-
   if (!modeLoaded) {
     return (
       <View style={[styles.flex, { justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.primaryDark }]}>
@@ -280,6 +315,9 @@ export default function LoginScreen({ navigation }: Props) {
       </View>
     );
   }
+
+  // Derived: is admin phone entered in bypass mode?
+  const isAdminPhone = bypassPhone.replace(/\D/g, '') === ADMIN_PHONE;
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -293,10 +331,9 @@ export default function LoginScreen({ navigation }: Props) {
       <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + 32 }]} keyboardShouldPersistTaps="handled">
 
         {/* ── BYPASS MODE ── */}
-        {!showAdmin && loginMode === 'bypass' && (
+        {loginMode === 'bypass' && (
           <View>
             <Text style={styles.sectionTitle}>Welcome to RentEase</Text>
-            <Text style={styles.sectionSub}>Enter your mobile number and name to continue.</Text>
 
             {bypassError ? <View style={styles.errorBox}><Text style={styles.errorText}>⚠️ {bypassError}</Text></View> : null}
 
@@ -315,13 +352,24 @@ export default function LoginScreen({ navigation }: Props) {
 
             <View style={{ height: 12 }} />
 
-            <FormField
-              label="Your Name"
-              required
-              placeholder="Enter your full name"
-              value={bypassName}
-              onChangeText={(t) => { setBypassName(t); setBypassError(null); }}
-            />
+            {isAdminPhone ? (
+              <FormField
+                label="Admin Password"
+                required
+                placeholder="Enter admin password"
+                secureTextEntry
+                value={bypassPassword}
+                onChangeText={(t) => { setBypassPassword(t); setBypassError(null); }}
+              />
+            ) : (
+              <FormField
+                label="Your Name"
+                required
+                placeholder="Enter your full name"
+                value={bypassName}
+                onChangeText={(t) => { setBypassName(t); setBypassError(null); }}
+              />
+            )}
 
             <Button title="Continue →" onPress={handleBypassLogin} loading={bypassLoading} style={{ marginTop: 4 }} />
 
@@ -331,15 +379,11 @@ export default function LoginScreen({ navigation }: Props) {
                 <Text style={styles.biometricText}>Login with Fingerprint / FaceID</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.adminLink} onPress={() => setShowAdmin(true)}>
-              <Ionicons name="shield-outline" size={14} color={COLORS.muted} />
-              <Text style={styles.adminLinkText}>Admin Login</Text>
-            </TouchableOpacity>
           </View>
         )}
 
         {/* ── EMAIL OTP MODE ── */}
-        {!showAdmin && loginMode === 'email' && (
+        {loginMode === 'email' && (
           <View>
             <Text style={styles.sectionTitle}>Login with OTP</Text>
             <Text style={styles.sectionSub}>Enter your email — we'll send you a one-time password.</Text>
@@ -352,15 +396,11 @@ export default function LoginScreen({ navigation }: Props) {
                 <Text style={styles.biometricText}>Login with Fingerprint / FaceID</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.adminLink} onPress={() => setShowAdmin(true)}>
-              <Ionicons name="shield-outline" size={14} color={COLORS.muted} />
-              <Text style={styles.adminLinkText}>Admin Login</Text>
-            </TouchableOpacity>
           </View>
         )}
 
         {/* ── PHONE OTP MODE ── */}
-        {!showAdmin && loginMode === 'phone' && (
+        {loginMode === 'phone' && (
           <View>
             <Text style={styles.sectionTitle}>Login with Mobile OTP</Text>
             <Text style={styles.sectionSub}>Enter your mobile number — we'll send you an OTP via SMS.</Text>
@@ -386,26 +426,6 @@ export default function LoginScreen({ navigation }: Props) {
                 <Text style={styles.biometricText}>Login with Fingerprint / FaceID</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.adminLink} onPress={() => setShowAdmin(true)}>
-              <Ionicons name="shield-outline" size={14} color={COLORS.muted} />
-              <Text style={styles.adminLinkText}>Admin Login</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* ── ADMIN LOGIN ── */}
-        {showAdmin && (
-          <View>
-            <TouchableOpacity style={styles.backLink} onPress={() => { setShowAdmin(false); setAdminError(null); }}>
-              <Ionicons name="arrow-back" size={16} color={COLORS.primary} />
-              <Text style={styles.backLinkText}>Back to Login</Text>
-            </TouchableOpacity>
-            <Text style={styles.sectionTitle}>Admin Login</Text>
-            {adminError ? <View style={styles.errorBox}><Text style={styles.errorText}>⚠️ {adminError}</Text></View> : null}
-            <FormField label="Admin Email" required placeholder="Enter admin email" keyboardType="email-address" autoCapitalize="none" value={adminEmail} onChangeText={(t) => { setAdminEmail(t); setAdminError(null); }} />
-            <FormField label="Admin Password" required placeholder="Enter admin password" secureTextEntry value={password} onChangeText={(t) => { setPassword(t); setAdminError(null); }} />
-            {adminEmail.trim().toLowerCase() === ADMIN_EMAIL && <Text style={styles.adminHint}>🔒 Admin access</Text>}
-            <Button title="Sign In as Admin" onPress={handleAdminLogin} loading={adminLoading} style={{ marginTop: 8 }} />
           </View>
         )}
 
@@ -420,7 +440,7 @@ const styles = StyleSheet.create({
   bannerLogo: { fontSize: 48, marginBottom: 8 },
   bannerAppName: { fontSize: 32, fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.5 },
   bannerTagline: { fontSize: 14, color: 'rgba(255,255,255,0.78)', marginTop: 4 },
-  container: { paddingHorizontal: 24, paddingTop: 28 },
+  container: { paddingHorizontal: 24, paddingTop: 12 },
   sectionTitle: { fontSize: 20, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
   sectionSub: { fontSize: 13, color: COLORS.muted, marginBottom: 20, lineHeight: 18 },
   errorBox: { backgroundColor: COLORS.dangerLight, padding: 12, borderRadius: 8, marginBottom: 16, borderWidth: 1, borderColor: '#FCA5A5' },
@@ -431,9 +451,4 @@ const styles = StyleSheet.create({
   phoneInput: { flex: 1, padding: 14, fontSize: 18, fontWeight: '600', color: COLORS.text, letterSpacing: 2 },
   biometricBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16, paddingVertical: 12, borderWidth: 1, borderColor: COLORS.primaryLight, borderRadius: 10, backgroundColor: COLORS.surface },
   biometricText: { color: COLORS.primary, fontSize: 14, fontWeight: '600' },
-  adminLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 24, paddingVertical: 8 },
-  adminLinkText: { color: COLORS.muted, fontSize: 13 },
-  backLink: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 20 },
-  backLinkText: { color: COLORS.primary, fontSize: 14, fontWeight: '600' },
-  adminHint: { fontSize: 12, color: COLORS.primary, fontWeight: '600', marginTop: 2, marginBottom: 4 },
 });

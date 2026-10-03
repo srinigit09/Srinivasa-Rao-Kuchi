@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView, RefreshControl, Switch,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView, RefreshControl, Switch, TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
@@ -11,14 +11,32 @@ import FormField from '../../components/common/FormField';
 import Card from '../../components/common/Card';
 import { formatDate, showAlert } from '../../utils';
 
+// ── Types ────────────────────────────────────────────────────────────────────
+type SubscriptionPlan = {
+  id: string;
+  name: string;
+  label: string;
+  days: number | null;
+  price_per_tenant: number;
+  price_per_property: number;
+};
+
+type ClientWithSub = Profile & {
+  subscription_plan?: string | null;
+  subscription_expires_at?: string | null;
+};
+
+const PLAN_OPTIONS = ['unlimited', '30days', '1year', 'custom'] as const;
+type PlanName = typeof PLAN_OPTIONS[number];
+
 export default function AdminClientsScreen() {
-  const [clients, setClients] = useState<Profile[]>([]);
+  const [clients, setClients] = useState<ClientWithSub[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
 
   // Edit / Details Modal
-  const [selectedClient, setSelectedClient] = useState<Profile | null>(null);
+  const [selectedClient, setSelectedClient] = useState<ClientWithSub | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
@@ -26,10 +44,24 @@ export default function AdminClientsScreen() {
   const [editIsActive, setEditIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // Subscription fields in modal
+  const [editSubPlan, setEditSubPlan] = useState<PlanName>('unlimited');
+  const [editSubCustomDays, setEditSubCustomDays] = useState('');
+
   // OTP Settings
   const [defaultOtp, setDefaultOtp] = useState('123456');
   const [useSupabaseOtp, setUseSupabaseOtp] = useState(false);
   const [otpSaving, setOtpSaving] = useState(false);
+
+  // Apply-to-all
+  const [applyAllPlan, setApplyAllPlan] = useState<PlanName>('unlimited');
+  const [applyAllCustomDays, setApplyAllCustomDays] = useState('');
+  const [applyAllLoading, setApplyAllLoading] = useState(false);
+
+  // Pricing card
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [pricingEdits, setPricingEdits] = useState<Record<string, { price_per_tenant: string; price_per_property: string }>>({});
+  const [pricingSaving, setPricingSaving] = useState(false);
 
   const fetchClients = useCallback(async () => {
     setLoading(true);
@@ -42,7 +74,7 @@ export default function AdminClientsScreen() {
     if (error) {
       showAlert('Error', error.message);
     } else if (data) {
-      setClients(data as Profile[]);
+      setClients(data as ClientWithSub[]);
     }
   }, []);
 
@@ -59,14 +91,33 @@ export default function AdminClientsScreen() {
     }
   }, []);
 
+  const fetchPlans = useCallback(async () => {
+    const { data } = await supabase
+      .from('subscription_plans')
+      .select('*')
+      .order('created_at');
+    if (data) {
+      setPlans(data as SubscriptionPlan[]);
+      const edits: Record<string, { price_per_tenant: string; price_per_property: string }> = {};
+      (data as SubscriptionPlan[]).forEach(p => {
+        edits[p.id] = {
+          price_per_tenant: String(p.price_per_tenant),
+          price_per_property: String(p.price_per_property),
+        };
+      });
+      setPricingEdits(edits);
+    }
+  }, []);
+
   useEffect(() => {
     fetchClients();
     fetchOtpSettings();
-  }, [fetchClients, fetchOtpSettings]);
+    fetchPlans();
+  }, [fetchClients, fetchOtpSettings, fetchPlans]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchClients(), fetchOtpSettings()]);
+    await Promise.all([fetchClients(), fetchOtpSettings(), fetchPlans()]);
     setRefreshing(false);
   };
 
@@ -87,11 +138,23 @@ export default function AdminClientsScreen() {
     else showAlert('Saved', 'OTP settings updated successfully.');
   };
 
-  const handleOpenEdit = (client: Profile) => {
+  // ── Compute expires_at from plan + customDays ─────────────────────────────
+  const computeExpiresAt = (planName: PlanName, customDays: string): string | null => {
+    if (planName === 'unlimited') return null;
+    let days = 0;
+    if (planName === '30days') days = 30;
+    else if (planName === '1year') days = 365;
+    else if (planName === 'custom') days = parseInt(customDays, 10) || 30;
+    return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  };
+
+  const handleOpenEdit = (client: ClientWithSub) => {
     setSelectedClient(client);
     setEditName(client.full_name || '');
     setEditPhone(client.phone || '');
     setEditIsActive(client.is_active !== false);
+    setEditSubPlan((client.subscription_plan as PlanName) || 'unlimited');
+    setEditSubCustomDays('');
 
     if (client.valid_until) {
       const remainingDays = Math.max(0, Math.ceil((new Date(client.valid_until).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
@@ -109,6 +172,7 @@ export default function AdminClientsScreen() {
 
     const days = parseInt(editValidityDays, 10) || 30;
     const newValidUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+    const newExpiresAt = computeExpiresAt(editSubPlan, editSubCustomDays);
 
     const { error } = await supabase
       .from('profiles')
@@ -117,6 +181,8 @@ export default function AdminClientsScreen() {
         phone: editPhone.trim() || null,
         is_active: editIsActive,
         valid_until: newValidUntil,
+        subscription_plan: editSubPlan,
+        subscription_expires_at: newExpiresAt,
       })
       .eq('id', selectedClient.id);
 
@@ -131,7 +197,7 @@ export default function AdminClientsScreen() {
     }
   };
 
-  const handleToggleStatus = async (client: Profile) => {
+  const handleToggleStatus = async (client: ClientWithSub) => {
     const nextStatus = !(client.is_active !== false);
     const { error } = await supabase
       .from('profiles')
@@ -145,7 +211,7 @@ export default function AdminClientsScreen() {
     }
   };
 
-  const handleDeleteClient = (client: Profile) => {
+  const handleDeleteClient = (client: ClientWithSub) => {
     showAlert(
       'Delete Client',
       `Are you sure you want to delete ${client.full_name || client.email}? This will remove all their data.`,
@@ -167,6 +233,65 @@ export default function AdminClientsScreen() {
     );
   };
 
+  // ── Apply-to-all subscription ─────────────────────────────────────────────
+  const handleApplyToAll = async () => {
+    if (applyAllPlan === 'custom' && (!applyAllCustomDays || isNaN(parseInt(applyAllCustomDays, 10)))) {
+      showAlert('Invalid', 'Please enter a valid number of days for Custom plan.');
+      return;
+    }
+    showAlert(
+      'Apply to All',
+      `Set "${applyAllPlan}" plan for all ${clients.filter(c => c.role !== 'admin').length} clients?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Apply',
+          onPress: async () => {
+            setApplyAllLoading(true);
+            const newExpiresAt = computeExpiresAt(applyAllPlan, applyAllCustomDays);
+            const ids = clients.filter(c => c.role !== 'admin').map(c => c.id);
+            const { error } = await supabase
+              .from('profiles')
+              .update({
+                subscription_plan: applyAllPlan,
+                subscription_expires_at: newExpiresAt,
+              })
+              .in('id', ids);
+            setApplyAllLoading(false);
+            if (error) showAlert('Error', error.message);
+            else {
+              showAlert('Done', 'Subscription applied to all clients.');
+              fetchClients();
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // ── Save pricing ──────────────────────────────────────────────────────────
+  const handleSavePricing = async () => {
+    setPricingSaving(true);
+    const updates = plans.map(p => {
+      const edit = pricingEdits[p.id];
+      return supabase
+        .from('subscription_plans')
+        .update({
+          price_per_tenant: parseFloat(edit?.price_per_tenant ?? '0') || 0,
+          price_per_property: parseFloat(edit?.price_per_property ?? '0') || 0,
+        })
+        .eq('id', p.id);
+    });
+    const results = await Promise.all(updates);
+    setPricingSaving(false);
+    const err = results.find(r => r.error)?.error;
+    if (err) showAlert('Save Error', err.message);
+    else {
+      showAlert('Saved', 'Pricing updated successfully.');
+      fetchPlans();
+    }
+  };
+
   const filtered = clients.filter(c => {
     const q = search.toLowerCase();
     return (
@@ -176,10 +301,13 @@ export default function AdminClientsScreen() {
     );
   });
 
-  const renderClientItem = ({ item }: { item: Profile }) => {
+  const renderClientItem = ({ item }: { item: ClientWithSub }) => {
     const isActive = item.is_active !== false;
     const isExpired = item.valid_until ? new Date(item.valid_until) < new Date() : false;
-    const isAdmin = item.role === 'admin';
+    const isAdminRole = item.role === 'admin';
+    const subPlan = item.subscription_plan || 'unlimited';
+    const subExpiry = item.subscription_expires_at;
+    const subExpired = subExpiry ? new Date(subExpiry) < new Date() : false;
 
     return (
       <View style={styles.clientCard}>
@@ -187,7 +315,7 @@ export default function AdminClientsScreen() {
           <View style={{ flex: 1 }}>
             <View style={styles.nameRow}>
               <Text style={styles.clientName}>{item.full_name || 'Unnamed Client'}</Text>
-              {isAdmin && <Text style={styles.adminBadge}>ADMIN</Text>}
+              {isAdminRole && <Text style={styles.adminBadge}>ADMIN</Text>}
             </View>
             <Text style={styles.clientSub}>✉️ {item.email || 'No email'}</Text>
             {item.phone ? <Text style={styles.clientSub}>📞 {item.phone}</Text> : null}
@@ -195,13 +323,16 @@ export default function AdminClientsScreen() {
             <Text style={styles.clientSub}>
               ⏳ Validity: {item.valid_until ? formatDate(item.valid_until) : '30 days'} {isExpired ? '(EXPIRED)' : ''}
             </Text>
+            <Text style={styles.clientSub}>
+              📋 Plan: {subPlan}{subExpiry ? ` · expires ${formatDate(subExpiry)}${subExpired ? ' (EXPIRED)' : ''}` : ''}
+            </Text>
           </View>
 
           <View style={styles.statusCol}>
             <TouchableOpacity
               style={[styles.statusBadge, isActive ? styles.activeBadge : styles.inactiveBadge]}
-              onPress={() => !isAdmin && handleToggleStatus(item)}
-              disabled={isAdmin}
+              onPress={() => !isAdminRole && handleToggleStatus(item)}
+              disabled={isAdminRole}
             >
               <Text style={[styles.statusText, isActive ? styles.activeText : styles.inactiveText]}>
                 {isActive ? 'Active' : 'Disabled'}
@@ -213,10 +344,10 @@ export default function AdminClientsScreen() {
         <View style={styles.actionRow}>
           <TouchableOpacity style={styles.actionBtn} onPress={() => handleOpenEdit(item)}>
             <Ionicons name="create-outline" size={16} color={COLORS.primary} />
-            <Text style={styles.actionBtnText}>Edit / Validity</Text>
+            <Text style={styles.actionBtnText}>Edit / Subscription</Text>
           </TouchableOpacity>
 
-          {!isAdmin && (
+          {!isAdminRole && (
             <TouchableOpacity style={styles.actionBtn} onPress={() => handleDeleteClient(item)}>
               <Ionicons name="trash-outline" size={16} color={COLORS.danger} />
               <Text style={[styles.actionBtnText, { color: COLORS.danger }]}>Delete</Text>
@@ -272,6 +403,81 @@ export default function AdminClientsScreen() {
         />
       </Card>
 
+      {/* Apply-to-all subscription card */}
+      <Card title="📦 Apply Subscription to All Clients">
+        <Text style={styles.cardHint}>Set one subscription plan for all non-admin clients at once.</Text>
+        <View style={styles.planRow}>
+          {PLAN_OPTIONS.map(p => (
+            <TouchableOpacity
+              key={p}
+              style={[styles.planChip, applyAllPlan === p && styles.planChipActive]}
+              onPress={() => setApplyAllPlan(p)}
+            >
+              <Text style={[styles.planChipText, applyAllPlan === p && styles.planChipTextActive]}>
+                {p === 'unlimited' ? '∞ Unlimited' : p === '30days' ? '30 Days' : p === '1year' ? '1 Year' : 'Custom'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {applyAllPlan === 'custom' && (
+          <FormField
+            label="Custom Days"
+            value={applyAllCustomDays}
+            onChangeText={setApplyAllCustomDays}
+            placeholder="e.g. 90"
+            keyboardType="numeric"
+          />
+        )}
+        <Button
+          title="Apply to All Clients"
+          onPress={handleApplyToAll}
+          loading={applyAllLoading}
+          style={{ marginTop: 4 }}
+        />
+      </Card>
+
+      {/* Subscription Pricing card */}
+      {plans.length > 0 && (
+        <Card title="💰 Subscription Pricing">
+          <Text style={styles.cardHint}>Set pricing shown to clients on the Activate screen.</Text>
+          {plans.map(plan => (
+            <View key={plan.id} style={styles.pricingRow}>
+              <Text style={styles.pricingLabel}>{plan.label}</Text>
+              <View style={styles.pricingInputs}>
+                <View style={styles.pricingField}>
+                  <Text style={styles.pricingFieldLabel}>Per Tenant (₹)</Text>
+                  <TextInput
+                    style={styles.pricingInput}
+                    value={pricingEdits[plan.id]?.price_per_tenant ?? ''}
+                    onChangeText={v => setPricingEdits(prev => ({ ...prev, [plan.id]: { ...prev[plan.id], price_per_tenant: v } }))}
+                    keyboardType="numeric"
+                    placeholder="0"
+                    placeholderTextColor={COLORS.muted}
+                  />
+                </View>
+                <View style={styles.pricingField}>
+                  <Text style={styles.pricingFieldLabel}>Per Property (₹)</Text>
+                  <TextInput
+                    style={styles.pricingInput}
+                    value={pricingEdits[plan.id]?.price_per_property ?? ''}
+                    onChangeText={v => setPricingEdits(prev => ({ ...prev, [plan.id]: { ...prev[plan.id], price_per_property: v } }))}
+                    keyboardType="numeric"
+                    placeholder="0"
+                    placeholderTextColor={COLORS.muted}
+                  />
+                </View>
+              </View>
+            </View>
+          ))}
+          <Button
+            title="Save Pricing"
+            onPress={handleSavePricing}
+            loading={pricingSaving}
+            style={{ marginTop: 8 }}
+          />
+        </Card>
+      )}
+
       <View style={styles.searchWrap}>
         <Ionicons name="search-outline" size={18} color={COLORS.muted} />
         <FormField
@@ -326,6 +532,31 @@ export default function AdminClientsScreen() {
                 placeholder="e.g. 30"
                 keyboardType="numeric"
               />
+
+              {/* Subscription plan picker */}
+              <Text style={styles.subPlanLabel}>Subscription Plan</Text>
+              <View style={styles.planRow}>
+                {PLAN_OPTIONS.map(p => (
+                  <TouchableOpacity
+                    key={p}
+                    style={[styles.planChip, editSubPlan === p && styles.planChipActive]}
+                    onPress={() => setEditSubPlan(p)}
+                  >
+                    <Text style={[styles.planChipText, editSubPlan === p && styles.planChipTextActive]}>
+                      {p === 'unlimited' ? '∞ Unlimited' : p === '30days' ? '30 Days' : p === '1year' ? '1 Year' : 'Custom'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {editSubPlan === 'custom' && (
+                <FormField
+                  label="Custom Days"
+                  value={editSubCustomDays}
+                  onChangeText={setEditSubCustomDays}
+                  placeholder="e.g. 90"
+                  keyboardType="numeric"
+                />
+              )}
 
               <View style={styles.toggleRow}>
                 <Text style={styles.toggleLabel}>Client Account Status</Text>
@@ -417,6 +648,40 @@ const styles = StyleSheet.create({
   },
   otpSettingLabel: { fontSize: 14, fontWeight: '600', color: COLORS.text },
   otpSettingHint: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
+  cardHint: { fontSize: 12, color: COLORS.muted, marginBottom: 10 },
+  planRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  planChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.bg,
+  },
+  planChipActive: { borderColor: COLORS.primary, backgroundColor: '#EEF2FF' },
+  planChipText: { fontSize: 13, color: COLORS.muted, fontWeight: '500' },
+  planChipTextActive: { color: COLORS.primary, fontWeight: '700' },
+  subPlanLabel: { fontSize: 13, fontWeight: '600', color: COLORS.text, marginBottom: 8, marginTop: 4 },
+  pricingRow: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+  },
+  pricingLabel: { fontSize: 13, fontWeight: '600', color: COLORS.text, marginBottom: 8 },
+  pricingInputs: { flexDirection: 'row', gap: 10 },
+  pricingField: { flex: 1 },
+  pricingFieldLabel: { fontSize: 11, color: COLORS.muted, marginBottom: 4 },
+  pricingInput: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 6,
+    padding: 8,
+    fontSize: 14,
+    color: COLORS.text,
+    backgroundColor: COLORS.white,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -427,7 +692,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: 16,
     padding: 20,
-    maxHeight: '85%',
+    maxHeight: '90%',
   },
   modalTitle: { fontSize: 20, fontWeight: '700', color: COLORS.text },
   modalSub: { fontSize: 13, color: COLORS.muted, marginBottom: 16, marginTop: 2 },

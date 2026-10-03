@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity, Linking,
+  View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity, Linking, TextInput,
 } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -36,6 +36,12 @@ export default function SettingsScreen() {
   const [loginMode, setLoginMode] = useState<LoginMode>('bypass');
   const [loginModeSaving, setLoginModeSaving] = useState(false);
 
+  // Subscription pricing (admin only)
+  type SubPlan = { id: string; name: string; label: string; price_per_tenant: number; price_per_property: number };
+  const [subPlans, setSubPlans] = useState<SubPlan[]>([]);
+  const [subPricingEdits, setSubPricingEdits] = useState<Record<string, { price_per_tenant: string; price_per_property: string }>>({});
+  const [subPricingSaving, setSubPricingSaving] = useState(false);
+
   // Biometric state
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
@@ -52,8 +58,45 @@ export default function SettingsScreen() {
       setBankIFSC(profile.bank_ifsc ?? '');
     }
     checkBiometricSupport();
-    if (isAdmin) loadLoginMode();
+    if (isAdmin) {
+      loadLoginMode();
+      loadSubPlans();
+    }
   }, [profile]);
+
+  const loadSubPlans = async () => {
+    const { data } = await supabase.from('subscription_plans').select('*').order('created_at');
+    if (data) {
+      setSubPlans(data as SubPlan[]);
+      const edits: Record<string, { price_per_tenant: string; price_per_property: string }> = {};
+      (data as SubPlan[]).forEach((p: SubPlan) => {
+        edits[p.id] = {
+          price_per_tenant: String(p.price_per_tenant),
+          price_per_property: String(p.price_per_property),
+        };
+      });
+      setSubPricingEdits(edits);
+    }
+  };
+
+  const saveSubPricing = async () => {
+    setSubPricingSaving(true);
+    const updates = subPlans.map(p => {
+      const edit = subPricingEdits[p.id];
+      return supabase
+        .from('subscription_plans')
+        .update({
+          price_per_tenant: parseFloat(edit?.price_per_tenant ?? '0') || 0,
+          price_per_property: parseFloat(edit?.price_per_property ?? '0') || 0,
+        })
+        .eq('id', p.id);
+    });
+    const results = await Promise.all(updates);
+    setSubPricingSaving(false);
+    const err = results.find(r => r.error)?.error;
+    if (err) showAlert('Save Error', err.message);
+    else showAlert('✅ Saved', 'Subscription pricing updated.');
+  };
 
   const loadLoginMode = async () => {
     const { data } = await supabase
@@ -324,6 +367,54 @@ export default function SettingsScreen() {
         </Card>
       )}
 
+      {/* ── Admin: Subscription Pricing ── */}
+      {isAdmin && subPlans.length > 0 && (
+        <Card title="💰 Subscription Pricing">
+          <Text style={styles.subPricingDesc}>
+            Set the pricing shown to clients on the Activate screen.
+          </Text>
+          {subPlans.map(plan => (
+            <View key={plan.id} style={styles.subPricingRow}>
+              <Text style={styles.subPricingLabel}>{plan.label}</Text>
+              <View style={styles.subPricingInputs}>
+                <View style={styles.subPricingField}>
+                  <Text style={styles.subPricingFieldLabel}>Per Tenant (₹)</Text>
+                  <TextInput
+                    style={styles.subPricingInput}
+                    value={subPricingEdits[plan.id]?.price_per_tenant ?? ''}
+                    onChangeText={v =>
+                      setSubPricingEdits(prev => ({ ...prev, [plan.id]: { ...prev[plan.id], price_per_tenant: v } }))
+                    }
+                    keyboardType="numeric"
+                    placeholder="0"
+                    placeholderTextColor={COLORS.muted}
+                  />
+                </View>
+                <View style={styles.subPricingField}>
+                  <Text style={styles.subPricingFieldLabel}>Per Property (₹)</Text>
+                  <TextInput
+                    style={styles.subPricingInput}
+                    value={subPricingEdits[plan.id]?.price_per_property ?? ''}
+                    onChangeText={v =>
+                      setSubPricingEdits(prev => ({ ...prev, [plan.id]: { ...prev[plan.id], price_per_property: v } }))
+                    }
+                    keyboardType="numeric"
+                    placeholder="0"
+                    placeholderTextColor={COLORS.muted}
+                  />
+                </View>
+              </View>
+            </View>
+          ))}
+          <Button
+            title="Save Pricing"
+            onPress={saveSubPricing}
+            loading={subPricingSaving}
+            style={{ marginTop: 8 }}
+          />
+        </Card>
+      )}
+
       <View style={styles.btnGroup}>
         <Button title="💾 Save Changes" onPress={save} loading={loading} />
         <Button title="Sign Out" onPress={handleSignOut} variant="ghost" />
@@ -442,4 +533,25 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   codeText: { fontSize: 11, color: '#e2e8f0', fontFamily: 'monospace', lineHeight: 18 },
+  subPricingDesc: { fontSize: 13, color: COLORS.muted, marginBottom: 12, lineHeight: 18 },
+  subPricingRow: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+  },
+  subPricingLabel: { fontSize: 13, fontWeight: '600', color: COLORS.text, marginBottom: 8 },
+  subPricingInputs: { flexDirection: 'row', gap: 10 },
+  subPricingField: { flex: 1 },
+  subPricingFieldLabel: { fontSize: 11, color: COLORS.muted, marginBottom: 4 },
+  subPricingInput: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 6,
+    padding: 8,
+    fontSize: 14,
+    color: COLORS.text,
+    backgroundColor: COLORS.white,
+  },
 });

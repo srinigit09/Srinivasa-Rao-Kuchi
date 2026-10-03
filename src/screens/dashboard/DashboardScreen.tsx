@@ -13,6 +13,7 @@ import { COLORS, PROPERTY_TYPES } from '../../constants';
 import { formatCurrency, formatMonth, isOverdue } from '../../utils';
 import Card from '../../components/common/Card';
 import StatusBadge from '../../components/common/StatusBadge';
+import SubscriptionBanner from '../../components/common/SubscriptionBanner';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import { BuildingType } from '../../types';
 
@@ -243,6 +244,9 @@ export default function DashboardScreen({ navigation }: Props) {
         <QuickActionBtn label="Record Payment" icon="cash-outline" onPress={() => navigation.navigate('OccupiedTenants', {})} />
         <QuickActionBtn label="Notices" icon="megaphone-outline" onPress={() => navigation.navigate('SocietyNotices' as any, buildingParam)} />
       </View>
+
+      {/* ── Subscription Banner ── */}
+      <SubscriptionBanner />
 
       {/* ── Scrollable body ── */}
       <ScrollView
