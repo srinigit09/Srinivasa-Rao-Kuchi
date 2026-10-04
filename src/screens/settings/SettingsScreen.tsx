@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
+import DatePickerField from '../../components/common/DatePickerField';
 import { COLORS } from '../../constants';
 import Card from '../../components/common/Card';
 import { formatDate, showAlert } from '../../utils';
@@ -225,7 +226,7 @@ export default function SettingsScreen() {
           autoCapitalize="none"
         />
         <FormField label="Mobile Number" value={phone} onChangeText={setPhone} placeholder="10-digit mobile" keyboardType="phone-pad" />
-        <FormField label="Date of Birth" value={dob} onChangeText={setDob} placeholder="YYYY-MM-DD" />
+        <DatePickerField label="Date of Birth" value={dob} onChange={setDob} />
         {isAdmin && (
           <View>
             <View style={styles.badgeRow}>

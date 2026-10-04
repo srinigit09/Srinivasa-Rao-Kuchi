@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
+import DatePickerField from '../../components/common/DatePickerField';
 import { COLORS } from '../../constants';
 import { showAlert } from '../../utils';
 
@@ -137,11 +138,10 @@ export default function ProfileSetupScreen({ navigation, route }: Props) {
           editable={!isPhoneVerified}
         />
 
-        <FormField
-          label="Date of Birth (YYYY-MM-DD)"
-          placeholder="e.g. 1990-05-15"
+        <DatePickerField
+          label="Date of Birth"
           value={dob}
-          onChangeText={(t) => { setDob(t); setFeedbackError(null); }}
+          onChange={(t) => { setDob(t); setFeedbackError(null); }}
         />
 
         <FormField

@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
+import DatePickerField from '../../components/common/DatePickerField';
 import SelectField from '../../components/common/SelectField';
 import { COLORS, SOCIETY_NOTICE_CATEGORIES } from '../../constants';
 import { SocietyNoticeCategory, SocietyNoticePriority } from '../../types';
@@ -130,11 +131,10 @@ export default function AddEditNoticeScreen({ navigation, route }: Props) {
           onChange={(v) => setPriority(v as any)}
         />
 
-        <FormField
-          label="Expiry Date (YYYY-MM-DD, Optional)"
-          placeholder="e.g. 2025-12-31"
+        <DatePickerField
+          label="Expiry Date (Optional)"
           value={expiryDate}
-          onChangeText={setExpiryDate}
+          onChange={setExpiryDate}
         />
 
         <Button

@@ -131,8 +131,8 @@ const MainTabs = () => {
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
-      <Tab.Screen name="Buildings" component={BuildingsScreen} options={{ title: 'Properties' }} />
       <Tab.Screen name="Tenants" component={TenantsScreen} options={{ title: 'Occupants' }} />
+      <Tab.Screen name="Buildings" component={BuildingsScreen} options={{ title: 'Properties' }} />
       <Tab.Screen name="MaintenanceTab" component={MaintenanceScreen} options={{ title: 'Services' }} />
       <Tab.Screen name="Reports" component={ReportsScreen} />
       {isAdmin && (

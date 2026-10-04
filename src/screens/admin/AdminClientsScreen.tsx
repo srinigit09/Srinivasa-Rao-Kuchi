@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import { Profile } from '../../types';
 import { COLORS } from '../../constants';
@@ -11,6 +12,7 @@ import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
 import Card from '../../components/common/Card';
 import BlueBannerHeader from '../../components/common/BlueBannerHeader';
+import DatePickerField from '../../components/common/DatePickerField';
 import { formatDate, showAlert } from '../../utils';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -30,6 +32,7 @@ type ClientWithSub = Profile & {
 
 const PLAN_OPTIONS = ['unlimited', '30days', '1year', 'custom'] as const;
 type PlanName = typeof PLAN_OPTIONS[number];
+type LoginMode = 'bypass' | 'email' | 'phone';
 
 export default function AdminClientsScreen() {
   const navigation = useNavigation();
@@ -50,11 +53,14 @@ export default function AdminClientsScreen() {
   // Subscription fields in modal
   const [editSubPlan, setEditSubPlan] = useState<PlanName>('unlimited');
   const [editSubCustomDays, setEditSubCustomDays] = useState('');
+  const [editSubFrom, setEditSubFrom] = useState('');
+  const [editSubTo, setEditSubTo] = useState('');
 
   // OTP Settings
   const [defaultOtp, setDefaultOtp] = useState('123456');
   const [useSupabaseOtp, setUseSupabaseOtp] = useState(false);
   const [otpSaving, setOtpSaving] = useState(false);
+  const [loginMode, setLoginMode] = useState<LoginMode>('bypass');
 
   // Apply-to-all
   const [applyAllPlan, setApplyAllPlan] = useState<PlanName>('unlimited');
@@ -65,6 +71,8 @@ export default function AdminClientsScreen() {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [pricingEdits, setPricingEdits] = useState<Record<string, { price_per_tenant: string; price_per_property: string }>>({});
   const [pricingSaving, setPricingSaving] = useState(false);
+  const [subscriptionModel, setSubscriptionModel] = useState<'free' | 'paid'>('free');
+  const [subModelSaving, setSubModelSaving] = useState(false);
 
   const fetchClients = useCallback(async () => {
     setLoading(true);
@@ -85,12 +93,14 @@ export default function AdminClientsScreen() {
     const { data } = await supabase
       .from('app_settings')
       .select('key, value')
-      .in('key', ['default_otp', 'use_supabase_otp']);
+      .in('key', ['default_otp', 'use_supabase_otp', 'login_mode', 'subscription_model']);
     if (data) {
       const map: Record<string, string> = {};
       data.forEach((r: { key: string; value: string }) => { map[r.key] = r.value; });
       setDefaultOtp(map['default_otp'] ?? '123456');
       setUseSupabaseOtp(map['use_supabase_otp'] === 'true');
+      setLoginMode((map['login_mode'] as LoginMode) || 'bypass');
+      setSubscriptionModel((map['subscription_model'] as 'free' | 'paid') || 'free');
     }
   }, []);
 
@@ -118,6 +128,11 @@ export default function AdminClientsScreen() {
     fetchPlans();
   }, [fetchClients, fetchOtpSettings, fetchPlans]);
 
+  // Reset search on every focus
+  useFocusEffect(useCallback(() => {
+    setSearch('');
+  }, []));
+
   const onRefresh = async () => {
     setRefreshing(true);
     await Promise.all([fetchClients(), fetchOtpSettings(), fetchPlans()]);
@@ -133,12 +148,24 @@ export default function AdminClientsScreen() {
     const updates = [
       supabase.from('app_settings').upsert({ key: 'default_otp', value: defaultOtp.trim(), updated_at: new Date().toISOString() }),
       supabase.from('app_settings').upsert({ key: 'use_supabase_otp', value: String(useSupabaseOtp), updated_at: new Date().toISOString() }),
+      supabase.from('app_settings').upsert({ key: 'login_mode', value: loginMode, updated_at: new Date().toISOString() }),
     ];
     const results = await Promise.all(updates);
     setOtpSaving(false);
     const err = results.find(r => r.error)?.error;
     if (err) showAlert('Save Error', err.message);
     else showAlert('Saved', 'OTP settings updated successfully.');
+  };
+
+  const saveSubscriptionModel = async (model: 'free' | 'paid') => {
+    setSubModelSaving(true);
+    setSubscriptionModel(model);
+    await supabase.from('app_settings').upsert(
+      { key: 'subscription_model', value: model },
+      { onConflict: 'key' }
+    );
+    setSubModelSaving(false);
+    showAlert('Saved', `Subscription model set to "${model}".`);
   };
 
   // ── Compute expires_at from plan + customDays ─────────────────────────────
@@ -158,6 +185,8 @@ export default function AdminClientsScreen() {
     setEditIsActive(client.is_active !== false);
     setEditSubPlan((client.subscription_plan as PlanName) || 'unlimited');
     setEditSubCustomDays('');
+    setEditSubFrom((client as any).subscription_starts_at?.split('T')[0] ?? '');
+    setEditSubTo(client.subscription_expires_at?.split('T')[0] ?? '');
 
     if (client.valid_until) {
       const remainingDays = Math.max(0, Math.ceil((new Date(client.valid_until).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
@@ -175,7 +204,7 @@ export default function AdminClientsScreen() {
 
     const days = parseInt(editValidityDays, 10) || 30;
     const newValidUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
-    const newExpiresAt = computeExpiresAt(editSubPlan, editSubCustomDays);
+    const newExpiresAt = editSubTo || computeExpiresAt(editSubPlan, editSubCustomDays);
 
     const { error } = await supabase
       .from('profiles')
@@ -185,8 +214,9 @@ export default function AdminClientsScreen() {
         is_active: editIsActive,
         valid_until: newValidUntil,
         subscription_plan: editSubPlan,
-        subscription_expires_at: newExpiresAt,
-      })
+        subscription_expires_at: newExpiresAt || null,
+        subscription_starts_at: editSubFrom || null,
+      } as any)
       .eq('id', selectedClient.id);
 
     setSaving(false);
@@ -373,6 +403,29 @@ export default function AdminClientsScreen() {
 
       {/* OTP Settings Card */}
       <Card title="🔐 OTP Settings">
+        {/* Login Mode */}
+        <Text style={styles.otpSettingLabel}>Login Mode</Text>
+        <View style={styles.planRow}>
+          {(['bypass', 'email', 'phone'] as LoginMode[]).map((mode) => {
+            const labels: Record<LoginMode, string> = {
+              bypass: 'Bypass (No OTP)',
+              email: 'Email OTP',
+              phone: 'SMS OTP',
+            };
+            return (
+              <TouchableOpacity
+                key={mode}
+                style={[styles.planChip, loginMode === mode && styles.planChipActive]}
+                onPress={() => setLoginMode(mode)}
+              >
+                <Text style={[styles.planChipText, loginMode === mode && styles.planChipTextActive]}>
+                  {labels[mode]}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         <View style={styles.otpSettingRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.otpSettingLabel}>Use Supabase Email OTP</Text>
@@ -446,53 +499,83 @@ export default function AdminClientsScreen() {
       {plans.length > 0 && (
         <Card title="💰 Subscription Pricing">
           <Text style={styles.cardHint}>Set pricing shown to clients on the Activate screen.</Text>
-          {plans.map(plan => (
-            <View key={plan.id} style={styles.pricingRow}>
-              <Text style={styles.pricingLabel}>{plan.label}</Text>
-              <View style={styles.pricingInputs}>
-                <View style={styles.pricingField}>
-                  <Text style={styles.pricingFieldLabel}>Per Tenant (₹)</Text>
-                  <TextInput
-                    style={styles.pricingInput}
-                    value={pricingEdits[plan.id]?.price_per_tenant ?? ''}
-                    onChangeText={v => setPricingEdits(prev => ({ ...prev, [plan.id]: { ...prev[plan.id], price_per_tenant: v } }))}
-                    keyboardType="numeric"
-                    placeholder="0"
-                    placeholderTextColor={COLORS.muted}
-                  />
+
+          {/* Subscription Model toggle */}
+          <Text style={[styles.otpSettingLabel, { marginBottom: 6 }]}>Subscription Model</Text>
+          <View style={[styles.planRow, { marginBottom: 12 }]}>
+            {(['free', 'paid'] as const).map((model) => (
+              <TouchableOpacity
+                key={model}
+                style={[styles.planChip, subscriptionModel === model && styles.planChipActive]}
+                onPress={() => !subModelSaving && saveSubscriptionModel(model)}
+              >
+                <Text style={[styles.planChipText, subscriptionModel === model && styles.planChipTextActive]}>
+                  {model === 'free' ? 'Free (Unlimited)' : 'Paid'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {subscriptionModel === 'free' ? (
+            <Text style={styles.cardHint}>
+              All clients have unlimited access. Switch to Paid to configure pricing.
+            </Text>
+          ) : (
+            <>
+              {plans.filter(plan => plan.name !== 'unlimited').map(plan => (
+                <View key={plan.id} style={styles.pricingRow}>
+                  <Text style={styles.pricingLabel}>{plan.label}</Text>
+                  <View style={styles.pricingInputs}>
+                    <View style={styles.pricingField}>
+                      <Text style={styles.pricingFieldLabel}>Per Tenant (₹)</Text>
+                      <TextInput
+                        style={styles.pricingInput}
+                        value={pricingEdits[plan.id]?.price_per_tenant ?? ''}
+                        onChangeText={v => setPricingEdits(prev => ({ ...prev, [plan.id]: { ...prev[plan.id], price_per_tenant: v } }))}
+                        keyboardType="numeric"
+                        placeholder="0"
+                        placeholderTextColor={COLORS.muted}
+                      />
+                    </View>
+                    <View style={styles.pricingField}>
+                      <Text style={styles.pricingFieldLabel}>Per Property (₹)</Text>
+                      <TextInput
+                        style={styles.pricingInput}
+                        value={pricingEdits[plan.id]?.price_per_property ?? ''}
+                        onChangeText={v => setPricingEdits(prev => ({ ...prev, [plan.id]: { ...prev[plan.id], price_per_property: v } }))}
+                        keyboardType="numeric"
+                        placeholder="0"
+                        placeholderTextColor={COLORS.muted}
+                      />
+                    </View>
+                  </View>
                 </View>
-                <View style={styles.pricingField}>
-                  <Text style={styles.pricingFieldLabel}>Per Property (₹)</Text>
-                  <TextInput
-                    style={styles.pricingInput}
-                    value={pricingEdits[plan.id]?.price_per_property ?? ''}
-                    onChangeText={v => setPricingEdits(prev => ({ ...prev, [plan.id]: { ...prev[plan.id], price_per_property: v } }))}
-                    keyboardType="numeric"
-                    placeholder="0"
-                    placeholderTextColor={COLORS.muted}
-                  />
-                </View>
-              </View>
-            </View>
-          ))}
-          <Button
-            title="Save Pricing"
-            onPress={handleSavePricing}
-            loading={pricingSaving}
-            style={{ marginTop: 8 }}
-          />
+              ))}
+              <Button
+                title="Save Pricing"
+                onPress={handleSavePricing}
+                loading={pricingSaving}
+                style={{ marginTop: 8 }}
+              />
+            </>
+          )}
         </Card>
       )}
 
       <View style={styles.searchWrap}>
         <Ionicons name="search-outline" size={18} color={COLORS.muted} />
-        <FormField
-          label=""
+        <TextInput
+          style={styles.searchInput}
           placeholder="Search client by name, email, phone"
+          placeholderTextColor={COLORS.muted}
           value={search}
           onChangeText={setSearch}
-          style={{ flex: 1, marginBottom: 0 }}
         />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch('')} style={{ paddingRight: 4 }}>
+            <Ionicons name="close-circle" size={18} color={COLORS.muted} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {filtered.length === 0 ? (
@@ -574,6 +657,17 @@ export default function AdminClientsScreen() {
                 />
               )}
 
+              <DatePickerField
+                label="Subscription From"
+                value={editSubFrom}
+                onChange={setEditSubFrom}
+              />
+              <DatePickerField
+                label="Subscription To"
+                value={editSubTo}
+                onChange={setEditSubTo}
+              />
+
               <View style={styles.toggleRow}>
                 <Text style={styles.toggleLabel}>Client Account Status</Text>
                 <TouchableOpacity
@@ -612,6 +706,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: COLORS.text,
   },
   list: { padding: 12, gap: 10 },
   clientCard: {
