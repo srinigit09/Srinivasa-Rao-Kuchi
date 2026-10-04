@@ -2,7 +2,7 @@
 -- RentEase — Complete Supabase PostgreSQL Schema
 -- Run this in: Supabase Dashboard → SQL Editor → New Query → Run
 -- Safe to re-run on existing databases (all statements are idempotent)
--- Last updated: includes subscription system, phone OTP, login mode
+-- Last updated: subscription_starts_at, subscription_model setting
 -- ============================================================
 
 -- Enable UUID extension
@@ -26,6 +26,7 @@ create table if not exists public.profiles (
   bank_account                 text,
   bank_ifsc                    text,
   subscription_plan            text default 'unlimited',
+  subscription_starts_at       timestamptz,
   subscription_expires_at      timestamptz,
   subscription_tenant_count    integer default 0,
   subscription_property_count  integer default 0,
@@ -42,6 +43,7 @@ alter table public.profiles add column if not exists bank_name                  
 alter table public.profiles add column if not exists bank_account                 text;
 alter table public.profiles add column if not exists bank_ifsc                    text;
 alter table public.profiles add column if not exists subscription_plan            text default 'unlimited';
+alter table public.profiles add column if not exists subscription_starts_at       timestamptz;
 alter table public.profiles add column if not exists subscription_expires_at      timestamptz;
 alter table public.profiles add column if not exists subscription_tenant_count    integer default 0;
 alter table public.profiles add column if not exists subscription_property_count  integer default 0;
@@ -398,9 +400,10 @@ create policy "Admin write" on public.app_settings for all    using (public.get_
 
 -- Default app settings (safe — skips if already exists)
 insert into public.app_settings (key, value) values
-  ('default_otp',       '123456'),
-  ('use_supabase_otp',  'false'),
-  ('login_mode',        'bypass')
+  ('default_otp',          '123456'),
+  ('use_supabase_otp',     'false'),
+  ('login_mode',           'bypass'),
+  ('subscription_model',   'free')
 on conflict (key) do nothing;
 
 -- ============================================================
