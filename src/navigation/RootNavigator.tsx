@@ -38,6 +38,7 @@ import MoveOutScreen from '../screens/tenants/MoveOutScreen';
 import EditTenantScreen from '../screens/tenants/EditTenantScreen';
 import AdminClientsScreen from '../screens/admin/AdminClientsScreen';
 import AddNewTenantScreen from '../screens/tenants/AddNewTenantScreen';
+import NoticePeriodTenantsScreen from '../screens/tenants/NoticePeriodTenantsScreen';
 import ActivateScreen from '../screens/settings/ActivateScreen';
 
 // New Maintenance & Society Screens
@@ -89,6 +90,7 @@ export type AppStackParamList = {
   Outstanding: { buildingId?: string; buildingName?: string };
   EditTenant: { tenantId: string };
   MoveOut: { tenantId: string };
+  NoticePeriodTenants: { buildingId?: string; buildingName?: string };
   AdminClients: undefined;
   Activate: undefined;
 
@@ -175,6 +177,7 @@ const AppNavigator = () => (
     <AppStack.Screen name="Outstanding" component={OutstandingScreen} options={{ headerShown: false }} />
     <AppStack.Screen name="EditTenant" component={EditTenantScreen} options={{ title: 'Edit Resident Details' }} />
     <AppStack.Screen name="MoveOut" component={MoveOutScreen} options={{ title: 'Move Out' }} />
+    <AppStack.Screen name="NoticePeriodTenants" component={NoticePeriodTenantsScreen} options={{ headerShown: false }} />
     <AppStack.Screen name="AdminClients" component={AdminClientsScreen} options={{ title: 'Admin Clients' }} />
     <AppStack.Screen name="Activate" component={ActivateScreen} options={{ headerShown: false }} />
 

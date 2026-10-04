@@ -139,22 +139,22 @@ export default function DashboardScreen({ navigation }: Props) {
   const filteredUnits = (data?.allUnits ?? []).filter(u => u.building_id === selectedBuildingId);
   const buildingTenants = (data?.allTenants ?? []).filter(t => t.building_id === selectedBuildingId);
 
-  const displayUnits = isPGBuilding
-    ? filteredUnits.reduce((sum, u) => sum + (u.total_beds || 1), 0)
-    : filteredUnits.length;
-
-  const displayOccupied = isPGBuilding
-    ? buildingTenants.length
-    : filteredUnits.filter(u => !u.is_vacant).length;
-
-  const displayVacant = Math.max(0, displayUnits - displayOccupied);
-
-  const noticePeriodTenants = (data?.allTenants ?? []).filter(t => {
-    if (t.building_id !== selectedBuildingId) return false;
+  const noticePeriodTenants = buildingTenants.filter(t => {
     if (!t.expected_vacate_date) return false;
     const today = new Date().toISOString().split('T')[0];
     return t.expected_vacate_date >= today;
   });
+
+  const displayUnits = isPGBuilding
+    ? filteredUnits.reduce((sum, u) => sum + (u.total_beds || 1), 0)
+    : filteredUnits.length;
+
+  // Occupied = all active tenants MINUS those on notice period
+  const displayOccupied = isPGBuilding
+    ? buildingTenants.length - noticePeriodTenants.length
+    : filteredUnits.filter(u => !u.is_vacant).length - noticePeriodTenants.length;
+
+  const displayVacant = Math.max(0, displayUnits - displayOccupied - noticePeriodTenants.length);
 
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
@@ -266,7 +266,7 @@ export default function DashboardScreen({ navigation }: Props) {
           />
           <StatCard
             label={isPGBuilding ? 'Beds Occupied' : 'Occupied'}
-            value={displayOccupied}
+            value={Math.max(0, displayOccupied)}
             icon="person-add"
             color={COLORS.success}
             onPress={navToOccupied}
@@ -274,33 +274,21 @@ export default function DashboardScreen({ navigation }: Props) {
           />
           <StatCard
             label={isPGBuilding ? 'Beds Vacant' : 'Vacant'}
-            value={displayVacant}
+            value={Math.max(0, displayVacant)}
             icon="key-outline"
             color="#D97706"
-            onPress={() => navigation.navigate('AddNewTenant')}
+            onPress={() => navigation.navigate('AddNewTenant', { preselectedBuildingId: selectedBuildingId })}
+            loading={loading}
+          />
+          <StatCard
+            label="Notice Period"
+            value={noticePeriodTenants.length}
+            icon="time-outline"
+            color="#B45309"
+            onPress={() => navigation.navigate('NoticePeriodTenants' as any, buildingParam)}
             loading={loading}
           />
         </View>
-
-        {/* ── Notice Period Alert Box (if any active tenant is on notice) ── */}
-        {noticePeriodTenants.length > 0 && (
-          <TouchableOpacity
-            style={styles.noticeAlertCard}
-            onPress={() => navigation.navigate('OccupiedTenants', buildingParam)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.noticeAlertIcon}>
-              <Ionicons name="time-outline" size={20} color="#B45309" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.noticeAlertTitle}>Notice Period Active ({noticePeriodTenants.length})</Text>
-              <Text style={styles.noticeAlertSub}>
-                {noticePeriodTenants.map(t => `${t.full_name} (${t.unit_number}) - vacating ${t.expected_vacate_date}`).join(' · ')}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color="#B45309" />
-          </TouchableOpacity>
-        )}
 
         {/* ── Payment Summary of the Month ── */}
         <Card title="Payment Summary of the Month">

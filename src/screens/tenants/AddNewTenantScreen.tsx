@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, RefreshControl,
   TextInput, FlatList, Modal,
@@ -38,6 +38,7 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
   const { user } = useAuth();
   const preselectedBuildingId = route.params?.preselectedBuildingId ?? '';
 
+  // Track current user-chosen building separately from the route param
   const [allUnits, setAllUnits] = useState<VacantUnit[]>([]);
   const [units, setUnits] = useState<VacantUnit[]>([]);
   const [buildings, setBuildings] = useState<BuildingSummary[]>([]);
@@ -51,7 +52,11 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async (silent = false) => {
+  // currentBuildingRef holds the building the user has chosen on THIS screen
+  // so re-focus (e.g. returning from AddTenantStep2) preserves the user's choice
+  const currentBuildingRef = useRef<string>(preselectedBuildingId);
+
+  const load = useCallback(async (silent = false, forceBuildingId?: string) => {
     if (!user) return;
     if (!silent) setLoading(true);
 
@@ -108,29 +113,34 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
 
     setAllUnits(vacantUnits);
 
-    // Filter by selected building
-    const buildingId = selectedBuildingId || preselectedBuildingId || blds[0]?.id || '';
-    if (buildingId && buildingId !== selectedBuildingId) {
-      setSelectedBuildingId(buildingId);
+    // Priority: forced (from focus) → user's last choice → first building
+    const buildingId = forceBuildingId ?? (currentBuildingRef.current || blds[0]?.id || '');
+    if (buildingId !== currentBuildingRef.current) {
+      currentBuildingRef.current = buildingId;
     }
-    const filtered = buildingId
+    setSelectedBuildingId(buildingId);
+    const newFiltered = buildingId
       ? vacantUnits.filter(u => u.building_id === buildingId)
       : vacantUnits;
-    setUnits(filtered);
-    setFiltered(filtered);
+    setUnits(newFiltered);
+    setFiltered(newFiltered);
     setLoading(false);
-  }, [user, selectedBuildingId, preselectedBuildingId]);
+  }, [user]);
 
   useFocusEffect(useCallback(() => {
-    // Reset to preselected building on focus
+    // When coming from Dashboard with a preselected building, always apply it
+    // When returning from a sub-screen (AddTenantStep2 etc), preserve user's last choice
     if (preselectedBuildingId) {
-      setSelectedBuildingId(preselectedBuildingId);
+      currentBuildingRef.current = preselectedBuildingId;
       setSelected(null);
       setSearch('');
+      load(false, preselectedBuildingId);
+    } else {
+      load(false, currentBuildingRef.current || undefined);
     }
-    load();
-  }, [load]));
-  const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
+  }, [load, preselectedBuildingId]));
+
+  const onRefresh = async () => { setRefreshing(true); await load(true, currentBuildingRef.current || undefined); setRefreshing(false); };
 
   const handleSearch = (q: string) => {
     setSearch(q);
@@ -149,6 +159,8 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
   };
 
   const handleBuildingSelect = (id: string) => {
+    // Persist the user's manual choice so focus-restore keeps it
+    currentBuildingRef.current = id;
     setSelectedBuildingId(id);
     setSelected(null);
     setSearch('');
@@ -254,18 +266,35 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
             {units.length === 0 && !loading && (
               <View style={styles.empty}>
                 <Ionicons
-                  name={totalUnitsCount === 0 ? "business-outline" : "checkmark-circle"}
+                  name={totalUnitsCount === 0 ? "business-outline" : "home-outline"}
                   size={48}
-                  color={totalUnitsCount === 0 ? COLORS.primary : COLORS.success}
+                  color={totalUnitsCount === 0 ? COLORS.primary : COLORS.warning}
                 />
                 <Text style={styles.emptyTitle}>
-                  {totalUnitsCount === 0 ? 'No Units Added Yet' : 'All Units Occupied!'}
+                  {totalUnitsCount === 0
+                    ? 'No Units Added Yet'
+                    : 'No Vacant Units in this Property'}
                 </Text>
                 <Text style={styles.emptyText}>
                   {totalUnitsCount === 0
-                    ? 'Add properties and units first before assigning residents.'
-                    : 'All your units are currently assigned to active residents.'}
+                    ? 'Add properties and units before assigning residents.'
+                    : 'All units in this property are currently occupied. Add a new unit to continue.'}
                 </Text>
+                <TouchableOpacity
+                  style={styles.addUnitBtn}
+                  onPress={() => {
+                    if (selectedBuildingId) {
+                      navigation.navigate('AddEditUnit', { buildingId: selectedBuildingId });
+                    } else {
+                      navigation.navigate('AddEditBuilding', {});
+                    }
+                  }}
+                >
+                  <Ionicons name="add-circle-outline" size={18} color="#fff" />
+                  <Text style={styles.addUnitBtnText}>
+                    {totalUnitsCount === 0 ? 'Add New Property' : 'Add New Unit / Flat'}
+                  </Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -276,29 +305,35 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
       <Modal
         visible={buildingDropdownOpen}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setBuildingDropdownOpen(false)}
       >
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setBuildingDropdownOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
             <Text style={styles.modalTitle}>Select Property / Society</Text>
-            {buildings.map(b => (
-              <TouchableOpacity
-                key={b.id}
-                style={[styles.buildingItem, selectedBuildingId === b.id && styles.buildingItemActive]}
-                onPress={() => handleBuildingSelect(b.id)}
-              >
-                <Ionicons
-                  name="business-outline"
-                  size={18}
-                  color={selectedBuildingId === b.id ? COLORS.primary : COLORS.muted}
-                />
-                <Text style={[styles.buildingItemText, selectedBuildingId === b.id && { color: COLORS.primary }]}>
-                  {b.name}
-                </Text>
-                {selectedBuildingId === b.id && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
-              </TouchableOpacity>
-            ))}
+            <FlatList
+              data={buildings}
+              keyExtractor={b => b.id}
+              style={{ maxHeight: 320 }}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item: b }) => (
+                <TouchableOpacity
+                  key={b.id}
+                  style={[styles.buildingItem, selectedBuildingId === b.id && styles.buildingItemActive]}
+                  onPress={() => handleBuildingSelect(b.id)}
+                >
+                  <Ionicons
+                    name="business-outline"
+                    size={18}
+                    color={selectedBuildingId === b.id ? COLORS.primary : COLORS.muted}
+                  />
+                  <Text style={[styles.buildingItemText, selectedBuildingId === b.id && { color: COLORS.primary }]}>
+                    {b.name}
+                  </Text>
+                  {selectedBuildingId === b.id && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
+                </TouchableOpacity>
+              )}
+            />
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
@@ -307,7 +342,7 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
       <Modal
         visible={dropdownOpen}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setDropdownOpen(false)}
       >
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDropdownOpen(false)}>
@@ -418,7 +453,13 @@ const styles = StyleSheet.create({
 
   empty: { alignItems: 'center', paddingTop: 60, gap: 8 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
-  emptyText: { fontSize: 14, color: COLORS.muted, textAlign: 'center' },
+  emptyText: { fontSize: 14, color: COLORS.muted, textAlign: 'center', paddingHorizontal: 16 },
+  addUnitBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: COLORS.primary, borderRadius: 10,
+    paddingHorizontal: 20, paddingVertical: 12, marginTop: 8,
+  },
+  addUnitBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },

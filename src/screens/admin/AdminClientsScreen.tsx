@@ -32,7 +32,7 @@ type ClientWithSub = Profile & {
 
 const PLAN_OPTIONS = ['unlimited', '30days', '1year', 'custom'] as const;
 type PlanName = typeof PLAN_OPTIONS[number];
-type LoginMode = 'bypass' | 'email' | 'phone';
+type LoginMode = 'bypass' | 'phone' | 'email';
 
 export default function AdminClientsScreen() {
   const navigation = useNavigation();
@@ -362,31 +362,42 @@ export default function AdminClientsScreen() {
           </View>
 
           <View style={styles.statusCol}>
-            <TouchableOpacity
-              style={[styles.statusBadge, isActive ? styles.activeBadge : styles.inactiveBadge]}
-              onPress={() => !isAdminRole && handleToggleStatus(item)}
-              disabled={isAdminRole}
-            >
+            <View style={[styles.statusBadge, isActive ? styles.activeBadge : styles.inactiveBadge]}>
               <Text style={[styles.statusText, isActive ? styles.activeText : styles.inactiveText]}>
                 {isActive ? 'Active' : 'Disabled'}
               </Text>
-            </TouchableOpacity>
+            </View>
           </View>
         </View>
 
-        <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.actionBtn} onPress={() => handleOpenEdit(item)}>
-            <Ionicons name="create-outline" size={16} color={COLORS.primary} />
-            <Text style={styles.actionBtnText}>Edit / Subscription</Text>
-          </TouchableOpacity>
+        {/* Modify button → shows action menu */}
+        {!isAdminRole && (
+          <View style={styles.actionRow}>
+            <TouchableOpacity style={styles.actionBtn} onPress={() => handleOpenEdit(item)}>
+              <Ionicons name="create-outline" size={16} color={COLORS.primary} />
+              <Text style={styles.actionBtnText}>Edit Details</Text>
+            </TouchableOpacity>
 
-          {!isAdminRole && (
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => handleToggleStatus(item)}
+            >
+              <Ionicons
+                name={isActive ? 'pause-circle-outline' : 'play-circle-outline'}
+                size={16}
+                color={isActive ? COLORS.warning : COLORS.success}
+              />
+              <Text style={[styles.actionBtnText, { color: isActive ? COLORS.warning : COLORS.success }]}>
+                {isActive ? 'Deactivate' : 'Activate'}
+              </Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.actionBtn} onPress={() => handleDeleteClient(item)}>
               <Ionicons name="trash-outline" size={16} color={COLORS.danger} />
               <Text style={[styles.actionBtnText, { color: COLORS.danger }]}>Delete</Text>
             </TouchableOpacity>
-          )}
-        </View>
+          </View>
+        )}
       </View>
     );
   };
@@ -406,15 +417,15 @@ export default function AdminClientsScreen() {
       >
 
       {/* OTP Settings Card */}
-      <Card title="🔐 OTP Settings">
-        {/* Login Mode */}
+      <Card title="🔐 OTP & Login Settings">
+        {/* Login Mode — order: Bypass → SMS OTP → Email OTP */}
         <Text style={styles.otpSettingLabel}>Login Mode</Text>
         <View style={styles.planRow}>
-          {(['bypass', 'email', 'phone'] as LoginMode[]).map((mode) => {
+          {(['bypass', 'phone', 'email'] as LoginMode[]).map((mode) => {
             const labels: Record<LoginMode, string> = {
               bypass: 'Bypass (No OTP)',
-              email: 'Email OTP',
               phone: 'SMS OTP',
+              email: 'Email OTP',
             };
             return (
               <TouchableOpacity
@@ -455,7 +466,8 @@ export default function AdminClientsScreen() {
           </View>
         )}
 
-        {loginMode !== 'phone' && !useSupabaseOtp && (
+        {/* Default OTP only shown for email/phone modes (not bypass) */}
+        {loginMode !== 'bypass' && loginMode !== 'phone' && !useSupabaseOtp && (
           <FormField
             label="Default OTP (6 digits)"
             value={defaultOtp}
@@ -474,18 +486,37 @@ export default function AdminClientsScreen() {
         />
       </Card>
 
-      {/* Apply-to-all subscription card */}
-      <Card title="📦 Apply Subscription to All Clients">
+      {/* Subscription Model & Apply-to-all card */}
+      <Card title="📦 Subscription Model">
         <Text style={styles.cardHint}>Set one subscription plan for all non-admin clients at once.</Text>
+
+        {/* Subscription Model toggle */}
+        <Text style={[styles.otpSettingLabel, { marginBottom: 6 }]}>Billing Model</Text>
+        <View style={[styles.planRow, { marginBottom: 12 }]}>
+          {(['free', 'paid'] as const).map((model) => (
+            <TouchableOpacity
+              key={model}
+              style={[styles.planChip, subscriptionModel === model && styles.planChipActive]}
+              onPress={() => !subModelSaving && saveSubscriptionModel(model)}
+            >
+              <Text style={[styles.planChipText, subscriptionModel === model && styles.planChipTextActive]}>
+                {model === 'free' ? 'Free (Unlimited)' : 'Paid'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Plan duration picker */}
+        <Text style={[styles.otpSettingLabel, { marginBottom: 6 }]}>Apply Plan to All Clients</Text>
         <View style={styles.planRow}>
-          {PLAN_OPTIONS.map(p => (
+          {(['unlimited', '30days', '1year', 'custom'] as PlanName[]).map(p => (
             <TouchableOpacity
               key={p}
               style={[styles.planChip, applyAllPlan === p && styles.planChipActive]}
               onPress={() => setApplyAllPlan(p)}
             >
               <Text style={[styles.planChipText, applyAllPlan === p && styles.planChipTextActive]}>
-                {p === 'unlimited' ? '∞ Unlimited' : p === '30days' ? '30 Days' : p === '1year' ? '1 Year' : 'Custom'}
+                {p === 'unlimited' ? '∞ Unlimited' : p === '30days' ? '30 Days Trial' : p === '1year' ? '1 Year' : 'Custom'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -507,70 +538,45 @@ export default function AdminClientsScreen() {
         />
       </Card>
 
-      {/* Subscription Pricing card */}
-      {plans.length > 0 && (
+      {/* Subscription Pricing card — only when paid model */}
+      {subscriptionModel === 'paid' && plans.length > 0 && (
         <Card title="💰 Subscription Pricing">
           <Text style={styles.cardHint}>Set pricing shown to clients on the Activate screen.</Text>
-
-          {/* Subscription Model toggle */}
-          <Text style={[styles.otpSettingLabel, { marginBottom: 6 }]}>Subscription Model</Text>
-          <View style={[styles.planRow, { marginBottom: 12 }]}>
-            {(['free', 'paid'] as const).map((model) => (
-              <TouchableOpacity
-                key={model}
-                style={[styles.planChip, subscriptionModel === model && styles.planChipActive]}
-                onPress={() => !subModelSaving && saveSubscriptionModel(model)}
-              >
-                <Text style={[styles.planChipText, subscriptionModel === model && styles.planChipTextActive]}>
-                  {model === 'free' ? 'Free (Unlimited)' : 'Paid'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {subscriptionModel === 'free' ? (
-            <Text style={styles.cardHint}>
-              All clients have unlimited access. Switch to Paid to configure pricing.
-            </Text>
-          ) : (
-            <>
-              {plans.filter(plan => plan.name !== 'unlimited').map(plan => (
-                <View key={plan.id} style={styles.pricingRow}>
-                  <Text style={styles.pricingLabel}>{plan.label}</Text>
-                  <View style={styles.pricingInputs}>
-                    <View style={styles.pricingField}>
-                      <Text style={styles.pricingFieldLabel}>Per Tenant (₹)</Text>
-                      <TextInput
-                        style={styles.pricingInput}
-                        value={pricingEdits[plan.id]?.price_per_tenant ?? ''}
-                        onChangeText={v => setPricingEdits(prev => ({ ...prev, [plan.id]: { ...prev[plan.id], price_per_tenant: v } }))}
-                        keyboardType="numeric"
-                        placeholder="0"
-                        placeholderTextColor={COLORS.muted}
-                      />
-                    </View>
-                    <View style={styles.pricingField}>
-                      <Text style={styles.pricingFieldLabel}>Per Property (₹)</Text>
-                      <TextInput
-                        style={styles.pricingInput}
-                        value={pricingEdits[plan.id]?.price_per_property ?? ''}
-                        onChangeText={v => setPricingEdits(prev => ({ ...prev, [plan.id]: { ...prev[plan.id], price_per_property: v } }))}
-                        keyboardType="numeric"
-                        placeholder="0"
-                        placeholderTextColor={COLORS.muted}
-                      />
-                    </View>
-                  </View>
+          {plans.filter(plan => plan.name !== 'unlimited').map(plan => (
+            <View key={plan.id} style={styles.pricingRow}>
+              <Text style={styles.pricingLabel}>{plan.label}</Text>
+              <View style={styles.pricingInputs}>
+                <View style={styles.pricingField}>
+                  <Text style={styles.pricingFieldLabel}>Per Tenant (₹)</Text>
+                  <TextInput
+                    style={styles.pricingInput}
+                    value={pricingEdits[plan.id]?.price_per_tenant ?? ''}
+                    onChangeText={v => setPricingEdits(prev => ({ ...prev, [plan.id]: { ...prev[plan.id], price_per_tenant: v } }))}
+                    keyboardType="numeric"
+                    placeholder="0"
+                    placeholderTextColor={COLORS.muted}
+                  />
                 </View>
-              ))}
-              <Button
-                title="Save Pricing"
-                onPress={handleSavePricing}
-                loading={pricingSaving}
-                style={{ marginTop: 8 }}
-              />
-            </>
-          )}
+                <View style={styles.pricingField}>
+                  <Text style={styles.pricingFieldLabel}>Per Property (₹)</Text>
+                  <TextInput
+                    style={styles.pricingInput}
+                    value={pricingEdits[plan.id]?.price_per_property ?? ''}
+                    onChangeText={v => setPricingEdits(prev => ({ ...prev, [plan.id]: { ...prev[plan.id], price_per_property: v } }))}
+                    keyboardType="numeric"
+                    placeholder="0"
+                    placeholderTextColor={COLORS.muted}
+                  />
+                </View>
+              </View>
+            </View>
+          ))}
+          <Button
+            title="Save Pricing"
+            onPress={handleSavePricing}
+            loading={pricingSaving}
+            style={{ marginTop: 8 }}
+          />
         </Card>
       )}
 

@@ -85,12 +85,18 @@ export default function AddEditBuildingScreen({ navigation, route }: Props) {
       owner_id: user!.id,
     };
 
-    const { error } = editId
-      ? await supabase.from('buildings').update(payload).eq('id', editId)
-      : await supabase.from('buildings').insert(payload);
-    setLoading(false);
-    if (error) { Alert.alert('Error', error.message); return; }
-    navigation.goBack();
+    if (editId) {
+      const { error } = await supabase.from('buildings').update(payload).eq('id', editId);
+      setLoading(false);
+      if (error) { Alert.alert('Error', error.message); return; }
+      navigation.goBack();
+    } else {
+      const { data, error } = await supabase.from('buildings').insert(payload).select('id').single();
+      setLoading(false);
+      if (error) { Alert.alert('Error', error.message); return; }
+      // After creating a new property, redirect to Add Unit/Flat page
+      navigation.replace('AddEditUnit', { buildingId: data.id });
+    }
   };
 
   const isSocietyOrApartment = type === 'apartment' || type === 'gated_community';
@@ -147,12 +153,12 @@ export default function AddEditBuildingScreen({ navigation, route }: Props) {
           </>
         ) : (
           <>
-            {/* Selected category badge — tapping goes back to step 1 */}
-
-            <View style={styles.selectedBadge}>
+            {/* Selected category badge — tap to change */}
+            <TouchableOpacity style={styles.selectedBadge} onPress={() => setStep(1)} activeOpacity={0.8}>
               <Ionicons name={selectedTypeObj?.icon as any ?? 'business'} size={18} color={COLORS.primary} />
-              <Text style={styles.selectedBadgeText}>{selectedTypeObj?.label}</Text>
-            </View>
+              <Text style={styles.selectedBadgeText}>{selectedTypeObj?.label ?? 'Multi-storied (Flats)'}</Text>
+              <Ionicons name="pencil-outline" size={13} color={COLORS.primary} style={{ marginLeft: 4 }} />
+            </TouchableOpacity>
 
             <Text style={[styles.sectionHeading, { marginTop: 12 }]}>Property Details</Text>
             <FormField
