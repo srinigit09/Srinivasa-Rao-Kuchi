@@ -61,7 +61,7 @@ export default function AddTenantStep2Screen({ navigation, route }: Props) {
   return (
     <KeyboardAvoidingView
       style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior='padding'
       keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 20}
     >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
@@ -148,5 +148,5 @@ export default function AddTenantStep2Screen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
-  container: { padding: 20, paddingBottom: 100 },
+  container: { padding: 20, paddingBottom: 160 },
 });

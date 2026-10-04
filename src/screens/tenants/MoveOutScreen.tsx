@@ -227,7 +227,7 @@ export default function MoveOutScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.bg },
-  container: { padding: 16, paddingBottom: 100 },
+  container: { padding: 16, paddingBottom: 160 },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   tenantName: { fontSize: 16, fontWeight: '700', color: COLORS.text },
   tenantMeta: { fontSize: 13, color: COLORS.muted, marginTop: 3 },

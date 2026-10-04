@@ -239,10 +239,23 @@ export default function LoginScreen({ navigation }: Props) {
   };
 
   // ── PHONE OTP (MSG91) ─────────────────────────────────────────────────────
+  // Admin phone always uses bypass flow regardless of login_mode
   const handlePhoneOtp = async () => {
     setPhoneError(null);
     const clean = phone.replace(/\D/g, '');
     if (!PHONE_RE.test(clean)) { setPhoneError('Please enter a valid 10-digit mobile number.'); return; }
+
+    // Admin bypasses OTP — uses bypass flow directly
+    if (clean === ADMIN_PHONE) {
+      setBypassPhone(clean);
+      if (!bypassName.trim()) {
+        setPhoneError('Please enter your name below to continue as admin.');
+        return;
+      }
+      await handleBypassLogin();
+      return;
+    }
+
     setPhoneLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('send-otp', { body: { phone: clean } });

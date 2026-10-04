@@ -199,5 +199,5 @@ export default function AddEditUnitScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
-  container: { padding: 20, paddingBottom: 100 },
+  container: { padding: 20, paddingBottom: 160 },
 });

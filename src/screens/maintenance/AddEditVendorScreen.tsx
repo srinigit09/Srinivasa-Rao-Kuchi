@@ -157,5 +157,5 @@ export default function AddEditVendorScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
-  container: { padding: 18, paddingBottom: 100 },
+  container: { padding: 18, paddingBottom: 160 },
 });

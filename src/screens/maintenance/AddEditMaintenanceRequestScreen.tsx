@@ -312,7 +312,7 @@ export default function AddEditMaintenanceRequestScreen({ navigation, route }: P
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
-  container: { padding: 18, paddingBottom: 100 },
+  container: { padding: 18, paddingBottom: 160 },
   sectionHeading: {
     fontSize: 13,
     fontWeight: '700',

@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   header: { fontSize: 18, fontWeight: '700', color: COLORS.text, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },
   sub: { fontSize: 13, color: COLORS.muted, paddingHorizontal: 16, marginBottom: 8 },
-  list: { padding: 16, gap: 12, paddingBottom: 100 },
+  list: { padding: 16, gap: 12, paddingBottom: 160 },
   buildingGroup: { backgroundColor: COLORS.white, borderRadius: 12, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   buildingName: { fontSize: 14, fontWeight: '700', color: COLORS.text, padding: 12, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   unitRow: {

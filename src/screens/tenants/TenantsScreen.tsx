@@ -380,11 +380,12 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text },
   emptyText: { fontSize: 13, color: COLORS.muted },
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center', paddingHorizontal: 20,
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
   },
   dropdownSheet: {
-    backgroundColor: COLORS.white, borderRadius: 16, padding: 16,
+    backgroundColor: COLORS.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 20, paddingBottom: 36,
   },
   dropdownTitle: {
     fontSize: 14, fontWeight: '700', color: COLORS.text,

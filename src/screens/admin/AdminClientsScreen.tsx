@@ -3,12 +3,14 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView, RefreshControl, Switch, TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import { Profile } from '../../types';
 import { COLORS } from '../../constants';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
 import Card from '../../components/common/Card';
+import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 import { formatDate, showAlert } from '../../utils';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -30,6 +32,7 @@ const PLAN_OPTIONS = ['unlimited', '30days', '1year', 'custom'] as const;
 type PlanName = typeof PLAN_OPTIONS[number];
 
 export default function AdminClientsScreen() {
+  const navigation = useNavigation();
   const [clients, setClients] = useState<ClientWithSub[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -360,10 +363,13 @@ export default function AdminClientsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.topBar}>
-        <Text style={styles.title}>Clients Management</Text>
-        <Text style={styles.subTitle}>Total Clients: {clients.length}</Text>
-      </View>
+      <BlueBannerHeader
+        title="Client Management"
+        subtitle={`${clients.filter(c => c.role !== 'admin').length} clients registered`}
+        onBack={navigation.canGoBack() ? () => navigation.goBack() : undefined}
+      />
+
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
 
       {/* OTP Settings Card */}
       <Card title="🔐 OTP Settings">
@@ -489,17 +495,27 @@ export default function AdminClientsScreen() {
         />
       </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        renderItem={renderClientItem}
-        contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListEmptyComponent={
-          <View style={styles.emptyWrap}>
-            <Text style={styles.emptyText}>{loading ? 'Loading clients...' : 'No clients found'}</Text>
+      {filtered.length === 0 ? (
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyText}>{loading ? 'Loading clients...' : 'No clients found'}</Text>
+        </View>
+      ) : (
+        filtered.map(item => (
+          <View key={item.id} style={styles.listPad}>
+            {renderClientItem({ item })}
           </View>
-        }
+        ))
+      )}
+
+      </ScrollView>
+
+      {/* Pull to refresh */}
+      <FlatList
+        data={[]}
+        keyExtractor={() => 'empty'}
+        renderItem={null}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        style={{ height: 0 }}
       />
 
       {/* Edit Client Modal */}
@@ -584,9 +600,8 @@ export default function AdminClientsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  topBar: { padding: 16, backgroundColor: COLORS.white, borderBottomWidth: 1, borderColor: COLORS.border },
-  title: { fontSize: 20, fontWeight: '700', color: COLORS.text },
-  subTitle: { fontSize: 13, color: COLORS.muted, marginTop: 2 },
+  scrollContent: { paddingBottom: 40 },
+  listPad: { paddingHorizontal: 12, paddingBottom: 8 },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',

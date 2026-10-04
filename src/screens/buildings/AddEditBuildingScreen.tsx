@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform, TouchableOpacity,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import { supabase } from '../../lib/supabase';
@@ -22,6 +23,17 @@ export default function AddEditBuildingScreen({ navigation, route }: Props) {
   const { user } = useAuth();
   const editId = route.params?.buildingId;
   const [step, setStep] = useState<1 | 2>(editId ? 2 : 1);
+
+  // Intercept hardware/gesture back: on step 2 go back to step 1, not out of screen
+  useFocusEffect(useCallback(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (step === 2 && !editId) {
+        e.preventDefault();
+        setStep(1);
+      }
+    });
+    return unsubscribe;
+  }, [navigation, step, editId]));
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [type, setType] = useState<BuildingType>('residential');
@@ -135,12 +147,7 @@ export default function AddEditBuildingScreen({ navigation, route }: Props) {
           </>
         ) : (
           <>
-            {!editId && (
-              <TouchableOpacity style={styles.backStepBtn} onPress={() => setStep(1)}>
-                <Ionicons name="arrow-back" size={16} color={COLORS.primary} />
-                <Text style={styles.backStepText}>Change Category ({selectedTypeObj?.label})</Text>
-              </TouchableOpacity>
-            )}
+            {/* Selected category badge — tapping goes back to step 1 */}
 
             <View style={styles.selectedBadge}>
               <Ionicons name={selectedTypeObj?.icon as any ?? 'business'} size={18} color={COLORS.primary} />
@@ -228,7 +235,7 @@ export default function AddEditBuildingScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
-  container: { padding: 18, paddingBottom: 60 },
+  container: { padding: 18, paddingBottom: 160 },
   backStepBtn: {
     flexDirection: 'row',
     alignItems: 'center',

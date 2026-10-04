@@ -233,7 +233,7 @@ export default function EditTenantScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
-  container: { padding: 20, paddingBottom: 100 },
+  container: { padding: 20, paddingBottom: 160 },
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { color: COLORS.muted, fontSize: 15 },
   sectionTitle: {
