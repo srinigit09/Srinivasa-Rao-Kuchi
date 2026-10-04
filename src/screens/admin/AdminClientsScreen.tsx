@@ -59,6 +59,7 @@ export default function AdminClientsScreen() {
   // OTP Settings
   const [defaultOtp, setDefaultOtp] = useState('123456');
   const [useSupabaseOtp, setUseSupabaseOtp] = useState(false);
+  const [useSmsGateway, setUseSmsGateway] = useState(false);
   const [otpSaving, setOtpSaving] = useState(false);
   const [loginMode, setLoginMode] = useState<LoginMode>('bypass');
 
@@ -93,12 +94,13 @@ export default function AdminClientsScreen() {
     const { data } = await supabase
       .from('app_settings')
       .select('key, value')
-      .in('key', ['default_otp', 'use_supabase_otp', 'login_mode', 'subscription_model']);
+      .in('key', ['default_otp', 'use_supabase_otp', 'use_sms_gateway', 'login_mode', 'subscription_model']);
     if (data) {
       const map: Record<string, string> = {};
       data.forEach((r: { key: string; value: string }) => { map[r.key] = r.value; });
       setDefaultOtp(map['default_otp'] ?? '123456');
       setUseSupabaseOtp(map['use_supabase_otp'] === 'true');
+      setUseSmsGateway(map['use_sms_gateway'] === 'true');
       setLoginMode((map['login_mode'] as LoginMode) || 'bypass');
       setSubscriptionModel((map['subscription_model'] as 'free' | 'paid') || 'free');
     }
@@ -146,9 +148,10 @@ export default function AdminClientsScreen() {
     }
     setOtpSaving(true);
     const updates = [
-      supabase.from('app_settings').upsert({ key: 'default_otp', value: defaultOtp.trim(), updated_at: new Date().toISOString() }),
-      supabase.from('app_settings').upsert({ key: 'use_supabase_otp', value: String(useSupabaseOtp), updated_at: new Date().toISOString() }),
-      supabase.from('app_settings').upsert({ key: 'login_mode', value: loginMode, updated_at: new Date().toISOString() }),
+      supabase.from('app_settings').upsert({ key: 'default_otp', value: defaultOtp.trim(), updated_at: new Date().toISOString() }, { onConflict: 'key' }),
+      supabase.from('app_settings').upsert({ key: 'use_supabase_otp', value: String(useSupabaseOtp), updated_at: new Date().toISOString() }, { onConflict: 'key' }),
+      supabase.from('app_settings').upsert({ key: 'use_sms_gateway', value: String(useSmsGateway), updated_at: new Date().toISOString() }, { onConflict: 'key' }),
+      supabase.from('app_settings').upsert({ key: 'login_mode', value: loginMode, updated_at: new Date().toISOString() }, { onConflict: 'key' }),
     ];
     const results = await Promise.all(updates);
     setOtpSaving(false);
@@ -447,6 +450,26 @@ export default function AdminClientsScreen() {
           })}
         </View>
 
+        {/* SMS Gateway toggle — only when phone OTP mode */}
+        {loginMode === 'phone' && (
+          <View style={styles.otpSettingRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.otpSettingLabel}>Enable SMS Gateway (MSG91)</Text>
+              <Text style={styles.otpSettingHint}>
+                {useSmsGateway
+                  ? 'Real SMS OTP via MSG91 — configure edge functions first.'
+                  : 'Default OTP mode — no SMS sent. Users enter the code below.'}
+              </Text>
+            </View>
+            <Switch
+              value={useSmsGateway}
+              onValueChange={setUseSmsGateway}
+              trackColor={{ false: COLORS.border, true: COLORS.primaryLight }}
+              thumbColor={useSmsGateway ? COLORS.primary : '#f4f3f4'}
+            />
+          </View>
+        )}
+
         {loginMode === 'email' && (
           <View style={styles.otpSettingRow}>
             <View style={{ flex: 1 }}>
@@ -466,8 +489,8 @@ export default function AdminClientsScreen() {
           </View>
         )}
 
-        {/* Default OTP only shown for email/phone modes (not bypass) */}
-        {loginMode !== 'bypass' && loginMode !== 'phone' && !useSupabaseOtp && (
+        {/* Default OTP — shown for all non-bypass modes when real gateway is off */}
+        {loginMode !== 'bypass' && !(loginMode === 'phone' && useSmsGateway) && !useSupabaseOtp && (
           <FormField
             label="Default OTP (6 digits)"
             value={defaultOtp}

@@ -305,7 +305,7 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
       <Modal
         visible={buildingDropdownOpen}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setBuildingDropdownOpen(false)}
       >
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setBuildingDropdownOpen(false)}>
@@ -342,7 +342,7 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
       <Modal
         visible={dropdownOpen}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setDropdownOpen(false)}
       >
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDropdownOpen(false)}>

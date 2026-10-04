@@ -238,29 +238,40 @@ export default function LoginScreen({ navigation }: Props) {
     }
   };
 
-  // ── PHONE OTP (MSG91) ─────────────────────────────────────────────────────
-  // Admin phone always uses bypass flow regardless of login_mode
+  // ── PHONE OTP ─────────────────────────────────────────────────────────────
+  // Uses default_otp from app_settings (no SMS gateway needed).
+  // When MSG91 is configured later, set use_sms_gateway='true' in app_settings
+  // and this function will call the edge function instead.
   const handlePhoneOtp = async () => {
     setPhoneError(null);
     const clean = phone.replace(/\D/g, '');
     if (!PHONE_RE.test(clean)) { setPhoneError('Please enter a valid 10-digit mobile number.'); return; }
 
-    // Admin bypasses OTP — uses bypass flow directly
-    if (clean === ADMIN_PHONE) {
-      setBypassPhone(clean);
-      if (!bypassName.trim()) {
-        setPhoneError('Please enter your name below to continue as admin.');
-        return;
-      }
-      await handleBypassLogin();
-      return;
-    }
-
     setPhoneLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('send-otp', { body: { phone: clean } });
-      setPhoneLoading(false);
-      if (error || data?.error) { setPhoneError(data?.error ?? friendlyError(error?.message ?? 'Failed to send OTP.')); return; }
+      // Check whether the real SMS gateway is configured
+      const { data: settingsRows } = await supabase
+        .from('app_settings')
+        .select('key, value')
+        .in('key', ['use_sms_gateway', 'default_otp']);
+      const settingsMap: Record<string, string> = {};
+      (settingsRows ?? []).forEach((r: any) => { settingsMap[r.key] = r.value; });
+
+      const useSmsGateway = settingsMap['use_sms_gateway'] === 'true';
+
+      if (useSmsGateway) {
+        // Real SMS via edge function (MSG91) — only when explicitly enabled
+        const { data, error } = await supabase.functions.invoke('send-otp', { body: { phone: clean } });
+        setPhoneLoading(false);
+        if (error || data?.error) {
+          setPhoneError(data?.error ?? friendlyError(error?.message ?? 'Failed to send OTP.'));
+          return;
+        }
+      } else {
+        // Default OTP mode — no SMS sent; user enters the code set in Admin page
+        setPhoneLoading(false);
+      }
+
       navigation.navigate('OTP', { phone: clean });
     } catch (e: any) {
       setPhoneLoading(false);

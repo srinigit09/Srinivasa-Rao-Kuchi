@@ -13,6 +13,8 @@ import { COLORS } from '../../constants';
 import { showAlert } from '../../utils';
 import { Ionicons } from '@expo/vector-icons';
 
+const ADMIN_PHONE = '8247873377';
+
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'OTP'>;
   route: RouteProp<AuthStackParamList, 'OTP'>;
@@ -31,7 +33,15 @@ export default function OTPScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resendLoading, setResendLoading] = useState(false);
+  // Whether real SMS gateway is active (loaded on mount, used for hint text & resend)
+  const [useSmsGateway, setUseSmsGateway] = useState(false);
   const inputs = useRef<(TextInput | null)[]>([]);
+
+  // Load gateway setting on mount so hint text is accurate
+  React.useEffect(() => {
+    supabase.from('app_settings').select('value').eq('key', 'use_sms_gateway').single()
+      .then(({ data }) => { if ((data as any)?.value === 'true') setUseSmsGateway(true); });
+  }, []);
 
   const handleChange = (text: string, index: number) => {
     setError(null);
@@ -49,54 +59,111 @@ export default function OTPScreen({ navigation, route }: Props) {
     setError(null);
 
     try {
+      // Fetch settings once — used by both phone and email flows
+      const { data: settings } = await supabase
+        .from('app_settings')
+        .select('key, value')
+        .in('key', ['default_otp', 'use_supabase_otp', 'use_sms_gateway']);
+      const map: Record<string, string> = {};
+      (settings ?? []).forEach((r: any) => { map[r.key] = r.value; });
+      const defaultOtp      = map['default_otp']      ?? '123456';
+      const useSupabaseOtp  = map['use_supabase_otp'] === 'true';
+      const useSmsGateway   = map['use_sms_gateway']  === 'true';
+
       if (isPhoneFlow) {
-        // ── MSG91 OTP verification via Edge Function ──────────────────────────
-        const { data, error: fnErr } = await supabase.functions.invoke('verify-otp', {
-          body: { phone, otp: token },
-        });
+        if (useSmsGateway) {
+          // ── Real SMS gateway (MSG91) verification via Edge Function ──────────
+          const { data, error: fnErr } = await supabase.functions.invoke('verify-otp', {
+            body: { phone, otp: token },
+          });
+          setLoading(false);
+          if (fnErr || data?.error) {
+            setError(data?.error ?? fnErr?.message ?? 'Invalid OTP. Please try again.');
+            return;
+          }
+          await supabase.auth.setSession({
+            access_token:  data.session.access_token,
+            refresh_token: data.session.refresh_token,
+          });
+          if (data.profile?.is_active === false) {
+            await supabase.auth.signOut();
+            showAlert('Account Inactive', 'Your account has been deactivated. Please contact the administrator.');
+            return;
+          }
+          if (data.profile?.valid_until && new Date(data.profile.valid_until) < new Date()) {
+            await supabase.auth.signOut();
+            showAlert('Subscription Expired', 'Your validity period has expired. Please contact admin.');
+            return;
+          }
+          if (data.isNewUser || !data.profile?.full_name) {
+            navigation.navigate('ProfileSetup', { phone });
+          }
+        } else {
+          // ── Default OTP mode for phone (no SMS gateway configured) ───────────
+          // Verify against default_otp from app_settings (admin-controlled)
+          if (token !== defaultOtp) {
+            setLoading(false);
+            setError('Invalid OTP. Please check the code and try again.');
+            return;
+          }
+          // Use deterministic synthetic credentials from phone number
+          const syntheticEmail = `${phone}@rentease.app`;
+          const syntheticPwd   = `Ph#${phone}!RE2026`;
+          await supabase.auth.signUp({ email: syntheticEmail, password: syntheticPwd });
+          const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+            email: syntheticEmail, password: syntheticPwd,
+          });
+          if (signInErr || !signInData?.user) {
+            setLoading(false);
+            setError(signInErr?.message ?? 'Login failed. Please try again.');
+            return;
+          }
+          const userId = signInData.user.id;
 
-        setLoading(false);
+          // Upsert profile — admin phone always gets admin role
+          const isAdminPhone = phone === ADMIN_PHONE;
+          const { data: existingProfile } = await supabase
+            .from('profiles').select('id, full_name, is_active, valid_until').eq('id', userId).single();
 
-        if (fnErr || data?.error) {
-          setError(data?.error ?? fnErr?.message ?? 'Invalid OTP. Please try again.');
-          return;
+          if (existingProfile?.is_active === false) {
+            await supabase.auth.signOut();
+            setLoading(false);
+            showAlert('Account Inactive', 'Your account has been deactivated. Please contact the administrator.');
+            return;
+          }
+          if (existingProfile?.valid_until && new Date(existingProfile.valid_until) < new Date()) {
+            await supabase.auth.signOut();
+            setLoading(false);
+            showAlert('Subscription Expired', 'Your validity period has expired. Please contact admin.');
+            return;
+          }
+
+          if (!existingProfile?.full_name) {
+            // New user — upsert admin role if admin phone, then go to profile setup
+            await supabase.from('profiles').upsert({
+              id: userId,
+              phone: phone,
+              phone_number: phone,
+              role: isAdminPhone ? 'admin' : 'client',
+              is_active: true,
+              valid_until: isAdminPhone
+                ? null
+                : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+            }, { onConflict: 'id' });
+            setLoading(false);
+            navigation.navigate('ProfileSetup', { phone });
+          } else {
+            // Existing user — ensure admin role stays correct
+            if (isAdminPhone) {
+              await supabase.from('profiles').update({ role: 'admin' }).eq('id', userId);
+            }
+            setLoading(false);
+            // RootNavigator detects session and redirects automatically
+          }
         }
-
-        // Set the Supabase session returned from the Edge Function
-        await supabase.auth.setSession({
-          access_token:  data.session.access_token,
-          refresh_token: data.session.refresh_token,
-        });
-
-        // Account status checks
-        if (data.profile?.is_active === false) {
-          await supabase.auth.signOut();
-          showAlert('Account Inactive', 'Your account has been deactivated. Please contact the administrator.');
-          return;
-        }
-        if (data.profile?.valid_until && new Date(data.profile.valid_until) < new Date()) {
-          await supabase.auth.signOut();
-          showAlert('Subscription Expired', 'Your validity period has expired. Please contact admin.');
-          return;
-        }
-
-        // New user — go to profile setup
-        if (data.isNewUser || !data.profile?.full_name) {
-          navigation.navigate('ProfileSetup', { phone });
-        }
-        // Existing user — RootNavigator detects session and redirects automatically
 
       } else {
-        // ── Legacy email/default OTP flow ─────────────────────────────────────
-        const { data: settings } = await supabase
-          .from('app_settings')
-          .select('key, value')
-          .in('key', ['default_otp', 'use_supabase_otp']);
-        const map: Record<string, string> = {};
-        (settings ?? []).forEach((r: any) => { map[r.key] = r.value; });
-        const useSupabaseOtp = map['use_supabase_otp'] === 'true';
-        const defaultOtp = map['default_otp'] ?? '123456';
-
+        // ── Email OTP flow ────────────────────────────────────────────────────
         let authUser = null;
         if (useSupabaseOtp) {
           const { data, error: verifyErr } = await supabase.auth.verifyOtp({
@@ -113,7 +180,7 @@ export default function OTPScreen({ navigation, route }: Props) {
         } else {
           if (token !== defaultOtp) {
             setLoading(false);
-            setError(`Invalid OTP. Default is ${defaultOtp}.`);
+            setError('Invalid OTP. Please check the code and try again.');
             return;
           }
           const pwd = `Pass#${email!.replace(/[^a-zA-Z0-9]/g, '')}!2026`;
@@ -161,12 +228,14 @@ export default function OTPScreen({ navigation, route }: Props) {
     setError(null);
     setOtp(['', '', '', '', '', '']);
     try {
-      if (isPhoneFlow) {
+      if (isPhoneFlow && useSmsGateway) {
+        // Only call edge function when SMS gateway is actually configured
         const { data, error: fnErr } = await supabase.functions.invoke('send-otp', {
           body: { phone },
         });
         if (fnErr || data?.error) setError(data?.error ?? fnErr?.message ?? 'Failed to resend OTP.');
       } else {
+        // Default OTP mode or email — just go back so user can re-enter
         navigation.goBack();
       }
     } catch (e: any) {
@@ -196,9 +265,12 @@ export default function OTPScreen({ navigation, route }: Props) {
       >
         {isPhoneFlow && (
           <View style={styles.hintBox}>
-            <Ionicons name="chatbubble-outline" size={18} color={COLORS.primary} />
+            <Ionicons name={useSmsGateway ? 'chatbubble-outline' : 'lock-closed-outline'} size={18} color={COLORS.primary} />
             <Text style={styles.hintText}>
-              Check your <Text style={styles.hintBold}>SMS messages</Text> for the 6-digit OTP from Supabase / your service provider.
+              {useSmsGateway
+                ? <>Check your <Text style={styles.hintBold}>SMS messages</Text> for the 6-digit OTP.</>
+                : <>Enter the <Text style={styles.hintBold}>default OTP</Text> set by your administrator. Contact admin if you don't know it.</>
+              }
             </Text>
           </View>
         )}

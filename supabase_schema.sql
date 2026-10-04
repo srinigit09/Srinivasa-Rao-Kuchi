@@ -514,6 +514,7 @@ create policy "Admin write" on public.app_settings for all    using (public.get_
 insert into public.app_settings (key, value) values
   ('default_otp',        '123456'),
   ('use_supabase_otp',   'false' ),
+  ('use_sms_gateway',    'false' ),   -- set 'true' only after MSG91 is fully configured
   ('login_mode',         'bypass'),   -- options: bypass | phone | email
   ('subscription_model', 'free'  )    -- options: free | paid
 on conflict (key) do nothing;
