@@ -2,18 +2,22 @@ import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl, Modal,
 } from 'react-native';
-import { useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { COLORS, PROPERTY_TYPES } from '../../constants';
 import { Tenant, BuildingType } from '../../types';
-import { AppStackParamList, MainTabParamList } from '../../navigation/RootNavigator';
+import { AppStackParamList } from '../../navigation/RootNavigator';
 import { formatDate } from '../../utils';
 import BlueBannerHeader from '../../components/common/BlueBannerHeader';
 
-type Props = { navigation: NativeStackNavigationProp<AppStackParamList> };
+type Props = {
+  navigation: NativeStackNavigationProp<AppStackParamList>;
+  route: RouteProp<AppStackParamList, 'Tenants'>;
+};
 
 interface BuildingSummary {
   id: string;
@@ -21,9 +25,8 @@ interface BuildingSummary {
   building_type: BuildingType;
 }
 
-export default function TenantsScreen({ navigation }: Props) {
+export default function TenantsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
-  const route = useRoute<RouteProp<MainTabParamList, 'Tenants'>>();
 
   const [buildings, setBuildings] = useState<BuildingSummary[]>([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>('');
@@ -35,9 +38,6 @@ export default function TenantsScreen({ navigation }: Props) {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  // Track whether we've initialised from a route param already
-  const initialised = useRef(false);
 
   const load = useCallback(async (silent = false, forceBuildingId?: string) => {
     if (!user) return;

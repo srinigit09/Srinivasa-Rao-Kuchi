@@ -62,7 +62,6 @@ export type AuthStackParamList = {
 export type MainTabParamList = {
   Dashboard: undefined;
   Buildings: undefined;
-  Tenants: { preselectedBuildingId?: string } | undefined;
   MaintenanceTab: undefined;
   Reports: undefined;
   AdminClients?: undefined;
@@ -71,6 +70,7 @@ export type MainTabParamList = {
 
 export type AppStackParamList = {
   Tabs: undefined;
+  Tenants: { preselectedBuildingId?: string } | undefined;
   AddEditBuilding: { buildingId?: string };
   BuildingDetail: { buildingId: string };
   AddEditUnit: { buildingId: string; unitId?: string };
@@ -131,7 +131,6 @@ const MainTabs = () => {
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
-      <Tab.Screen name="Tenants" component={TenantsScreen} options={{ title: 'Occupants' }} />
       <Tab.Screen name="Buildings" component={BuildingsScreen} options={{ title: 'Properties' }} />
       <Tab.Screen name="MaintenanceTab" component={MaintenanceScreen} options={{ title: 'Services' }} />
       <Tab.Screen name="Reports" component={ReportsScreen} />
@@ -157,6 +156,7 @@ const AppNavigator = () => (
     }}
   >
     <AppStack.Screen name="Tabs" component={MainTabs} options={{ headerShown: false }} />
+    <AppStack.Screen name="Tenants" component={TenantsScreen} options={{ headerShown: false }} />
     <AppStack.Screen name="AddEditBuilding" component={AddEditBuildingScreen} options={{ title: 'Property / Society' }} />
     <AppStack.Screen name="BuildingDetail" component={BuildingDetailScreen} options={{ title: 'Property Details' }} />
     <AppStack.Screen name="AddEditUnit" component={AddEditUnitScreen} options={{ title: 'Unit / Flat' }} />

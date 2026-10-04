@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView, RefreshControl, Switch, TextInput,
+  View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, RefreshControl, Switch, TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -399,7 +399,11 @@ export default function AdminClientsScreen() {
         onBack={navigation.canGoBack() ? () => navigation.goBack() : undefined}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
 
       {/* OTP Settings Card */}
       <Card title="🔐 OTP Settings">
@@ -600,19 +604,10 @@ export default function AdminClientsScreen() {
 
       </ScrollView>
 
-      {/* Pull to refresh */}
-      <FlatList
-        data={[]}
-        keyExtractor={() => 'empty'}
-        renderItem={null}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        style={{ height: 0 }}
-      />
-
-      {/* Edit Client Modal */}
-      <Modal visible={modalVisible} animationType="slide" transparent>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalBox}>
+      {/* Edit Client Modal — bottom sheet */}
+      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setModalVisible(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalBox}>
             <ScrollView keyboardShouldPersistTaps="handled">
               <Text style={styles.modalTitle}>Edit Client Profile</Text>
               <Text style={styles.modalSub}>{selectedClient?.email}</Text>
@@ -693,8 +688,8 @@ export default function AdminClientsScreen() {
                 <Button title="Save Changes" onPress={handleSaveClient} loading={saving} style={{ flex: 1 }} />
               </View>
             </ScrollView>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -808,14 +803,15 @@ const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: 20,
+    justifyContent: 'flex-end',
   },
   modalBox: {
     backgroundColor: COLORS.white,
-    borderRadius: 16,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     padding: 20,
-    maxHeight: '90%',
+    paddingBottom: 36,
+    maxHeight: '92%',
   },
   modalTitle: { fontSize: 20, fontWeight: '700', color: COLORS.text },
   modalSub: { fontSize: 13, color: COLORS.muted, marginBottom: 16, marginTop: 2 },

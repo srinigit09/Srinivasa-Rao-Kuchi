@@ -239,6 +239,7 @@ export default function DashboardScreen({ navigation }: Props) {
 
       {/* ── Quick Actions ── */}
       <View style={styles.quickActionsPanel}>
+        <QuickActionBtn label="Occupants" icon="people-outline" onPress={() => navigation.navigate('Tenants' as any, { preselectedBuildingId: selectedBuildingId })} />
         <QuickActionBtn label="Add Resident" icon="person-add-outline" onPress={() => navigation.navigate('AddNewTenant', { preselectedBuildingId: selectedBuildingId })} />
         <QuickActionBtn label="Record Payment" icon="cash-outline" onPress={() => navigation.navigate('OccupiedTenants', {})} />
         <QuickActionBtn label="Notices" icon="megaphone-outline" onPress={() => navigation.navigate('SocietyNotices' as any, buildingParam)} />
@@ -642,15 +643,14 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+    justifyContent: 'flex-end',
   },
   dropdownSheet: {
-    width: '100%',
     backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: 16,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 36,
   },
   dropdownTitle: {
     fontSize: 15,
