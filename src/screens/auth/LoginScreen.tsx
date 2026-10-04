@@ -193,6 +193,7 @@ export default function LoginScreen({ navigation }: Props) {
       const upsertPayload = {
         id: userId,
         full_name: bypassName.trim(),
+        phone: cleanPhone,
         phone_number: cleanPhone,
         role: isAdminPhone ? 'admin' : (isNewProfile ? 'client' : undefined),
         is_active: isAdminPhone ? true : (isNewProfile ? true : undefined),
