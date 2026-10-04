@@ -151,6 +151,7 @@ export default function TenantsScreen({ navigation }: Props) {
       <BlueBannerHeader
         title="Residents & Occupants"
         subtitle={bannerSubtitle}
+        onBack={() => navigation.navigate('Tabs' as any)}
       />
 
       {/* Property Filter Bar */}
