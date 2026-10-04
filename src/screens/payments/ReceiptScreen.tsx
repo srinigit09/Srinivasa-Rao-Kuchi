@@ -71,7 +71,7 @@ const buildReceiptHTML = (payment: Payment & { tenant_name: string; building_nam
   <div class="section">
     <div class="section-title">Tenant Details</div>
     <div class="row"><span class="row-label">Tenant Name</span><span class="row-value">${payment.tenant_name}</span></div>
-    <div class="row"><span class="row-label">Building</span><span class="row-value">${payment.building_name}</span></div>
+    <div class="row"><span class="row-label">Property</span><span class="row-value">${payment.building_name}</span></div>
     <div class="row"><span class="row-label">Unit / Flat</span><span class="row-value">${payment.unit_number}</span></div>
     <div class="row"><span class="row-label">Period</span><span class="row-value">${formatMonth(payment.payment_month)}</span></div>
   </div>
@@ -196,7 +196,7 @@ export default function ReceiptScreen({ navigation, route }: Props) {
         {/* Tenant */}
         <Section title="TENANT DETAILS">
           <Row label="Tenant Name" value={payment.tenant_name} />
-          <Row label="Building" value={payment.building_name} />
+          <Row label="Property" value={payment.building_name} />
           <Row label="Unit / Flat" value={payment.unit_number} />
           <Row label="Period" value={formatMonth(payment.payment_month)} />
         </Section>

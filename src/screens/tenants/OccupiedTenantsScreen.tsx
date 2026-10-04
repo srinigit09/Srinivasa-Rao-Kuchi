@@ -110,7 +110,7 @@ export default function OccupiedTenantsScreen({ navigation, route }: Props) {
   };
 
   const selectedBuilding = buildings.find(b => b.id === selectedBuildingId);
-  const dropdownLabel = selectedBuilding?.name ?? 'Select Building';
+  const dropdownLabel = selectedBuilding?.name ?? 'Select Property';
 
   const bannerSubtitle = selectedBuilding
     ? `${selectedBuilding.name}  ·  ${tenants.length} active tenant${tenants.length !== 1 ? 's' : ''}`
@@ -185,7 +185,7 @@ export default function OccupiedTenantsScreen({ navigation, route }: Props) {
       <Modal visible={dropdownOpen} transparent animationType="fade" onRequestClose={() => setDropdownOpen(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDropdownOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet}>
-            <Text style={styles.dropdownTitle}>Select Building</Text>
+            <Text style={styles.dropdownTitle}>Select Property</Text>
             {buildings.map(b => (
               <TouchableOpacity
                 key={b.id}
@@ -248,10 +248,11 @@ const styles = StyleSheet.create({
   // Building picker modal
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-start', paddingTop: 80, paddingHorizontal: 16,
+    justifyContent: 'flex-end',
   },
   dropdownSheet: {
-    backgroundColor: COLORS.white, borderRadius: 16, paddingVertical: 8,
+    backgroundColor: COLORS.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    paddingVertical: 8, paddingBottom: 36,
     shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, elevation: 12,
   },
   dropdownTitle: {

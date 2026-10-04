@@ -161,7 +161,7 @@ export default function AddEditBuildingScreen({ navigation, route }: Props) {
                   ? 'House / Villa Name'
                   : type === 'commercial'
                   ? 'Commercial Property / Complex Name'
-                  : 'Property / Building Name'
+                  : 'Property Name'
               }
               required
               placeholder={

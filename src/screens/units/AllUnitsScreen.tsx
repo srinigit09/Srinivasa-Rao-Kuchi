@@ -142,7 +142,7 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
   const occupiedCount = totalUnits - vacantCount;
 
   const selectedBuilding = buildings.find(b => b.id === selectedBuildingId);
-  const dropdownLabel = selectedBuilding?.name ?? 'Select Building';
+  const dropdownLabel = selectedBuilding?.name ?? 'Select Property';
 
   const bannerSubtitle = selectedBuilding
     ? `${selectedBuilding.name}  ·  ${totalUnits} unit${totalUnits !== 1 ? 's' : ''} · ${occupiedCount} occupied · ${vacantCount} vacant`
@@ -206,7 +206,7 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
           <View style={styles.empty}>
             <Ionicons name="home-outline" size={48} color={COLORS.border} />
             <Text style={styles.emptyTitle}>{selectedBuildingId ? 'No units yet' : 'Select a building'}</Text>
-            <Text style={styles.emptyText}>{selectedBuildingId ? 'Add units to this building.' : 'Use the dropdown above.'}</Text>
+            <Text style={styles.emptyText}>{selectedBuildingId ? 'Add units to this property.' : 'Use the dropdown above.'}</Text>
           </View>
         )}
         renderItem={({ item }) => {
@@ -364,7 +364,7 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
       <Modal visible={dropdownOpen} transparent animationType="fade" onRequestClose={() => setDropdownOpen(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDropdownOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet}>
-            <Text style={styles.dropdownTitle}>Select Building</Text>
+            <Text style={styles.dropdownTitle}>Select Property</Text>
             {buildings.map(b => (
               <TouchableOpacity
                 key={b.id}
@@ -459,10 +459,11 @@ const styles = StyleSheet.create({
   // Building picker modal
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-start', paddingTop: 80, paddingHorizontal: 16,
+    justifyContent: 'flex-end',
   },
   dropdownSheet: {
-    backgroundColor: COLORS.white, borderRadius: 16, paddingVertical: 8,
+    backgroundColor: COLORS.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    paddingVertical: 8, paddingBottom: 36,
     shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, elevation: 12,
   },
   dropdownTitle: {

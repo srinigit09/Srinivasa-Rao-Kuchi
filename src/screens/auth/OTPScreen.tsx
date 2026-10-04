@@ -18,7 +18,6 @@ type Props = {
   route: RouteProp<AuthStackParamList, 'OTP'>;
 };
 
-const HEADER_BLUE = '#1D4ED8';
 
 export default function OTPScreen({ navigation, route }: Props) {
   const { phone, email } = route.params;
@@ -248,7 +247,7 @@ export default function OTPScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: COLORS.white },
   banner: {
-    backgroundColor: HEADER_BLUE,
+    backgroundColor: COLORS.primaryDark,
     paddingHorizontal: 16, paddingBottom: 20,
     flexDirection: 'row', alignItems: 'center', gap: 12,
   },

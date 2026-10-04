@@ -151,7 +151,7 @@ export default function AddTenantStep1Screen({ navigation, route }: Props) {
           <View style={styles.empty}>
             <Ionicons name="home-outline" size={48} color={COLORS.border} />
             <Text style={styles.emptyTitle}>No vacant units</Text>
-            <Text style={styles.emptyText}>All units are occupied or no buildings exist.</Text>
+            <Text style={styles.emptyText}>All units are occupied or no properties exist.</Text>
           </View>
         )}
         renderItem={({ item }) => (
