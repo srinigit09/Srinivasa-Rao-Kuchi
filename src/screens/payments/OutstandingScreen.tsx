@@ -150,11 +150,11 @@ export default function OutstandingScreen({ navigation, route }: Props) {
           </View>
         )}
         renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => navigation.navigate('TenantProfile', { tenantId: item.tenant_id })}
-          >
-            <View style={{ flex: 1 }}>
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={{ flex: 1 }}
+              onPress={() => navigation.navigate('TenantProfile', { tenantId: item.tenant_id })}
+            >
               <Text style={styles.tenantName}>{item.tenant_name}</Text>
               <Text style={styles.meta}>{item.building_name} · {item.unit_number}</Text>
               <Text style={styles.period}>{formatMonth(item.payment_month)}</Text>
@@ -166,12 +166,18 @@ export default function OutstandingScreen({ navigation, route }: Props) {
                   Advance: {formatCurrency(item.advance_paid)} applied
                 </Text>
               )}
-            </View>
+            </TouchableOpacity>
             <View style={{ alignItems: 'flex-end', gap: 6 }}>
               {item.outstanding > 0 && (
                 <Text style={styles.outstanding}>{formatCurrency(item.outstanding)}</Text>
               )}
               <StatusBadge status={item.status} />
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={() => navigation.navigate('RecordPayment', { tenantId: item.tenant_id, paymentId: item.id })}
+              >
+                <Text style={styles.editBtnText}>✏️ Pay</Text>
+              </TouchableOpacity>
               {item.phone && (
                 <TouchableOpacity
                   style={styles.reminderBtn}
@@ -182,7 +188,7 @@ export default function OutstandingScreen({ navigation, route }: Props) {
                 </TouchableOpacity>
               )}
             </View>
-          </TouchableOpacity>
+          </View>
         )}
       />
     </View>
@@ -235,6 +241,12 @@ const styles = StyleSheet.create({
   dueRow: { fontSize: 11, color: COLORS.muted, marginTop: 3 },
   advanceRow: { fontSize: 11, color: '#7C3AED', fontWeight: '600', marginTop: 2 },
   outstanding: { fontSize: 17, fontWeight: '700', color: COLORS.warning },
+  editBtn: {
+    paddingHorizontal: 8, paddingVertical: 3,
+    backgroundColor: '#EFF6FF', borderRadius: 6,
+    borderWidth: 1, borderColor: '#BFDBFE',
+  },
+  editBtnText: { fontSize: 11, fontWeight: '700', color: COLORS.primary },
   reminderBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: '#E8FFF0', paddingHorizontal: 8, paddingVertical: 5,

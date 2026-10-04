@@ -171,19 +171,26 @@ export default function TenantProfileScreen({ navigation, route }: Props) {
       {payments.length > 0 && (
         <Card title="Recent Transactions & Receipts">
           {payments.slice(0, 5).map((p, i) => (
-            <TouchableOpacity
-              key={p.id}
-              style={[styles.payRow, i > 0 && styles.topBorder]}
-              onPress={() => navigation.navigate('Receipt', { paymentId: p.id })}
-            >
-              <View style={{ flex: 1 }}>
+            <View key={p.id} style={[styles.payRow, i > 0 && styles.topBorder]}>
+              <TouchableOpacity
+                style={{ flex: 1 }}
+                onPress={() => navigation.navigate('Receipt', { paymentId: p.id })}
+              >
                 <Text style={styles.payMonth}>{formatMonth(p.payment_month)}</Text>
                 <Text style={styles.payAmt}>
                   Paid: {formatCurrency(p.amount_paid + (p.advance_paid ?? 0))} · Total Due: {formatCurrency(p.amount_due)}
                 </Text>
+              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <StatusBadge status={p.status} />
+                <TouchableOpacity
+                  style={styles.editPayBtn}
+                  onPress={() => navigation.navigate('RecordPayment', { tenantId, paymentId: p.id })}
+                >
+                  <Text style={styles.editPayBtnText}>✏️</Text>
+                </TouchableOpacity>
               </View>
-              <StatusBadge status={p.status} />
-            </TouchableOpacity>
+            </View>
           ))}
           {payments.length > 5 && (
             <TouchableOpacity style={styles.viewAll} onPress={() => navigation.navigate('PaymentHistory', { tenantId })}>
@@ -298,4 +305,10 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.border,
   },
   viewAllText: { fontSize: 13, fontWeight: '700', color: COLORS.primary },
+  editPayBtn: {
+    paddingHorizontal: 7, paddingVertical: 3,
+    backgroundColor: '#EFF6FF', borderRadius: 6,
+    borderWidth: 1, borderColor: '#BFDBFE',
+  },
+  editPayBtnText: { fontSize: 13 },
 });

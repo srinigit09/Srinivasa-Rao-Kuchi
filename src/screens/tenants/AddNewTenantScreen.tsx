@@ -319,7 +319,7 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
               <Ionicons name="search" size={16} color={COLORS.muted} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search unit, building..."
+                placeholder="Search unit, property..."
                 placeholderTextColor={COLORS.muted}
                 value={search}
                 onChangeText={handleSearch}

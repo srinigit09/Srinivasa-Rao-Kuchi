@@ -146,7 +146,7 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
 
   const bannerSubtitle = selectedBuilding
     ? `${selectedBuilding.name}  ·  ${totalUnits} unit${totalUnits !== 1 ? 's' : ''} · ${occupiedCount} occupied · ${vacantCount} vacant`
-    : 'Select a building';
+    : 'Select a property';
 
   return (
     <View style={styles.container}>
@@ -197,7 +197,7 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
             >
               <Ionicons name="add-circle" size={22} color={COLORS.primary} />
               <Text style={styles.addText}>
-                {selectedBuildingId ? 'Add New Unit' : 'Select a building first'}
+                {selectedBuildingId ? 'Add New Unit' : 'Select a property first'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -205,7 +205,7 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
         ListEmptyComponent={loading ? null : (
           <View style={styles.empty}>
             <Ionicons name="home-outline" size={48} color={COLORS.border} />
-            <Text style={styles.emptyTitle}>{selectedBuildingId ? 'No units yet' : 'Select a building'}</Text>
+            <Text style={styles.emptyTitle}>{selectedBuildingId ? 'No units yet' : 'Select a property'}</Text>
             <Text style={styles.emptyText}>{selectedBuildingId ? 'Add units to this property.' : 'Use the dropdown above.'}</Text>
           </View>
         )}

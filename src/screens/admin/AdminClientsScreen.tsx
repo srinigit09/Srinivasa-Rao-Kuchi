@@ -416,7 +416,13 @@ export default function AdminClientsScreen() {
               <TouchableOpacity
                 key={mode}
                 style={[styles.planChip, loginMode === mode && styles.planChipActive]}
-                onPress={() => setLoginMode(mode)}
+                onPress={async () => {
+                  setLoginMode(mode);
+                  await supabase.from('app_settings').upsert(
+                    { key: 'login_mode', value: mode },
+                    { onConflict: 'key' }
+                  );
+                }}
               >
                 <Text style={[styles.planChipText, loginMode === mode && styles.planChipTextActive]}>
                   {labels[mode]}
@@ -426,24 +432,26 @@ export default function AdminClientsScreen() {
           })}
         </View>
 
-        <View style={styles.otpSettingRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.otpSettingLabel}>Use Supabase Email OTP</Text>
-            <Text style={styles.otpSettingHint}>
-              {useSupabaseOtp
-                ? 'Real OTP sent via Supabase email — users must enter code from email.'
-                : 'Default OTP active — users log in with the code below.'}
-            </Text>
+        {loginMode === 'email' && (
+          <View style={styles.otpSettingRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.otpSettingLabel}>Use Supabase Email OTP</Text>
+              <Text style={styles.otpSettingHint}>
+                {useSupabaseOtp
+                  ? 'Real OTP sent via Supabase email — users must enter code from email.'
+                  : 'Default OTP active — users log in with the code below.'}
+              </Text>
+            </View>
+            <Switch
+              value={useSupabaseOtp}
+              onValueChange={setUseSupabaseOtp}
+              trackColor={{ false: COLORS.border, true: COLORS.primaryLight }}
+              thumbColor={useSupabaseOtp ? COLORS.primary : '#f4f3f4'}
+            />
           </View>
-          <Switch
-            value={useSupabaseOtp}
-            onValueChange={setUseSupabaseOtp}
-            trackColor={{ false: COLORS.border, true: COLORS.primaryLight }}
-            thumbColor={useSupabaseOtp ? COLORS.primary : '#f4f3f4'}
-          />
-        </View>
+        )}
 
-        {!useSupabaseOtp && (
+        {loginMode !== 'phone' && !useSupabaseOtp && (
           <FormField
             label="Default OTP (6 digits)"
             value={defaultOtp}

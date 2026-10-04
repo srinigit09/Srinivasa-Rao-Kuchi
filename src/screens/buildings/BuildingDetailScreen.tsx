@@ -37,8 +37,8 @@ export default function BuildingDetailScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     const [{ data: b }, { data: u }, { count: rCount }, { count: nCount }] = await Promise.all([
       supabase.from('buildings').select('*').eq('id', buildingId).single(),
       supabase.from('units').select('*, tenants(id, full_name, is_active, resident_type)').eq('building_id', buildingId).order('unit_number'),
@@ -53,7 +53,7 @@ export default function BuildingDetailScreen({ navigation, route }: Props) {
   }, [buildingId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
-  const onRefresh = async () => { setRefreshing(true); setLoading(false); await load(); setRefreshing(false); };
+  const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 
   const deleteUnit = async (id: string) => {
     Alert.alert('Delete Unit?', 'This will remove the unit and any resident data.', [

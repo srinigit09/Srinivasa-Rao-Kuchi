@@ -48,7 +48,6 @@ interface DashboardData {
   activeNoticesCount: number;
 }
 
-const HEADER_BLUE = '#1D4ED8';
 
 export default function DashboardScreen({ navigation }: Props) {
   const { user, signOut } = useAuth();
@@ -197,14 +196,14 @@ export default function DashboardScreen({ navigation }: Props) {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: HEADER_BLUE }}>
-      <StatusBar barStyle="light-content" backgroundColor={HEADER_BLUE} />
+    <View style={{ flex: 1, backgroundColor: COLORS.primaryDark }}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primaryDark} />
 
       {/* ── Blue Header ── */}
       <View style={[styles.headerPanel, { paddingTop: insets.top + 8 }]}>
         <View style={styles.appNameRow}>
           <View style={styles.appIconCircle}>
-            <Ionicons name="business" size={16} color={HEADER_BLUE} />
+            <Ionicons name="business" size={16} color={COLORS.primaryDark} />
           </View>
           <Text style={styles.appName}>RentEase</Text>
           <TouchableOpacity
@@ -402,7 +401,7 @@ const StatCard = ({ label, value, icon, color, onPress, loading }: any) => (
 const QuickActionBtn = ({ label, icon, onPress }: any) => (
   <TouchableOpacity style={styles.qaBtn} onPress={onPress} activeOpacity={0.75}>
     <View style={styles.qaIconWrap}>
-      <Ionicons name={icon} size={18} color={HEADER_BLUE} />
+      <Ionicons name={icon} size={18} color={COLORS.primaryDark} />
     </View>
     <Text style={styles.qaLabel} numberOfLines={1}>{label}</Text>
   </TouchableOpacity>
@@ -410,7 +409,7 @@ const QuickActionBtn = ({ label, icon, onPress }: any) => (
 
 const styles = StyleSheet.create({
   headerPanel: {
-    backgroundColor: HEADER_BLUE,
+    backgroundColor: COLORS.primaryDark,
     paddingHorizontal: 16,
     paddingBottom: 14,
   },
@@ -470,7 +469,7 @@ const styles = StyleSheet.create({
   quickActionsPanel: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: HEADER_BLUE,
+    backgroundColor: COLORS.primaryDark,
     paddingHorizontal: 14,
     paddingBottom: 12,
   },

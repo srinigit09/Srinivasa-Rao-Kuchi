@@ -131,6 +131,24 @@ export default function MoveOutScreen({ navigation, route }: Props) {
       if (isUnitNowVacant) {
         await supabase.from('units').update({ is_vacant: true }).eq('id', tenant.unit_id);
       }
+      // For any Pending/Partial payments, set amount_paid = total due so generated
+      // outstanding column becomes 0 (generated columns cannot be updated directly)
+      const { data: unpaidPayments } = await supabase
+        .from('payments')
+        .select('id, amount_due, electricity, water, maintenance_charge, other_charges, advance_paid')
+        .eq('tenant_id', tenantId)
+        .neq('status', 'Paid');
+      if (unpaidPayments && unpaidPayments.length > 0) {
+        await Promise.all(unpaidPayments.map((p: any) => {
+          const totalDue = (p.amount_due ?? 0)
+            + (p.electricity ?? 0) + (p.water ?? 0)
+            + (p.maintenance_charge ?? 0) + (p.other_charges ?? 0);
+          const alreadyPaid = p.advance_paid ?? 0;
+          return supabase.from('payments')
+            .update({ amount_paid: Math.max(0, totalDue - alreadyPaid) })
+            .eq('id', p.id);
+        }));
+      }
     }
 
     setLoading(false);

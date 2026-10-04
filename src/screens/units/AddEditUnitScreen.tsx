@@ -75,7 +75,7 @@ export default function AddEditUnitScreen({ navigation, route }: Props) {
   const save = async () => {
     if (!validate()) return;
     setLoading(true);
-    const payload = {
+    const payload: Record<string, any> = {
       building_id: buildingId,
       owner_id: user!.id,
       unit_number: unitNumber.trim(),
@@ -85,6 +85,8 @@ export default function AddEditUnitScreen({ navigation, route }: Props) {
       rent_per_bed: parseFloat(rentPerBed) || 0,
       monthly_maintenance: monthlyMaintenance ? parseFloat(monthlyMaintenance) : 0,
     };
+    // On new unit creation always mark vacant; on edit preserve existing vacancy status
+    if (!unitId) { payload.is_vacant = true; }
     const { error } = unitId
       ? await supabase.from('units').update(payload).eq('id', unitId)
       : await supabase.from('units').insert(payload);

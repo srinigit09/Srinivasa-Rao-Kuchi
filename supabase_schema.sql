@@ -2,7 +2,7 @@
 -- RentEase — Complete Supabase PostgreSQL Schema
 -- Run this in: Supabase Dashboard → SQL Editor → New Query → Run
 -- Safe to re-run on existing databases (all statements are idempotent)
--- Last updated: subscription_starts_at, subscription_model setting
+-- Last updated: is_vacant default true enforced on units; payments.outstanding/status are generated columns (cannot UPDATE directly)
 -- ============================================================
 
 -- Enable UUID extension

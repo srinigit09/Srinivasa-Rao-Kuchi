@@ -83,11 +83,11 @@ export default function CollectedPaymentsScreen({ navigation, route }: Props) {
           </View>
         )}
         renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => navigation.navigate('Receipt', { paymentId: item.id })}
-          >
-            <View style={{ flex: 1 }}>
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={{ flex: 1 }}
+              onPress={() => navigation.navigate('Receipt', { paymentId: item.id })}
+            >
               <Text style={styles.tenantName}>{item.tenant_name}</Text>
               <Text style={styles.meta}>{item.building_name} · {item.unit_number}</Text>
               <Text style={styles.period}>{formatMonth(item.payment_month)}</Text>
@@ -104,15 +104,21 @@ export default function CollectedPaymentsScreen({ navigation, route }: Props) {
               {item.receipt_number && (
                 <Text style={styles.rcpNo}>{item.receipt_number}</Text>
               )}
-            </View>
+            </TouchableOpacity>
             <View style={{ alignItems: 'flex-end', gap: 6 }}>
               <Text style={styles.amount}>{formatCurrency(item.amount_paid + (item.advance_paid ?? 0))}</Text>
               {(item.advance_paid ?? 0) > 0 && (
                 <Text style={styles.amountBreak}>rent {formatCurrency(item.amount_paid)}</Text>
               )}
               <StatusBadge status={item.status} />
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={() => navigation.navigate('RecordPayment', { tenantId: item.tenant_id, paymentId: item.id })}
+              >
+                <Text style={styles.editBtnText}>✏️ Edit</Text>
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
+          </View>
         )}
       />
     </View>
@@ -139,4 +145,10 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', paddingTop: 80, gap: 8 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
   emptyText: { fontSize: 14, color: COLORS.muted },
+  editBtn: {
+    paddingHorizontal: 8, paddingVertical: 3,
+    backgroundColor: '#EFF6FF', borderRadius: 6,
+    borderWidth: 1, borderColor: '#BFDBFE',
+  },
+  editBtnText: { fontSize: 11, fontWeight: '700', color: COLORS.primary },
 });
