@@ -55,6 +55,8 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
   // currentBuildingRef holds the building the user has chosen on THIS screen
   // so re-focus (e.g. returning from AddTenantStep2) preserves the user's choice
   const currentBuildingRef = useRef<string>(preselectedBuildingId);
+  // Track the last preselectedBuildingId we applied — only re-apply when it changes
+  const appliedPreselectedRef = useRef<string>('');
 
   const load = useCallback(async (silent = false, forceBuildingId?: string) => {
     if (!user) return;
@@ -128,9 +130,11 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
   }, [user]);
 
   useFocusEffect(useCallback(() => {
-    // When coming from Dashboard with a preselected building, always apply it
+    // Only apply the preselected building when it's a fresh navigation from Dashboard
+    // (i.e. this is the first focus with this particular preselectedBuildingId value)
     // When returning from a sub-screen (AddTenantStep2 etc), preserve user's last choice
-    if (preselectedBuildingId) {
+    if (preselectedBuildingId && appliedPreselectedRef.current !== preselectedBuildingId) {
+      appliedPreselectedRef.current = preselectedBuildingId;
       currentBuildingRef.current = preselectedBuildingId;
       setSelected(null);
       setSearch('');

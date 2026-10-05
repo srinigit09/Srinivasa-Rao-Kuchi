@@ -156,7 +156,7 @@ export default function NoticePeriodTenantsScreen({ navigation, route }: Props) 
         )}
       />
 
-      <Modal visible={dropdownOpen} transparent animationType="slide" onRequestClose={() => setDropdownOpen(false)}>
+      <Modal visible={dropdownOpen} transparent animationType="fade" onRequestClose={() => setDropdownOpen(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDropdownOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet}>
             <Text style={styles.dropdownTitle}>Select Property</Text>
