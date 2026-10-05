@@ -125,30 +125,42 @@ export default function LoginScreen({ navigation }: Props) {
     }
     setBypassLoading(true);
 
-    // Deterministic synthetic credentials from phone number.
-    // Two password formulas are tried to handle accounts created under different login modes.
-    const syntheticEmail  = `${cleanPhone}@rentease.app`;
-    const syntheticPwd    = `Ph#${cleanPhone}!RE2026`;           // bypass / phone-OTP formula
-    const altPwd          = `Pass#${cleanPhone.replace(/[^a-zA-Z0-9]/g, '')}!2026`; // email-OTP formula
+    // Current and legacy credential formulas — try all combinations
+    const syntheticEmail = `${cleanPhone}@rentease.app`;  // current email format
+    const legacyEmail    = cleanPhone;                     // original format (bare phone)
+    const syntheticPwd   = `Ph#${cleanPhone}!RE2026`;      // current password formula
+    const legacyPwd      = `Pass#${cleanPhone.replace(/[^a-zA-Z0-9]/g, '')}!2026`; // original formula
 
-    // Helper: try sign-in, return data or null
-    const trySignIn = async (pwd: string) => {
-      const res = await supabase.auth.signInWithPassword({ email: syntheticEmail, password: pwd });
-      return res.error ? null : res.data;
+    const trySignIn = async (em: string, pw: string) => {
+      const res = await supabase.auth.signInWithPassword({ email: em, password: pw });
+      return (!res.error && res.data?.user) ? res.data : null;
     };
 
     try {
-      // Step 1: try primary password
-      let signInData = await trySignIn(syntheticPwd);
+      // Try all 4 combinations of email × password in priority order
+      let signInData = await trySignIn(syntheticEmail, syntheticPwd);
+      let usedLegacy = false;
 
-      // Step 2: try alternate password (account created via email-OTP flow)
       if (!signInData) {
-        signInData = await trySignIn(altPwd);
+        signInData = await trySignIn(legacyEmail, legacyPwd);
+        if (signInData) usedLegacy = true;
+      }
+      if (!signInData) {
+        signInData = await trySignIn(syntheticEmail, legacyPwd);
+        if (signInData) usedLegacy = true;
+      }
+      if (!signInData) {
+        signInData = await trySignIn(legacyEmail, syntheticPwd);
       }
 
-      // Step 3: still no session — account may not exist yet, try to create it
+      // If we used legacy credentials, migrate to canonical password for next login
+      if (signInData && usedLegacy) {
+        await supabase.auth.updateUser({ password: syntheticPwd });
+      }
+
+      // No session yet — account may not exist, or exists with unknown password
       if (!signInData) {
-        const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+        const { error: signUpErr } = await supabase.auth.signUp({
           email: syntheticEmail,
           password: syntheticPwd,
           options: { emailRedirectTo: undefined },
@@ -158,11 +170,7 @@ export default function LoginScreen({ navigation }: Props) {
           || signUpErr?.message?.toLowerCase().includes('already been registered');
 
         if (alreadyExists) {
-          // Account exists but neither known password worked.
-          // Use the OTP flow internally: navigate to OTP screen with the phone number
-          // so the user can log in with the default OTP (123456).
-          // After OTP login succeeds, OTPScreen will update the password to syntheticPwd
-          // so future bypass logins work immediately.
+          // Account exists with unknown password — go to OTP screen to reset it
           setBypassLoading(false);
           navigation.navigate('OTP', { phone: cleanPhone, bypassPasswordReset: true, bypassName: bypassName.trim() } as any);
           return;
@@ -172,8 +180,8 @@ export default function LoginScreen({ navigation }: Props) {
           return;
         }
 
-        // New account just created — sign in now
-        signInData = await trySignIn(syntheticPwd);
+        // New account created — sign in now
+        signInData = await trySignIn(syntheticEmail, syntheticPwd);
         if (!signInData) {
           setBypassLoading(false);
           setBypassError('Account created but login failed. Please try again.');

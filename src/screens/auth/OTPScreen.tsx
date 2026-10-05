@@ -106,45 +106,61 @@ export default function OTPScreen({ navigation, route }: Props) {
             setError('Invalid OTP. Please check the code and try again.');
             return;
           }
-          // Use deterministic synthetic credentials from phone number
+          // Canonical synthetic credentials used by the current codebase
           const syntheticEmail = `${phone}@rentease.app`;
           const syntheticPwd   = `Ph#${phone}!RE2026`;
 
-          // Try to sign in with all known password formulas
+          // Legacy credentials: original app used bare phone number as email
+          // and Pass#<phone>!2026 as password — must try these for existing accounts
+          const legacyEmail    = phone;                                       // e.g. "8247873377"
+          const legacyPwd      = `Pass#${phone.replace(/[^a-zA-Z0-9]/g, '')}!2026`;
+
           let signInData: any = null;
 
-          const res1 = await supabase.auth.signInWithPassword({ email: syntheticEmail, password: syntheticPwd });
-          if (!res1.error && res1.data?.user) {
-            signInData = res1.data;
-          } else {
-            const altPwd = `Pass#${phone.replace(/[^a-zA-Z0-9]/g, '')}!2026`;
-            const res2 = await supabase.auth.signInWithPassword({ email: syntheticEmail, password: altPwd });
-            if (!res2.error && res2.data?.user) {
-              signInData = res2.data;
-              // Update to canonical password so bypass works next time
+          // Attempt 1: current formula
+          const r1 = await supabase.auth.signInWithPassword({ email: syntheticEmail, password: syntheticPwd });
+          if (!r1.error && r1.data?.user) { signInData = r1.data; }
+
+          // Attempt 2: legacy email + legacy password
+          if (!signInData) {
+            const r2 = await supabase.auth.signInWithPassword({ email: legacyEmail, password: legacyPwd });
+            if (!r2.error && r2.data?.user) {
+              signInData = r2.data;
+              // Migrate: update password to canonical so future logins use new formula
               await supabase.auth.updateUser({ password: syntheticPwd });
             }
           }
 
-          // Still no session — account exists with unknown password OR doesn't exist yet.
-          // Use the edge function to force-reset the password (OTP already verified above).
+          // Attempt 3: current email + legacy password (account migrated email but not pwd)
+          if (!signInData) {
+            const r3 = await supabase.auth.signInWithPassword({ email: syntheticEmail, password: legacyPwd });
+            if (!r3.error && r3.data?.user) {
+              signInData = r3.data;
+              await supabase.auth.updateUser({ password: syntheticPwd });
+            }
+          }
+
+          // Attempt 4: legacy email + canonical password
+          if (!signInData) {
+            const r4 = await supabase.auth.signInWithPassword({ email: legacyEmail, password: syntheticPwd });
+            if (!r4.error && r4.data?.user) { signInData = r4.data; }
+          }
+
+          // All known formulas exhausted — create fresh account with canonical credentials
+          if (!signInData) {
+            await supabase.auth.signUp({ email: syntheticEmail, password: syntheticPwd,
+              options: { emailRedirectTo: undefined } });
+            const r5 = await supabase.auth.signInWithPassword({ email: syntheticEmail, password: syntheticPwd });
+            if (!r5.error && r5.data?.user) { signInData = r5.data; }
+          }
+
           if (!signInData?.user) {
-            const { data: fnData, error: fnErr } = await supabase.functions.invoke(
-              'reset-user-password',
-              { body: { email: syntheticEmail, newPassword: syntheticPwd, otp: token } },
+            setLoading(false);
+            setError(
+              'Login failed. Please contact admin and set your password in Supabase Dashboard.\n\n' +
+              `Email: ${syntheticEmail}\nPassword: ${syntheticPwd}`
             );
-            if (fnErr || fnData?.error) {
-              // Edge function not deployed or failed — fall back to sign-up (new account)
-              await supabase.auth.signUp({ email: syntheticEmail, password: syntheticPwd });
-            }
-            // Now sign in with the freshly set password
-            const res3 = await supabase.auth.signInWithPassword({ email: syntheticEmail, password: syntheticPwd });
-            if (res3.error || !res3.data?.user) {
-              setLoading(false);
-              setError('Login failed after password reset. Please try again.');
-              return;
-            }
-            signInData = res3.data;
+            return;
           }
 
           const userId = signInData.user.id;
