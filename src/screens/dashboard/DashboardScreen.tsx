@@ -265,7 +265,7 @@ export default function DashboardScreen({ navigation }: Props) {
             loading={loading}
           />
           <StatCard
-            label={isPGBuilding ? 'Beds Occupied' : 'Occupied'}
+            label={isPGBuilding ? 'Beds Occupied' : 'Occupied\n'}
             value={Math.max(0, displayOccupied)}
             icon="person-add"
             color={COLORS.success}
@@ -273,7 +273,7 @@ export default function DashboardScreen({ navigation }: Props) {
             loading={loading}
           />
           <StatCard
-            label={isPGBuilding ? 'Beds Vacant' : 'Vacant'}
+            label={isPGBuilding ? 'Beds Vacant' : 'Vacant\n'}
             value={Math.max(0, displayVacant)}
             icon="key-outline"
             color="#D97706"
