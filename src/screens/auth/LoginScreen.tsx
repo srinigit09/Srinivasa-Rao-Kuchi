@@ -130,34 +130,52 @@ export default function LoginScreen({ navigation }: Props) {
     const syntheticPwd   = `Ph#${cleanPhone}!RE2026`;
 
     try {
-      // Try signing in first (returning user)
+      // Step 1: try signing in (handles existing accounts from any login mode)
       let { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
         email: syntheticEmail,
         password: syntheticPwd,
       });
 
       if (signInErr) {
-        // New user — create account silently
+        // Step 2: sign-in failed — attempt to create the account
         const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
           email: syntheticEmail,
           password: syntheticPwd,
           options: { emailRedirectTo: undefined },
         });
-        if (signUpErr || !signUpData?.user) {
+
+        // "User already registered" means the account exists but sign-in failed
+        // (e.g. password mismatch from a previous login mode). Try sign-in again.
+        const alreadyExists = signUpErr?.message?.toLowerCase().includes('already registered')
+          || signUpErr?.message?.toLowerCase().includes('already been registered');
+
+        if (alreadyExists || signUpData?.user) {
+          // Account exists or was just created — sign in now
+          const reSignIn = await supabase.auth.signInWithPassword({
+            email: syntheticEmail, password: syntheticPwd,
+          });
+          if (reSignIn.error || !reSignIn.data?.session) {
+            setBypassLoading(false);
+            setBypassError(friendlyError(reSignIn.error?.message ?? 'Login failed.'));
+            return;
+          }
+          signInData = reSignIn.data;
+        } else if (signUpErr) {
           setBypassLoading(false);
-          setBypassError(friendlyError(signUpErr?.message ?? 'Could not create account.'));
+          setBypassError(friendlyError(signUpErr.message));
           return;
+        } else {
+          // New account created, sign in
+          const reSignIn = await supabase.auth.signInWithPassword({
+            email: syntheticEmail, password: syntheticPwd,
+          });
+          if (reSignIn.error || !reSignIn.data?.session) {
+            setBypassLoading(false);
+            setBypassError(friendlyError(reSignIn.error?.message ?? 'Login failed.'));
+            return;
+          }
+          signInData = reSignIn.data;
         }
-        // Sign in the new account
-        const reSignIn = await supabase.auth.signInWithPassword({
-          email: syntheticEmail, password: syntheticPwd,
-        });
-        if (reSignIn.error || !reSignIn.data?.session) {
-          setBypassLoading(false);
-          setBypassError(friendlyError(reSignIn.error?.message ?? 'Login failed.'));
-          return;
-        }
-        signInData = reSignIn.data;
       }
 
       const userId = signInData?.session?.user?.id;

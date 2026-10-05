@@ -466,6 +466,7 @@ const styles = StyleSheet.create({
   modalSheet: {
     backgroundColor: COLORS.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
     paddingTop: 16, paddingBottom: 36,
+    minHeight: 260,
     shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, elevation: 12,
   },
   modalTitle: {
