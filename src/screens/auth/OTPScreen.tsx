@@ -22,7 +22,7 @@ type Props = {
 
 
 export default function OTPScreen({ navigation, route }: Props) {
-  const { phone, email } = route.params;
+  const { phone, email, bypassPasswordReset, bypassName } = route.params;
   const isPhoneFlow = !!phone;
   const target = phone
     ? `+91 ${phone.slice(0, 5)} ${phone.slice(5)}`
@@ -109,15 +109,41 @@ export default function OTPScreen({ navigation, route }: Props) {
           // Use deterministic synthetic credentials from phone number
           const syntheticEmail = `${phone}@rentease.app`;
           const syntheticPwd   = `Ph#${phone}!RE2026`;
+
+          // Always attempt sign-up first (safe to call even if account exists)
           await supabase.auth.signUp({ email: syntheticEmail, password: syntheticPwd });
-          const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
-            email: syntheticEmail, password: syntheticPwd,
-          });
+
+          let signInData: any = null;
+          let signInErr: any = null;
+
+          // Try primary password first
+          const res1 = await supabase.auth.signInWithPassword({ email: syntheticEmail, password: syntheticPwd });
+          if (!res1.error && res1.data?.user) {
+            signInData = res1.data;
+          } else {
+            // Try alt password (account may have been created via email-OTP flow)
+            const altPwd = `Pass#${phone.replace(/[^a-zA-Z0-9]/g, '')}!2026`;
+            const res2 = await supabase.auth.signInWithPassword({ email: syntheticEmail, password: altPwd });
+            if (!res2.error && res2.data?.user) {
+              signInData = res2.data;
+              // Update password to the canonical syntheticPwd so bypass mode works next time
+              await supabase.auth.updateUser({ password: syntheticPwd });
+            } else {
+              signInErr = res2.error ?? res1.error;
+            }
+          }
+
           if (signInErr || !signInData?.user) {
             setLoading(false);
             setError(signInErr?.message ?? 'Login failed. Please try again.');
             return;
           }
+
+          // If coming from bypass password-reset flow, update password to syntheticPwd
+          if (bypassPasswordReset) {
+            await supabase.auth.updateUser({ password: syntheticPwd });
+          }
+
           const userId = signInData.user.id;
 
           // Upsert profile — admin phone always gets admin role
@@ -138,7 +164,8 @@ export default function OTPScreen({ navigation, route }: Props) {
             return;
           }
 
-          if (!existingProfile?.full_name) {
+          const hasProfile = !!existingProfile?.full_name;
+          if (!hasProfile) {
             // New user — upsert admin role if admin phone, then go to profile setup
             await supabase.from('profiles').upsert({
               id: userId,
@@ -153,9 +180,12 @@ export default function OTPScreen({ navigation, route }: Props) {
             setLoading(false);
             navigation.navigate('ProfileSetup', { phone });
           } else {
-            // Existing user — ensure admin role stays correct
-            if (isAdminPhone) {
-              await supabase.from('profiles').update({ role: 'admin' }).eq('id', userId);
+            // Existing user — ensure admin role stays correct; update name if provided via bypass reset
+            const profileUpdate: Record<string, any> = {};
+            if (isAdminPhone) profileUpdate.role = 'admin';
+            if (bypassPasswordReset && bypassName) profileUpdate.full_name = bypassName;
+            if (Object.keys(profileUpdate).length > 0) {
+              await supabase.from('profiles').update(profileUpdate).eq('id', userId);
             }
             setLoading(false);
             // RootNavigator detects session and redirects automatically
@@ -267,9 +297,11 @@ export default function OTPScreen({ navigation, route }: Props) {
           <View style={styles.hintBox}>
             <Ionicons name={useSmsGateway ? 'chatbubble-outline' : 'lock-closed-outline'} size={18} color={COLORS.primary} />
             <Text style={styles.hintText}>
-              {useSmsGateway
-                ? <>Check your <Text style={styles.hintBold}>SMS messages</Text> for the 6-digit OTP.</>
-                : <>Enter the <Text style={styles.hintBold}>default OTP</Text> set by your administrator. Contact admin if you don't know it.</>
+              {bypassPasswordReset
+                ? <>One-time step to <Text style={styles.hintBold}>restore access</Text>. Enter the default OTP (e.g. 123456) to reset your login.</>
+                : useSmsGateway
+                  ? <>Check your <Text style={styles.hintBold}>SMS messages</Text> for the 6-digit OTP.</>
+                  : <>Enter the <Text style={styles.hintBold}>default OTP</Text> set by your administrator. Contact admin if you don't know it.</>
               }
             </Text>
           </View>

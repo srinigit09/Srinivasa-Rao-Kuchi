@@ -146,7 +146,7 @@ export default function LoginScreen({ navigation }: Props) {
         signInData = await trySignIn(altPwd);
       }
 
-      // Step 3: still no session — account may not exist yet, create it
+      // Step 3: still no session — account may not exist yet, try to create it
       if (!signInData) {
         const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
           email: syntheticEmail,
@@ -158,14 +158,13 @@ export default function LoginScreen({ navigation }: Props) {
           || signUpErr?.message?.toLowerCase().includes('already been registered');
 
         if (alreadyExists) {
-          // Account exists but neither password worked — update the password
-          // We do this by signing in with OTP (phone) isn't available without SMS,
-          // so surface a clear message instructing the admin to reset via Supabase dashboard
+          // Account exists but neither known password worked.
+          // Use the OTP flow internally: navigate to OTP screen with the phone number
+          // so the user can log in with the default OTP (123456).
+          // After OTP login succeeds, OTPScreen will update the password to syntheticPwd
+          // so future bypass logins work immediately.
           setBypassLoading(false);
-          setBypassError(
-            'Your account exists but the password does not match. ' +
-            'Please log in using Phone OTP mode with code 123456, then switch back to Bypass.'
-          );
+          navigation.navigate('OTP', { phone: cleanPhone, bypassPasswordReset: true, bypassName: bypassName.trim() } as any);
           return;
         } else if (signUpErr) {
           setBypassLoading(false);
