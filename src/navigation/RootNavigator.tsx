@@ -140,7 +140,7 @@ const MainTabs = () => {
         <Tab.Screen
           name="AdminClients"
           component={AdminClientsScreen}
-          options={{ title: 'Clients (Admin)' }}
+          options={{ title: 'Admin' }}
         />
       )}
       <Tab.Screen name="Settings" component={SettingsScreen} />
