@@ -31,6 +31,8 @@ export default function TenantsScreen({ navigation, route }: Props) {
   const [buildings, setBuildings] = useState<BuildingSummary[]>([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  // Track the last preselectedBuildingId we applied — only re-apply when it changes
+  const appliedPreselectedRef = useRef<string>('');
   const [filterType, setFilterType] = useState<'ALL' | 'tenant' | 'owner_occupant' | 'guest'>('ALL');
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -113,9 +115,11 @@ export default function TenantsScreen({ navigation, route }: Props) {
   };
 
   useFocusEffect(useCallback(() => {
-    // On every focus, if a preselected building was passed from Dashboard, use it
+    // Only apply the preselected building once per new navigation from Dashboard
+    // so user's manual dropdown selection is preserved on sub-screen return
     const preselected = (route.params as any)?.preselectedBuildingId;
-    if (preselected) {
+    if (preselected && appliedPreselectedRef.current !== preselected) {
+      appliedPreselectedRef.current = preselected;
       load(false, preselected);
     } else {
       load();

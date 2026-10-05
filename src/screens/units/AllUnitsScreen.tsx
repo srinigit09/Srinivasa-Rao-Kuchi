@@ -270,7 +270,7 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
       <Modal
         visible={!!vacantSheet}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setVacantSheet(null)}
       >
         <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={() => setVacantSheet(null)}>

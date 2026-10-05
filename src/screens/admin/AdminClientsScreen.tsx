@@ -634,7 +634,7 @@ export default function AdminClientsScreen() {
       </ScrollView>
 
       {/* Edit Client Modal — bottom sheet */}
-      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
+      <Modal visible={modalVisible} animationType="fade" transparent onRequestClose={() => setModalVisible(false)}>
         <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setModalVisible(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalBox}>
             <ScrollView keyboardShouldPersistTaps="handled">
