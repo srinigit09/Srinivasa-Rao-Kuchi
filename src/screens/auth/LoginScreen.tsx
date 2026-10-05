@@ -125,56 +125,60 @@ export default function LoginScreen({ navigation }: Props) {
     }
     setBypassLoading(true);
 
-    // Deterministic synthetic credentials from phone number
-    const syntheticEmail = `${cleanPhone}@rentease.app`;
-    const syntheticPwd   = `Ph#${cleanPhone}!RE2026`;
+    // Deterministic synthetic credentials from phone number.
+    // Two password formulas are tried to handle accounts created under different login modes.
+    const syntheticEmail  = `${cleanPhone}@rentease.app`;
+    const syntheticPwd    = `Ph#${cleanPhone}!RE2026`;           // bypass / phone-OTP formula
+    const altPwd          = `Pass#${cleanPhone.replace(/[^a-zA-Z0-9]/g, '')}!2026`; // email-OTP formula
+
+    // Helper: try sign-in, return data or null
+    const trySignIn = async (pwd: string) => {
+      const res = await supabase.auth.signInWithPassword({ email: syntheticEmail, password: pwd });
+      return res.error ? null : res.data;
+    };
 
     try {
-      // Step 1: try signing in (handles existing accounts from any login mode)
-      let { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
-        email: syntheticEmail,
-        password: syntheticPwd,
-      });
+      // Step 1: try primary password
+      let signInData = await trySignIn(syntheticPwd);
 
-      if (signInErr) {
-        // Step 2: sign-in failed — attempt to create the account
+      // Step 2: try alternate password (account created via email-OTP flow)
+      if (!signInData) {
+        signInData = await trySignIn(altPwd);
+      }
+
+      // Step 3: still no session — account may not exist yet, create it
+      if (!signInData) {
         const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
           email: syntheticEmail,
           password: syntheticPwd,
           options: { emailRedirectTo: undefined },
         });
 
-        // "User already registered" means the account exists but sign-in failed
-        // (e.g. password mismatch from a previous login mode). Try sign-in again.
         const alreadyExists = signUpErr?.message?.toLowerCase().includes('already registered')
           || signUpErr?.message?.toLowerCase().includes('already been registered');
 
-        if (alreadyExists || signUpData?.user) {
-          // Account exists or was just created — sign in now
-          const reSignIn = await supabase.auth.signInWithPassword({
-            email: syntheticEmail, password: syntheticPwd,
-          });
-          if (reSignIn.error || !reSignIn.data?.session) {
-            setBypassLoading(false);
-            setBypassError(friendlyError(reSignIn.error?.message ?? 'Login failed.'));
-            return;
-          }
-          signInData = reSignIn.data;
+        if (alreadyExists) {
+          // Account exists but neither password worked — update the password
+          // We do this by signing in with OTP (phone) isn't available without SMS,
+          // so surface a clear message instructing the admin to reset via Supabase dashboard
+          setBypassLoading(false);
+          setBypassError(
+            'Your account exists but the password does not match. ' +
+            'Please log in using Phone OTP mode with code 123456, then switch back to Bypass.'
+          );
+          return;
         } else if (signUpErr) {
           setBypassLoading(false);
           setBypassError(friendlyError(signUpErr.message));
           return;
-        } else {
-          // New account created, sign in
-          const reSignIn = await supabase.auth.signInWithPassword({
-            email: syntheticEmail, password: syntheticPwd,
-          });
-          if (reSignIn.error || !reSignIn.data?.session) {
-            setBypassLoading(false);
-            setBypassError(friendlyError(reSignIn.error?.message ?? 'Login failed.'));
-            return;
-          }
-          signInData = reSignIn.data;
+        }
+
+        // New account just created — sign in now
+        signInData = await trySignIn(syntheticPwd);
+        if (!signInData) {
+          setBypassLoading(false);
+          setBypassError('Account created but login failed. Please try again.');
+          return;
         }
       }
 
