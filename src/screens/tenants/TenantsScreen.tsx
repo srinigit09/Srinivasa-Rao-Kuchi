@@ -273,8 +273,9 @@ export default function TenantsScreen({ navigation, route }: Props) {
 
       {/* Property Selector Modal */}
       <Modal visible={dropdownOpen} transparent animationType="fade" onRequestClose={() => setDropdownOpen(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDropdownOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setDropdownOpen(false)} />
+          <View style={styles.dropdownSheet}>
             <Text style={styles.dropdownTitle}>Select Property / Society</Text>
 
             {buildings.map(b => (
@@ -294,8 +295,8 @@ export default function TenantsScreen({ navigation, route }: Props) {
                 {selectedBuildingId === b.id && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
               </TouchableOpacity>
             ))}
-          </TouchableOpacity>
-        </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -384,13 +385,11 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 44 },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text },
   emptyText: { fontSize: 13, color: COLORS.muted },
-  modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-  },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)' },
   dropdownSheet: {
     backgroundColor: COLORS.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 20, paddingBottom: 36,
+    padding: 20, paddingBottom: 36, minHeight: 220,
   },
   dropdownTitle: {
     fontSize: 14, fontWeight: '700', color: COLORS.text,

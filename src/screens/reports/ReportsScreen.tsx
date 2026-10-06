@@ -377,8 +377,9 @@ export default function ReportsScreen({ navigation }: Props) {
 
       {/* Building Filter Modal */}
       <Modal visible={buildingDropdown} transparent animationType="fade" onRequestClose={() => setBuildingDropdown(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setBuildingDropdown(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setBuildingDropdown(false)} />
+          <View style={styles.dropdownSheet}>
             <Text style={styles.dropdownTitle}>Filter by Property / Society</Text>
 
             <TouchableOpacity
@@ -416,14 +417,15 @@ export default function ReportsScreen({ navigation }: Props) {
                 </TouchableOpacity>
               )}
             />
-          </TouchableOpacity>
-        </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
 
       {/* Custom Date Range Modal */}
       <Modal visible={showModal} transparent animationType="fade" onRequestClose={() => setShowModal(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowModal(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.modalBox}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowModal(false)} />
+          <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Custom Date Range</Text>
             <Text style={styles.modalHint}>Format: YYYY-MM-01 (e.g. 2025-01-01)</Text>
 
@@ -460,8 +462,8 @@ export default function ReportsScreen({ navigation }: Props) {
                 <Text style={{ fontWeight: '700', color: '#fff' }}>Apply</Text>
               </TouchableOpacity>
             </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -646,17 +648,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 14,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-  },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)' },
   dropdownSheet: {
     backgroundColor: COLORS.white,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
     paddingBottom: 36,
+    minHeight: 220,
   },
   dropdownTitle: {
     fontSize: 14,
@@ -687,8 +687,12 @@ const styles = StyleSheet.create({
   },
   modalBox: {
     backgroundColor: COLORS.white,
-    borderRadius: 16,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     padding: 18,
+    paddingBottom: 36,
   },
   modalTitle: {
     fontSize: 16,

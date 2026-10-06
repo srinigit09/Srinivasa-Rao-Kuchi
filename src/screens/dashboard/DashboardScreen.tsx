@@ -325,8 +325,9 @@ export default function DashboardScreen({ navigation }: Props) {
 
       {/* ── Building picker modal ── */}
       <Modal visible={dropdownOpen} transparent animationType="fade" onRequestClose={() => setDropdownOpen(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDropdownOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setDropdownOpen(false)} />
+          <View style={styles.dropdownSheet}>
             <Text style={styles.dropdownTitle}>Select Property / Society</Text>
 
             <FlatList
@@ -363,8 +364,8 @@ export default function DashboardScreen({ navigation }: Props) {
             >
               <Text style={styles.viewBuildingText}>Open Property / Society Details →</Text>
             </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -628,17 +629,15 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     marginTop: 2,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)' },
   dropdownSheet: {
     backgroundColor: COLORS.white,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
     paddingBottom: 36,
+    minHeight: 220,
   },
   dropdownTitle: {
     fontSize: 15,

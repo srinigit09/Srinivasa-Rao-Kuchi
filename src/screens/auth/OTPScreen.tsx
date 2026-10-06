@@ -146,19 +146,51 @@ export default function OTPScreen({ navigation, route }: Props) {
             if (!r4.error && r4.data?.user) { signInData = r4.data; }
           }
 
-          // All known formulas exhausted — create fresh account with canonical credentials
+          // All known formulas exhausted — use Admin REST API via service_role_key to
+          // delete any stale account and create a fresh one with the canonical password.
           if (!signInData) {
-            await supabase.auth.signUp({ email: syntheticEmail, password: syntheticPwd,
-              options: { emailRedirectTo: undefined } });
-            const r5 = await supabase.auth.signInWithPassword({ email: syntheticEmail, password: syntheticPwd });
-            if (!r5.error && r5.data?.user) { signInData = r5.data; }
+            const { data: keyRow } = await supabase
+              .from('app_settings').select('value').eq('key', 'service_role_key').single();
+            const serviceKey = (keyRow as any)?.value ?? '';
+            const supabaseUrl = `https://kauraxhcafonogggjhca.supabase.co`;
+
+            if (serviceKey) {
+              // 1. Find and delete any stale account with this email
+              const listRes = await fetch(
+                `${supabaseUrl}/auth/v1/admin/users?page=1&per_page=1000`,
+                { headers: { 'Authorization': `Bearer ${serviceKey}`, 'apikey': serviceKey } },
+              );
+              if (listRes.ok) {
+                const { users } = await listRes.json();
+                const stale = (users ?? []).find((u: any) => u.email === syntheticEmail);
+                if (stale) {
+                  await fetch(`${supabaseUrl}/auth/v1/admin/users/${stale.id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${serviceKey}`, 'apikey': serviceKey },
+                  });
+                }
+              }
+            }
+
+            // 2. Now sign-up fresh — should succeed after deletion
+            const { error: suErr } = await supabase.auth.signUp({
+              email: syntheticEmail, password: syntheticPwd,
+              options: { emailRedirectTo: undefined },
+            });
+            if (!suErr) {
+              const r5 = await supabase.auth.signInWithPassword({ email: syntheticEmail, password: syntheticPwd });
+              if (!r5.error && r5.data?.user) { signInData = r5.data; }
+            }
           }
 
           if (!signInData?.user) {
             setLoading(false);
             setError(
-              'Login failed. Please contact admin and set your password in Supabase Dashboard.\n\n' +
-              `Email: ${syntheticEmail}\nPassword: ${syntheticPwd}`
+              'Login failed. Please run this in Supabase SQL Editor:\n\n' +
+              `SELECT extensions.pgcrypto_gen_salt('bf');\n` +
+              `-- Then go to Authentication → Users → find\n` +
+              `-- "${syntheticEmail}" → Edit → set password:\n` +
+              `Ph#${phone}!RE2026`
             );
             return;
           }
