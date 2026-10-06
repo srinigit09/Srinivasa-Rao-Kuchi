@@ -324,7 +324,7 @@ export default function DashboardScreen({ navigation }: Props) {
       </ScrollView>
 
       {/* ── Building picker modal ── */}
-      <Modal visible={dropdownOpen} transparent animationType="fade" onRequestClose={() => setDropdownOpen(false)}>
+      <Modal visible={dropdownOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setDropdownOpen(false)}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setDropdownOpen(false)} />
           <View style={styles.dropdownSheet}>

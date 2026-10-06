@@ -7,7 +7,7 @@ interface AuthContextType {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
-  loading: boolean;
+  loading: boolean;        // true while session + profile are being loaded
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -18,30 +18,29 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [session,  setSession]  = useState<Session | null>(null);
+  const [profile,  setProfile]  = useState<Profile | null>(null);
+  // loading stays true until BOTH session check AND profile fetch are done
+  const [loading,  setLoading]  = useState(true);
 
   const fetchProfile = async (userId: string) => {
     const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-    // Always update profile state (null clears stale data, object updates it)
+      .from('profiles').select('*').eq('id', userId).single();
     setProfile(data ? (data as Profile) : null);
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // On mount: restore persisted session, then fetch profile, then stop loading
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
-      if (session?.user) fetchProfile(session.user.id);
+      if (session?.user) await fetchProfile(session.user.id);
       setLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    // React to auth state changes (sign-in / sign-out / token refresh)
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
-      if (session?.user) fetchProfile(session.user.id);
+      if (session?.user) await fetchProfile(session.user.id);
       else setProfile(null);
       setLoading(false);
     });

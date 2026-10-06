@@ -271,6 +271,7 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
         visible={!!vacantSheet}
         transparent
         animationType="fade"
+        statusBarTranslucent
         onRequestClose={() => setVacantSheet(null)}
       >
         <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={() => setVacantSheet(null)}>
@@ -361,7 +362,7 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
       </Modal>
 
       {/* ── Building Picker Modal ── */}
-      <Modal visible={dropdownOpen} transparent animationType="fade" onRequestClose={() => setDropdownOpen(false)}>
+      <Modal visible={dropdownOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setDropdownOpen(false)}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setDropdownOpen(false)} />
           <View style={styles.dropdownSheet}>

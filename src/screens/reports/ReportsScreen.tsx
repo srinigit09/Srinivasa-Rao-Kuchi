@@ -376,7 +376,7 @@ export default function ReportsScreen({ navigation }: Props) {
       </ScrollView>
 
       {/* Building Filter Modal */}
-      <Modal visible={buildingDropdown} transparent animationType="fade" onRequestClose={() => setBuildingDropdown(false)}>
+      <Modal visible={buildingDropdown} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setBuildingDropdown(false)}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setBuildingDropdown(false)} />
           <View style={styles.dropdownSheet}>
@@ -422,7 +422,7 @@ export default function ReportsScreen({ navigation }: Props) {
       </Modal>
 
       {/* Custom Date Range Modal */}
-      <Modal visible={showModal} transparent animationType="fade" onRequestClose={() => setShowModal(false)}>
+      <Modal visible={showModal} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowModal(false)}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowModal(false)} />
           <View style={styles.modalBox}>
