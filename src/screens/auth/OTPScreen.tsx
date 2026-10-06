@@ -13,31 +13,44 @@ import { COLORS } from '../../constants';
 import { showAlert } from '../../utils';
 import { Ionicons } from '@expo/vector-icons';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// OTP SCREEN — handles both phone OTP and email OTP flows
+//
+// Phone OTP  (route.params.phone set):
+//   • Verify default OTP from app_settings
+//   • Sign in / create account using {phone}@rentease.app + Ph#{phone}!RE2026
+//   • This is the same account used by Bypass mode → switching modes never breaks login
+//
+// Email OTP  (route.params.email set):
+//   • Verify default OTP (or real Supabase OTP if use_supabase_otp=true)
+//   • Sign in / create account using the real email + Pass#{sanitisedEmail}!2026
+//   • Email address IS the Supabase Auth email
+// ─────────────────────────────────────────────────────────────────────────────
+
 const ADMIN_PHONE = '8247873377';
+const SUPA_URL    = 'https://kauraxhcafonogggjhca.supabase.co';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'OTP'>;
-  route: RouteProp<AuthStackParamList, 'OTP'>;
+  route:      RouteProp<AuthStackParamList, 'OTP'>;
 };
 
-
 export default function OTPScreen({ navigation, route }: Props) {
-  const { phone, email, bypassPasswordReset, bypassName } = route.params;
+  const { phone, email } = route.params;
   const isPhoneFlow = !!phone;
-  const target = phone
-    ? `+91 ${phone.slice(0, 5)} ${phone.slice(5)}`
-    : (email ?? '');
   const insets = useSafeAreaInsets();
 
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const target = isPhoneFlow
+    ? `+91 ${phone!.slice(0, 5)} ${phone!.slice(5)}`
+    : (email ?? '');
+
+  const [otp,           setOtp]           = useState(['', '', '', '', '', '']);
+  const [loading,       setLoading]       = useState(false);
+  const [error,         setError]         = useState<string | null>(null);
   const [resendLoading, setResendLoading] = useState(false);
-  // Whether real SMS gateway is active (loaded on mount, used for hint text & resend)
   const [useSmsGateway, setUseSmsGateway] = useState(false);
   const inputs = useRef<(TextInput | null)[]>([]);
 
-  // Load gateway setting on mount so hint text is accurate
   React.useEffect(() => {
     supabase.from('app_settings').select('value').eq('key', 'use_sms_gateway').single()
       .then(({ data }) => { if ((data as any)?.value === 'true') setUseSmsGateway(true); });
@@ -51,6 +64,81 @@ export default function OTPScreen({ navigation, route }: Props) {
     if (text && index < 5) inputs.current[index + 1]?.focus();
   };
 
+  // ── Delete stale auth user via Admin REST API ─────────────────────────────
+  const deleteAuthUser = async (userId: string, serviceKey: string) => {
+    await fetch(`${SUPA_URL}/auth/v1/admin/users/${userId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey },
+    });
+  };
+
+  // ── Ensure/reset account when password doesn't match ─────────────────────
+  const resetAndSignIn = async (authEmail: string, authPwd: string): Promise<string | null> => {
+    const { data: keyRow } = await supabase
+      .from('app_settings').select('value').eq('key', 'service_role_key').single();
+    const serviceKey = (keyRow as any)?.value ?? '';
+
+    if (serviceKey) {
+      const listRes = await fetch(`${SUPA_URL}/auth/v1/admin/users?page=1&per_page=1000`, {
+        headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey },
+      });
+      if (listRes.ok) {
+        const { users } = await listRes.json();
+        const stale = (users ?? []).find((u: any) => u.email === authEmail);
+        if (stale) await deleteAuthUser(stale.id, serviceKey);
+      }
+    }
+
+    // Recreate fresh
+    await supabase.auth.signUp({ email: authEmail, password: authPwd, options: { emailRedirectTo: undefined } });
+    const { data, error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPwd });
+    if (error || !data?.user) return null;
+    return data.user.id;
+  };
+
+  // ── Finalise profile after successful auth ────────────────────────────────
+  const finaliseProfile = async (
+    userId: string,
+    opts: { phone?: string; email?: string }
+  ) => {
+    const isAdminPhone = opts.phone === ADMIN_PHONE;
+    const { data: existing } = await supabase
+      .from('profiles').select('id, full_name, is_active, valid_until, role').eq('id', userId).single();
+
+    if (existing?.is_active === false) {
+      await supabase.auth.signOut();
+      showAlert('Account Inactive', 'Your account has been deactivated. Contact the administrator.');
+      return false;
+    }
+    if (existing?.valid_until && new Date(existing.valid_until) < new Date()) {
+      await supabase.auth.signOut();
+      showAlert('Subscription Expired', 'Your validity period has expired. Contact admin.');
+      return false;
+    }
+
+    const isNew = !existing?.full_name;
+    if (isNew) {
+      // New user — create profile and send to setup
+      await supabase.from('profiles').upsert({
+        id:           userId,
+        phone:        opts.phone ?? null,
+        phone_number: opts.phone ?? null,
+        email:        opts.email ?? null,
+        role:         isAdminPhone ? 'admin' : 'client',
+        is_active:    true,
+        valid_until:  isAdminPhone ? null : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      }, { onConflict: 'id' });
+      navigation.navigate('ProfileSetup', { phone: opts.phone, email: opts.email });
+    } else {
+      // Existing user — keep profile, ensure admin role
+      if (isAdminPhone) {
+        await supabase.from('profiles').update({ role: 'admin' }).eq('id', userId);
+      }
+      // RootNavigator detects session and navigates automatically
+    }
+    return true;
+  };
+
   const handleVerify = async () => {
     const token = otp.join('');
     if (token.length < 6) { setError('Please enter all 6 digits.'); return; }
@@ -59,248 +147,110 @@ export default function OTPScreen({ navigation, route }: Props) {
     setError(null);
 
     try {
-      // Fetch settings once — used by both phone and email flows
-      const { data: settings } = await supabase
-        .from('app_settings')
-        .select('key, value')
+      // Load settings
+      const { data: settingsRows } = await supabase
+        .from('app_settings').select('key, value')
         .in('key', ['default_otp', 'use_supabase_otp', 'use_sms_gateway']);
-      const map: Record<string, string> = {};
-      (settings ?? []).forEach((r: any) => { map[r.key] = r.value; });
-      const defaultOtp      = map['default_otp']      ?? '123456';
-      const useSupabaseOtp  = map['use_supabase_otp'] === 'true';
-      const useSmsGateway   = map['use_sms_gateway']  === 'true';
+      const s: Record<string, string> = {};
+      (settingsRows ?? []).forEach((r: any) => { s[r.key] = r.value; });
+      const defaultOtp     = s['default_otp']     ?? '123456';
+      const useSupabaseOtp = s['use_supabase_otp'] === 'true';
+      const useGateway     = s['use_sms_gateway']  === 'true';
 
+      // ── PHONE OTP FLOW ──────────────────────────────────────────────────────
       if (isPhoneFlow) {
-        if (useSmsGateway) {
-          // ── Real SMS gateway (MSG91) verification via Edge Function ──────────
-          const { data, error: fnErr } = await supabase.functions.invoke('verify-otp', {
-            body: { phone, otp: token },
-          });
+        if (useGateway) {
+          // Real SMS via MSG91 Edge Function
+          const { data, error: fnErr } = await supabase.functions.invoke('verify-otp', { body: { phone, otp: token } });
           setLoading(false);
-          if (fnErr || data?.error) {
-            setError(data?.error ?? fnErr?.message ?? 'Invalid OTP. Please try again.');
-            return;
-          }
-          await supabase.auth.setSession({
-            access_token:  data.session.access_token,
-            refresh_token: data.session.refresh_token,
-          });
-          if (data.profile?.is_active === false) {
-            await supabase.auth.signOut();
-            showAlert('Account Inactive', 'Your account has been deactivated. Please contact the administrator.');
-            return;
-          }
-          if (data.profile?.valid_until && new Date(data.profile.valid_until) < new Date()) {
-            await supabase.auth.signOut();
-            showAlert('Subscription Expired', 'Your validity period has expired. Please contact admin.');
-            return;
-          }
-          if (data.isNewUser || !data.profile?.full_name) {
-            navigation.navigate('ProfileSetup', { phone });
-          }
+          if (fnErr || data?.error) { setError(data?.error ?? fnErr?.message ?? 'Invalid OTP.'); return; }
+          await supabase.auth.setSession({ access_token: data.session.access_token, refresh_token: data.session.refresh_token });
+          if (data.isNewUser || !data.profile?.full_name) navigation.navigate('ProfileSetup', { phone: phone! });
+          return;
+        }
+
+        // Default OTP — verify against app_settings value
+        if (token !== defaultOtp) { setLoading(false); setError('Invalid OTP. Please try again.'); return; }
+
+        // Canonical account: {phone}@rentease.app / Ph#{phone}!RE2026
+        // This is the SAME account used by Bypass mode — no conflict when switching
+        const authEmail = `${phone}@rentease.app`;
+        const authPwd   = `Ph#${phone}!RE2026`;
+
+        let userId: string | null = null;
+
+        // Try sign-in
+        const si = await supabase.auth.signInWithPassword({ email: authEmail, password: authPwd });
+        if (!si.error && si.data?.user) {
+          userId = si.data.user.id;
         } else {
-          // ── Default OTP mode for phone (no SMS gateway configured) ───────────
-          // Verify against default_otp from app_settings (admin-controlled)
-          if (token !== defaultOtp) {
-            setLoading(false);
-            setError('Invalid OTP. Please check the code and try again.');
-            return;
-          }
-          // Canonical synthetic credentials used by the current codebase
-          const syntheticEmail = `${phone}@rentease.app`;
-          const syntheticPwd   = `Ph#${phone}!RE2026`;
+          // Account doesn't exist yet — create it
+          const { data: suData, error: suErr } = await supabase.auth.signUp({
+            email: authEmail, password: authPwd, options: { emailRedirectTo: undefined },
+          });
+          const alreadyExists = suErr?.message?.toLowerCase().includes('already registered')
+            || suErr?.message?.toLowerCase().includes('already been registered');
 
-          // Legacy credentials: original app used bare phone number as email
-          // and Pass#<phone>!2026 as password — must try these for existing accounts
-          const legacyEmail    = phone;                                       // e.g. "8247873377"
-          const legacyPwd      = `Pass#${phone.replace(/[^a-zA-Z0-9]/g, '')}!2026`;
-
-          let signInData: any = null;
-
-          // Attempt 1: current formula
-          const r1 = await supabase.auth.signInWithPassword({ email: syntheticEmail, password: syntheticPwd });
-          if (!r1.error && r1.data?.user) { signInData = r1.data; }
-
-          // Attempt 2: legacy email + legacy password
-          if (!signInData) {
-            const r2 = await supabase.auth.signInWithPassword({ email: legacyEmail, password: legacyPwd });
-            if (!r2.error && r2.data?.user) {
-              signInData = r2.data;
-              // Migrate: update password to canonical so future logins use new formula
-              await supabase.auth.updateUser({ password: syntheticPwd });
-            }
-          }
-
-          // Attempt 3: current email + legacy password (account migrated email but not pwd)
-          if (!signInData) {
-            const r3 = await supabase.auth.signInWithPassword({ email: syntheticEmail, password: legacyPwd });
-            if (!r3.error && r3.data?.user) {
-              signInData = r3.data;
-              await supabase.auth.updateUser({ password: syntheticPwd });
-            }
-          }
-
-          // Attempt 4: legacy email + canonical password
-          if (!signInData) {
-            const r4 = await supabase.auth.signInWithPassword({ email: legacyEmail, password: syntheticPwd });
-            if (!r4.error && r4.data?.user) { signInData = r4.data; }
-          }
-
-          // All known formulas exhausted — use Admin REST API via service_role_key to
-          // delete any stale account and create a fresh one with the canonical password.
-          if (!signInData) {
-            const { data: keyRow } = await supabase
-              .from('app_settings').select('value').eq('key', 'service_role_key').single();
-            const serviceKey = (keyRow as any)?.value ?? '';
-            const supabaseUrl = `https://kauraxhcafonogggjhca.supabase.co`;
-
-            if (serviceKey) {
-              // 1. Find and delete any stale account with this email
-              const listRes = await fetch(
-                `${supabaseUrl}/auth/v1/admin/users?page=1&per_page=1000`,
-                { headers: { 'Authorization': `Bearer ${serviceKey}`, 'apikey': serviceKey } },
-              );
-              if (listRes.ok) {
-                const { users } = await listRes.json();
-                const stale = (users ?? []).find((u: any) => u.email === syntheticEmail);
-                if (stale) {
-                  await fetch(`${supabaseUrl}/auth/v1/admin/users/${stale.id}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${serviceKey}`, 'apikey': serviceKey },
-                  });
-                }
-              }
-            }
-
-            // 2. Now sign-up fresh — should succeed after deletion
-            const { error: suErr } = await supabase.auth.signUp({
-              email: syntheticEmail, password: syntheticPwd,
-              options: { emailRedirectTo: undefined },
-            });
-            if (!suErr) {
-              const r5 = await supabase.auth.signInWithPassword({ email: syntheticEmail, password: syntheticPwd });
-              if (!r5.error && r5.data?.user) { signInData = r5.data; }
-            }
-          }
-
-          if (!signInData?.user) {
-            setLoading(false);
-            setError(
-              'Login failed. Please run this in Supabase SQL Editor:\n\n' +
-              `SELECT extensions.pgcrypto_gen_salt('bf');\n` +
-              `-- Then go to Authentication → Users → find\n` +
-              `-- "${syntheticEmail}" → Edit → set password:\n` +
-              `Ph#${phone}!RE2026`
-            );
-            return;
-          }
-
-          const userId = signInData.user.id;
-
-          // Upsert profile — admin phone always gets admin role
-          const isAdminPhone = phone === ADMIN_PHONE;
-          const { data: existingProfile } = await supabase
-            .from('profiles').select('id, full_name, is_active, valid_until').eq('id', userId).single();
-
-          if (existingProfile?.is_active === false) {
-            await supabase.auth.signOut();
-            setLoading(false);
-            showAlert('Account Inactive', 'Your account has been deactivated. Please contact the administrator.');
-            return;
-          }
-          if (existingProfile?.valid_until && new Date(existingProfile.valid_until) < new Date()) {
-            await supabase.auth.signOut();
-            setLoading(false);
-            showAlert('Subscription Expired', 'Your validity period has expired. Please contact admin.');
-            return;
-          }
-
-          const hasProfile = !!existingProfile?.full_name;
-          if (!hasProfile) {
-            // New user — upsert admin role if admin phone, then go to profile setup
-            await supabase.from('profiles').upsert({
-              id: userId,
-              phone: phone,
-              phone_number: phone,
-              role: isAdminPhone ? 'admin' : 'client',
-              is_active: true,
-              valid_until: isAdminPhone
-                ? null
-                : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-            }, { onConflict: 'id' });
-            setLoading(false);
-            navigation.navigate('ProfileSetup', { phone });
-          } else {
-            // Existing user — ensure admin role stays correct; update name if provided via bypass reset
-            const profileUpdate: Record<string, any> = {};
-            if (isAdminPhone) profileUpdate.role = 'admin';
-            if (bypassPasswordReset && bypassName) profileUpdate.full_name = bypassName;
-            if (Object.keys(profileUpdate).length > 0) {
-              await supabase.from('profiles').update(profileUpdate).eq('id', userId);
-            }
-            setLoading(false);
-            // RootNavigator detects session and redirects automatically
+          if (!suErr && suData?.user) {
+            const si2 = await supabase.auth.signInWithPassword({ email: authEmail, password: authPwd });
+            if (!si2.error && si2.data?.user) userId = si2.data.user.id;
+          } else if (alreadyExists) {
+            // Stale account — reset it
+            userId = await resetAndSignIn(authEmail, authPwd);
           }
         }
 
+        if (!userId) { setLoading(false); setError('Login failed. Please try again.'); return; }
+
+        const ok = await finaliseProfile(userId, { phone: phone! });
+        if (!ok) setLoading(false);
+        else setLoading(false);
+        return;
+      }
+
+      // ── EMAIL OTP FLOW ──────────────────────────────────────────────────────
+      // The user's real email IS the Supabase Auth email.
+      let userId: string | null = null;
+
+      if (useSupabaseOtp) {
+        // Real Supabase email OTP
+        const { data, error: verifyErr } = await supabase.auth.verifyOtp({ email: email!, token, type: 'email' });
+        if (verifyErr || !data?.user) { setLoading(false); setError(verifyErr?.message ?? 'Invalid OTP.'); return; }
+        userId = data.user.id;
       } else {
-        // ── Email OTP flow ────────────────────────────────────────────────────
-        let authUser = null;
-        if (useSupabaseOtp) {
-          const { data, error: verifyErr } = await supabase.auth.verifyOtp({
-            email: email!,
-            token,
-            type: 'email',
-          });
-          if (verifyErr || !data?.user) {
-            setLoading(false);
-            setError(verifyErr?.message ?? 'Invalid OTP. Please try again.');
-            return;
-          }
-          authUser = data.user;
+        // Default OTP — verify then sign in / create account
+        if (token !== defaultOtp) { setLoading(false); setError('Invalid OTP. Please try again.'); return; }
+
+        const authPwd = `Pass#${email!.replace(/[^a-zA-Z0-9]/g, '')}!2026`;
+
+        const si = await supabase.auth.signInWithPassword({ email: email!, password: authPwd });
+        if (!si.error && si.data?.user) {
+          userId = si.data.user.id;
         } else {
-          if (token !== defaultOtp) {
-            setLoading(false);
-            setError('Invalid OTP. Please check the code and try again.');
-            return;
-          }
-          const pwd = `Pass#${email!.replace(/[^a-zA-Z0-9]/g, '')}!2026`;
-          await supabase.auth.signUp({ email: email!, password: pwd });
-          const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
-            email: email!, password: pwd,
+          const { data: suData, error: suErr } = await supabase.auth.signUp({
+            email: email!, password: authPwd, options: { emailRedirectTo: undefined },
           });
-          if (signInErr || !signInData?.user) {
-            setLoading(false);
-            setError(signInErr?.message ?? 'Login failed. Please try again.');
-            return;
+          const alreadyExists = suErr?.message?.toLowerCase().includes('already registered')
+            || suErr?.message?.toLowerCase().includes('already been registered');
+
+          if (!suErr && suData?.user) {
+            const si2 = await supabase.auth.signInWithPassword({ email: email!, password: authPwd });
+            if (!si2.error && si2.data?.user) userId = si2.data.user.id;
+          } else if (alreadyExists) {
+            userId = await resetAndSignIn(email!, authPwd);
           }
-          authUser = signInData.user;
-        }
-
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('id, full_name, is_active, valid_until')
-          .eq('id', authUser.id)
-          .single();
-
-        setLoading(false);
-        if (profileData?.is_active === false) {
-          await supabase.auth.signOut();
-          showAlert('Account Inactive', 'Your account has been deactivated. Please contact the administrator.');
-          return;
-        }
-        if (profileData?.valid_until && new Date(profileData.valid_until) < new Date()) {
-          await supabase.auth.signOut();
-          showAlert('Subscription Expired', 'Your validity period has expired. Please contact admin.');
-          return;
-        }
-        if (!profileData?.full_name) {
-          navigation.navigate('ProfileSetup', { email: email || undefined });
         }
       }
+
+      if (!userId) { setLoading(false); setError('Login failed. Please try again.'); return; }
+
+      const ok = await finaliseProfile(userId, { email: email! });
+      if (!ok) setLoading(false);
+      else setLoading(false);
+
     } catch (e: any) {
       setLoading(false);
-      setError(e.message || 'Verification failed.');
+      setError(e.message ?? 'Verification failed. Please try again.');
     }
   };
 
@@ -310,20 +260,16 @@ export default function OTPScreen({ navigation, route }: Props) {
     setOtp(['', '', '', '', '', '']);
     try {
       if (isPhoneFlow && useSmsGateway) {
-        // Only call edge function when SMS gateway is actually configured
-        const { data, error: fnErr } = await supabase.functions.invoke('send-otp', {
-          body: { phone },
-        });
+        const { data, error: fnErr } = await supabase.functions.invoke('send-otp', { body: { phone } });
         if (fnErr || data?.error) setError(data?.error ?? fnErr?.message ?? 'Failed to resend OTP.');
+        else inputs.current[0]?.focus();
       } else {
-        // Default OTP mode or email — just go back so user can re-enter
         navigation.goBack();
       }
     } catch (e: any) {
-      setError(e.message ?? 'Failed to resend OTP.');
+      setError(e.message ?? 'Failed to resend.');
     }
     setResendLoading(false);
-    inputs.current[0]?.focus();
   };
 
   return (
@@ -335,7 +281,7 @@ export default function OTPScreen({ navigation, route }: Props) {
         <View style={{ flex: 1 }}>
           <Text style={styles.bannerTitle}>Enter OTP</Text>
           <Text style={styles.bannerSub} numberOfLines={1}>
-            {isPhoneFlow ? '📱 SMS sent to ' : '📧 Sent to '}{target}
+            {isPhoneFlow ? '📱 Code for ' : '📧 Code for '}{target}
           </Text>
         </View>
       </View>
@@ -344,19 +290,18 @@ export default function OTPScreen({ navigation, route }: Props) {
         contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 32 }]}
         keyboardShouldPersistTaps="handled"
       >
-        {isPhoneFlow && (
-          <View style={styles.hintBox}>
-            <Ionicons name={useSmsGateway ? 'chatbubble-outline' : 'lock-closed-outline'} size={18} color={COLORS.primary} />
-            <Text style={styles.hintText}>
-              {bypassPasswordReset
-                ? <>One-time step to <Text style={styles.hintBold}>restore access</Text>. Enter the default OTP (e.g. 123456) to reset your login.</>
-                : useSmsGateway
-                  ? <>Check your <Text style={styles.hintBold}>SMS messages</Text> for the 6-digit OTP.</>
-                  : <>Enter the <Text style={styles.hintBold}>default OTP</Text> set by your administrator. Contact admin if you don't know it.</>
-              }
-            </Text>
-          </View>
-        )}
+        <View style={styles.hintBox}>
+          <Ionicons
+            name={isPhoneFlow && useSmsGateway ? 'chatbubble-outline' : 'lock-closed-outline'}
+            size={18} color={COLORS.primary}
+          />
+          <Text style={styles.hintText}>
+            {isPhoneFlow && useSmsGateway
+              ? <>Check your <Text style={styles.hintBold}>SMS messages</Text> for the 6-digit OTP.</>
+              : <>Enter the <Text style={styles.hintBold}>default OTP</Text> set by your administrator.</>
+            }
+          </Text>
+        </View>
 
         {error ? (
           <View style={styles.errorBox}>
@@ -390,7 +335,7 @@ export default function OTPScreen({ navigation, route }: Props) {
           {resendLoading
             ? <ActivityIndicator size="small" color={COLORS.primary} />
             : <Text style={styles.resendText}>
-                {isPhoneFlow ? '🔄 Resend OTP' : '← Change email / Resend OTP'}
+                {isPhoneFlow ? '🔄 Resend OTP' : '← Change email / Resend'}
               </Text>
           }
         </TouchableOpacity>
@@ -400,39 +345,20 @@ export default function OTPScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: COLORS.white },
-  banner: {
-    backgroundColor: COLORS.primaryDark,
-    paddingHorizontal: 16, paddingBottom: 20,
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-  },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center', justifyContent: 'center',
-  },
+  flex:      { flex: 1, backgroundColor: COLORS.white },
+  banner:    { backgroundColor: COLORS.primaryDark, paddingHorizontal: 16, paddingBottom: 20, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  backBtn:   { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
   bannerTitle: { fontSize: 22, fontWeight: '800', color: '#fff' },
-  bannerSub: { fontSize: 13, color: 'rgba(255,255,255,0.78)', marginTop: 2 },
-  body: { paddingHorizontal: 24, paddingTop: 32 },
-  hintBox: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
-    backgroundColor: COLORS.primaryLight, borderRadius: 10,
-    padding: 14, marginBottom: 20,
-  },
-  hintText: { flex: 1, fontSize: 14, color: COLORS.primary, lineHeight: 20 },
-  hintBold: { fontWeight: '800' },
-  errorBox: {
-    backgroundColor: COLORS.dangerLight, padding: 12, borderRadius: 8,
-    marginBottom: 16, borderWidth: 1, borderColor: '#FCA5A5',
-  },
+  bannerSub:   { fontSize: 13, color: 'rgba(255,255,255,0.78)', marginTop: 2 },
+  body:      { paddingHorizontal: 24, paddingTop: 32 },
+  hintBox:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: COLORS.primaryLight, borderRadius: 10, padding: 14, marginBottom: 20 },
+  hintText:  { flex: 1, fontSize: 14, color: COLORS.primary, lineHeight: 20 },
+  hintBold:  { fontWeight: '800' },
+  errorBox:  { backgroundColor: COLORS.dangerLight, padding: 12, borderRadius: 8, marginBottom: 16, borderWidth: 1, borderColor: '#FCA5A5' },
   errorText: { color: COLORS.danger, fontSize: 13, fontWeight: '500' },
-  label: { fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 12 },
-  otpRow: { flexDirection: 'row', gap: 8 },
-  otpBox: {
-    flex: 1, height: 58, borderWidth: 1.5, borderColor: COLORS.border,
-    borderRadius: 10, textAlign: 'center', fontSize: 24, fontWeight: '700',
-    color: COLORS.text, backgroundColor: COLORS.surface,
-  },
+  label:     { fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 12 },
+  otpRow:    { flexDirection: 'row', gap: 8 },
+  otpBox:    { flex: 1, height: 58, borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 10, textAlign: 'center', fontSize: 24, fontWeight: '700', color: COLORS.text, backgroundColor: COLORS.surface },
   resendBtn: { alignItems: 'center', marginTop: 20, paddingVertical: 8 },
-  resendText: { color: COLORS.primary, fontSize: 14, fontWeight: '600' },
+  resendText:{ color: COLORS.primary, fontSize: 14, fontWeight: '600' },
 });

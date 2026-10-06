@@ -14,31 +14,41 @@ import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
 import { COLORS } from '../../constants';
 import { showAlert } from '../../utils';
-
-const PHONE_RE = /^\d{10}$/;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const BIOMETRIC_KEY = 'rentease_biometric_enabled';
-const ADMIN_PHONE = '8247873377';
+import { Profile } from '../../types';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LOGIN MODE — controlled from app_settings table (admin can change in Settings)
-// ─────────────────────────────────────────────────────────────────────────────
-//  'bypass' (DEFAULT) — phone + name, no OTP, free forever
-//  'email'            — email + OTP via email (free via Supabase)
-//  'phone'            — mobile + OTP via SMS (MSG91, paid)
+// AUTH DESIGN — single account per phone number, works across all 3 modes
 //
-// Admin changes this inside the app: Settings → Login Mode
-// No code change or app update needed to switch modes.
+// Every user (admin + clients) has ONE Supabase Auth account:
+//   email:    {phone}@rentease.app
+//   password: Ph#{phone}!RE2026   (synthetic, never shown to user)
+//
+// Login modes only change how the user reaches that account:
+//   bypass  — phone + name → sign in directly (no OTP)
+//   phone   — phone → enter default OTP → sign in
+//   email   — email address → enter default OTP → sign in (email = auth email)
+//
+// Switching modes never breaks existing accounts.
 // ─────────────────────────────────────────────────────────────────────────────
+
+const PHONE_RE   = /^\d{10}$/;
+const EMAIL_RE   = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const BIOMETRIC_KEY = 'rentease_biometric_enabled';
+const ADMIN_PHONE   = '8247873377';
+const SUPA_URL      = 'https://kauraxhcafonogggjhca.supabase.co';
 
 type LoginMode = 'bypass' | 'email' | 'phone';
+
+// Derive the canonical Supabase Auth credentials from a phone number
+const authCredentials = (phone: string) => ({
+  email: `${phone}@rentease.app`,
+  password: `Ph#${phone}!RE2026`,
+});
 
 const friendlyError = (msg: string): string => {
   const m = msg.toLowerCase();
   if (m.includes('fetch') || m.includes('network') || m.includes('networkerror') || m.includes('timeout') || m.includes('abort'))
     return 'No internet connection. Please check your network and try again.';
-  if (m.includes('invalid login credentials') || m.includes('invalid email') || m.includes('invalid password'))
-    return 'Incorrect email or password. Please try again.';
   if (m.includes('too many requests') || m.includes('rate limit'))
     return 'Too many attempts. Please wait a moment and try again.';
   return msg;
@@ -49,49 +59,44 @@ type Props = { navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'
 export default function LoginScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
 
-  const [loginMode, setLoginMode] = useState<LoginMode>('bypass');
+  const [loginMode, setLoginMode]   = useState<LoginMode>('bypass');
   const [modeLoaded, setModeLoaded] = useState(false);
 
   // Bypass fields
-  const [bypassPhone, setBypassPhone] = useState('');
-  const [bypassName, setBypassName] = useState('');
+  const [bypassPhone,   setBypassPhone]   = useState('');
+  const [bypassName,    setBypassName]    = useState('');
   const [bypassLoading, setBypassLoading] = useState(false);
-  const [bypassError, setBypassError] = useState<string | null>(null);
+  const [bypassError,   setBypassError]   = useState<string | null>(null);
 
   // Email OTP fields
-  const [email, setEmail] = useState('');
+  const [email,        setEmail]        = useState('');
   const [emailLoading, setEmailLoading] = useState(false);
-  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailError,   setEmailError]   = useState<string | null>(null);
 
   // Phone OTP fields
-  const [phone, setPhone] = useState('');
+  const [phone,        setPhone]        = useState('');
   const [phoneLoading, setPhoneLoading] = useState(false);
-  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [phoneError,   setPhoneError]   = useState<string | null>(null);
 
   const [hasBiometrics, setHasBiometrics] = useState(false);
 
   useEffect(() => {
     checkBiometrics();
-    loadSettings();
+    loadLoginMode();
   }, []);
 
-  const loadSettings = async () => {
+  const loadLoginMode = async () => {
     const { data } = await supabase
-      .from('app_settings')
-      .select('key, value')
-      .in('key', ['login_mode', 'default_otp', 'use_supabase_otp']);
-    const map: Record<string, string> = {};
-    (data ?? []).forEach((r: any) => { map[r.key] = r.value; });
-    const mode = (map['login_mode'] as LoginMode) || 'bypass';
-    setLoginMode(mode);
+      .from('app_settings').select('value').eq('key', 'login_mode').single();
+    setLoginMode(((data as any)?.value as LoginMode) || 'bypass');
     setModeLoaded(true);
   };
 
   const checkBiometrics = async () => {
     try {
       const compatible = await LocalAuthentication.hasHardwareAsync();
-      const enrolled = await LocalAuthentication.isEnrolledAsync();
-      const enabled = await AsyncStorage.getItem(BIOMETRIC_KEY);
+      const enrolled   = await LocalAuthentication.isEnrolledAsync();
+      const enabled    = await AsyncStorage.getItem(BIOMETRIC_KEY);
       if (compatible && enrolled && enabled === 'true') setHasBiometrics(true);
     } catch { /* ignore */ }
   };
@@ -109,152 +114,178 @@ export default function LoginScreen({ navigation }: Props) {
     } catch (e: any) { showAlert('Biometric Error', e.message); }
   };
 
-  // ── BYPASS MODE: phone + name, no OTP ────────────────────────────────────
-  // Uses a deterministic synthetic email+password from the phone number.
-  // Account is created silently on first login. Admin role is set in profile.
+  // ── Shared: ensure a Supabase Auth account exists for a phone number ────────
+  // Uses the canonical email + password formula. If the account doesn't exist
+  // it's created silently. If a stale account exists (wrong password) it's
+  // deleted via the Admin API (service_role_key from app_settings) and recreated.
+  const ensureAccount = async (cleanPhone: string): Promise<{ userId: string } | { error: string }> => {
+    const { email: authEmail, password: authPwd } = authCredentials(cleanPhone);
+
+    // Try to sign in with canonical credentials first
+    const signIn = await supabase.auth.signInWithPassword({ email: authEmail, password: authPwd });
+    if (!signIn.error && signIn.data?.user) {
+      return { userId: signIn.data.user.id };
+    }
+
+    // Sign-in failed — try to create the account
+    const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+      email: authEmail, password: authPwd,
+      options: { emailRedirectTo: undefined },
+    });
+
+    const alreadyExists = signUpErr?.message?.toLowerCase().includes('already registered')
+      || signUpErr?.message?.toLowerCase().includes('already been registered');
+
+    if (!signUpErr && signUpData?.user) {
+      // Fresh account created — sign in now
+      const si = await supabase.auth.signInWithPassword({ email: authEmail, password: authPwd });
+      if (!si.error && si.data?.user) return { userId: si.data.user.id };
+      return { error: 'Account created but sign-in failed. Please try again.' };
+    }
+
+    if (alreadyExists) {
+      // Account exists but password doesn't match the canonical formula.
+      // Use service_role_key to delete and recreate it.
+      const { data: keyRow } = await supabase
+        .from('app_settings').select('value').eq('key', 'service_role_key').single();
+      const serviceKey = (keyRow as any)?.value ?? '';
+
+      if (!serviceKey) {
+        return {
+          error:
+            'Account conflict detected. Run this SQL once in Supabase Dashboard:\n\n' +
+            `DELETE FROM auth.users WHERE email LIKE '%${cleanPhone}%';`,
+        };
+      }
+
+      // List all auth users and delete any that match this phone
+      const listRes = await fetch(`${SUPA_URL}/auth/v1/admin/users?page=1&per_page=1000`, {
+        headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey },
+      });
+      if (listRes.ok) {
+        const { users } = await listRes.json();
+        const matches = (users ?? []).filter((u: any) =>
+          u.email === authEmail || u.email === cleanPhone
+        );
+        await Promise.all(matches.map((u: any) =>
+          fetch(`${SUPA_URL}/auth/v1/admin/users/${u.id}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey },
+          })
+        ));
+      }
+
+      // Recreate with canonical credentials
+      const { error: su2 } = await supabase.auth.signUp({
+        email: authEmail, password: authPwd,
+        options: { emailRedirectTo: undefined },
+      });
+      if (su2) return { error: friendlyError(su2.message) };
+
+      const si2 = await supabase.auth.signInWithPassword({ email: authEmail, password: authPwd });
+      if (!si2.error && si2.data?.user) return { userId: si2.data.user.id };
+      return { error: 'Account reset but sign-in failed. Please try again.' };
+    }
+
+    return { error: friendlyError(signUpErr?.message ?? 'Login failed. Please try again.') };
+  };
+
+  // ── Shared: check profile status and upsert after successful auth ───────────
+  const finaliseLogin = async (
+    userId: string,
+    opts: { phone?: string; name?: string; email?: string }
+  ): Promise<{ error: string } | null> => {
+    const { data: existing } = await supabase
+      .from('profiles').select('*')
+      .eq('id', userId).single();
+    const profile = existing as Profile | null;
+
+    if (profile?.is_active === false) {
+      await supabase.auth.signOut();
+      return { error: 'Your account has been deactivated. Contact the administrator.' };
+    }
+    if (profile?.valid_until && new Date(profile.valid_until) < new Date()) {
+      await supabase.auth.signOut();
+      return { error: 'Your validity period has expired. Contact admin.' };
+    }
+
+    const isAdminPhone = opts.phone === ADMIN_PHONE;
+    const isNew        = !profile?.full_name;
+
+    await supabase.from('profiles').upsert({
+      id:           userId,
+      full_name:    opts.name  ?? profile?.full_name ?? '',
+      phone:        opts.phone ?? profile?.phone     ?? null,
+      phone_number: opts.phone ?? profile?.phone     ?? null,
+      email:        opts.email ?? profile?.email     ?? null,
+      role:         isAdminPhone ? 'admin' : (isNew ? 'client' : (profile?.role ?? 'client')),
+      is_active:    true,
+      ...(isNew && !isAdminPhone
+        ? { valid_until: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() }
+        : {}),
+    }, { onConflict: 'id' });
+
+    return null; // success — RootNavigator detects session automatically
+  };
+
+  // ── BYPASS MODE ──────────────────────────────────────────────────────────────
   const handleBypassLogin = async () => {
     setBypassError(null);
     const cleanPhone = bypassPhone.replace(/\D/g, '');
-    if (!PHONE_RE.test(cleanPhone)) {
-      setBypassError('Please enter a valid 10-digit mobile number.');
-      return;
-    }
-    if (!bypassName.trim()) {
-      setBypassError('Please enter your name.');
-      return;
-    }
+    if (!PHONE_RE.test(cleanPhone)) { setBypassError('Please enter a valid 10-digit mobile number.'); return; }
+    if (!bypassName.trim())         { setBypassError('Please enter your name.');                      return; }
+
     setBypassLoading(true);
-
-    // Current and legacy credential formulas — try all combinations
-    const syntheticEmail = `${cleanPhone}@rentease.app`;  // current email format
-    const legacyEmail    = cleanPhone;                     // original format (bare phone)
-    const syntheticPwd   = `Ph#${cleanPhone}!RE2026`;      // current password formula
-    const legacyPwd      = `Pass#${cleanPhone.replace(/[^a-zA-Z0-9]/g, '')}!2026`; // original formula
-
-    const trySignIn = async (em: string, pw: string) => {
-      const res = await supabase.auth.signInWithPassword({ email: em, password: pw });
-      return (!res.error && res.data?.user) ? res.data : null;
-    };
-
     try {
-      // Try all 4 combinations of email × password in priority order
-      let signInData = await trySignIn(syntheticEmail, syntheticPwd);
-      let usedLegacy = false;
+      const result = await ensureAccount(cleanPhone);
+      if ('error' in result) { setBypassLoading(false); setBypassError(result.error); return; }
 
-      if (!signInData) {
-        signInData = await trySignIn(legacyEmail, legacyPwd);
-        if (signInData) usedLegacy = true;
-      }
-      if (!signInData) {
-        signInData = await trySignIn(syntheticEmail, legacyPwd);
-        if (signInData) usedLegacy = true;
-      }
-      if (!signInData) {
-        signInData = await trySignIn(legacyEmail, syntheticPwd);
-      }
-
-      // If we used legacy credentials, migrate to canonical password for next login
-      if (signInData && usedLegacy) {
-        await supabase.auth.updateUser({ password: syntheticPwd });
-      }
-
-      // No session yet — account may not exist, or exists with unknown password
-      if (!signInData) {
-        const { error: signUpErr } = await supabase.auth.signUp({
-          email: syntheticEmail,
-          password: syntheticPwd,
-          options: { emailRedirectTo: undefined },
-        });
-
-        const alreadyExists = signUpErr?.message?.toLowerCase().includes('already registered')
-          || signUpErr?.message?.toLowerCase().includes('already been registered');
-
-        if (alreadyExists) {
-          // Account exists with unknown password — go to OTP screen to reset it
-          setBypassLoading(false);
-          navigation.navigate('OTP', { phone: cleanPhone, bypassPasswordReset: true, bypassName: bypassName.trim() } as any);
-          return;
-        } else if (signUpErr) {
-          setBypassLoading(false);
-          setBypassError(friendlyError(signUpErr.message));
-          return;
-        }
-
-        // New account created — sign in now
-        signInData = await trySignIn(syntheticEmail, syntheticPwd);
-        if (!signInData) {
-          setBypassLoading(false);
-          setBypassError('Account created but login failed. Please try again.');
-          return;
-        }
-      }
-
-      const userId = signInData?.session?.user?.id;
-      if (!userId) {
-        setBypassLoading(false);
-        setBypassError('Login failed. Please try again.');
-        return;
-      }
-
-      // Check / create profile
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('id, full_name, is_active, valid_until')
-        .eq('id', userId)
-        .single();
-
-      if (existingProfile?.is_active === false) {
-        await supabase.auth.signOut();
-        setBypassLoading(false);
-        showAlert('Account Inactive', 'Your account has been deactivated. Please contact the administrator.');
-        return;
-      }
-      if (existingProfile?.valid_until && new Date(existingProfile.valid_until) < new Date()) {
-        await supabase.auth.signOut();
-        setBypassLoading(false);
-        showAlert('Subscription Expired', 'Your validity period has expired. Please contact admin.');
-        return;
-      }
-
-      // Upsert profile — admin phone always gets admin role
-      const isAdminPhone = cleanPhone === ADMIN_PHONE;
-      const isNewProfile = !existingProfile?.full_name;
-      const upsertPayload = {
-        id: userId,
-        full_name: bypassName.trim(),
-        phone: cleanPhone,
-        phone_number: cleanPhone,
-        role: isAdminPhone ? 'admin' : (isNewProfile ? 'client' : undefined),
-        is_active: isAdminPhone ? true : (isNewProfile ? true : undefined),
-        valid_until: isNewProfile && !isAdminPhone
-          ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
-          : undefined,
-      };
-      const { error: upsertErr } = await supabase.from('profiles').upsert(
-        upsertPayload, { onConflict: 'id' }
-      );
-      if (upsertErr) {
-        setBypassLoading(false);
-        setBypassError(`Profile save failed: ${upsertErr.message}`);
-        return;
-      }
-
+      const err = await finaliseLogin(result.userId, { phone: cleanPhone, name: bypassName.trim() });
       setBypassLoading(false);
-      // RootNavigator detects the session and navigates automatically
+      if (err) showAlert('Login Error', err.error);
+      // On success: RootNavigator detects session → navigates to Dashboard
     } catch (e: any) {
       setBypassLoading(false);
       setBypassError(friendlyError(e.message ?? 'Login failed.'));
     }
   };
 
-  // ── EMAIL OTP ─────────────────────────────────────────────────────────────
+  // ── PHONE OTP MODE ───────────────────────────────────────────────────────────
+  const handlePhoneOtp = async () => {
+    setPhoneError(null);
+    const clean = phone.replace(/\D/g, '');
+    if (!PHONE_RE.test(clean)) { setPhoneError('Please enter a valid 10-digit mobile number.'); return; }
+
+    setPhoneLoading(true);
+    try {
+      const { data: settingsRows } = await supabase
+        .from('app_settings').select('key, value').in('key', ['use_sms_gateway', 'default_otp']);
+      const sm: Record<string, string> = {};
+      (settingsRows ?? []).forEach((r: any) => { sm[r.key] = r.value; });
+
+      if (sm['use_sms_gateway'] === 'true') {
+        const { data, error } = await supabase.functions.invoke('send-otp', { body: { phone: clean } });
+        setPhoneLoading(false);
+        if (error || data?.error) { setPhoneError(data?.error ?? friendlyError(error?.message ?? 'Failed to send OTP.')); return; }
+      } else {
+        setPhoneLoading(false);
+      }
+      navigation.navigate('OTP', { phone: clean });
+    } catch (e: any) {
+      setPhoneLoading(false);
+      setPhoneError(friendlyError(e.message ?? 'Failed.'));
+    }
+  };
+
+  // ── EMAIL OTP MODE ───────────────────────────────────────────────────────────
   const handleEmailOtp = async () => {
     setEmailError(null);
     const clean = email.trim().toLowerCase();
     if (!EMAIL_RE.test(clean)) { setEmailError('Please enter a valid email address.'); return; }
+
     setEmailLoading(true);
     try {
-      const { data: s } = await supabase.from('app_settings').select('key, value').eq('key', 'use_supabase_otp').single();
+      const { data: s } = await supabase.from('app_settings').select('value').eq('key', 'use_supabase_otp').single();
       if ((s as any)?.value === 'true') {
         const { error: otpErr } = await supabase.auth.signInWithOtp({ email: clean, options: { shouldCreateUser: true } });
         if (otpErr) { setEmailLoading(false); setEmailError(friendlyError(otpErr.message)); return; }
@@ -263,48 +294,7 @@ export default function LoginScreen({ navigation }: Props) {
       navigation.navigate('OTP', { email: clean });
     } catch (e: any) {
       setEmailLoading(false);
-      setEmailError(friendlyError(e.message ?? 'Failed. Please try again.'));
-    }
-  };
-
-  // ── PHONE OTP ─────────────────────────────────────────────────────────────
-  // Uses default_otp from app_settings (no SMS gateway needed).
-  // When MSG91 is configured later, set use_sms_gateway='true' in app_settings
-  // and this function will call the edge function instead.
-  const handlePhoneOtp = async () => {
-    setPhoneError(null);
-    const clean = phone.replace(/\D/g, '');
-    if (!PHONE_RE.test(clean)) { setPhoneError('Please enter a valid 10-digit mobile number.'); return; }
-
-    setPhoneLoading(true);
-    try {
-      // Check whether the real SMS gateway is configured
-      const { data: settingsRows } = await supabase
-        .from('app_settings')
-        .select('key, value')
-        .in('key', ['use_sms_gateway', 'default_otp']);
-      const settingsMap: Record<string, string> = {};
-      (settingsRows ?? []).forEach((r: any) => { settingsMap[r.key] = r.value; });
-
-      const useSmsGateway = settingsMap['use_sms_gateway'] === 'true';
-
-      if (useSmsGateway) {
-        // Real SMS via edge function (MSG91) — only when explicitly enabled
-        const { data, error } = await supabase.functions.invoke('send-otp', { body: { phone: clean } });
-        setPhoneLoading(false);
-        if (error || data?.error) {
-          setPhoneError(data?.error ?? friendlyError(error?.message ?? 'Failed to send OTP.'));
-          return;
-        }
-      } else {
-        // Default OTP mode — no SMS sent; user enters the code set in Admin page
-        setPhoneLoading(false);
-      }
-
-      navigation.navigate('OTP', { phone: clean });
-    } catch (e: any) {
-      setPhoneLoading(false);
-      setPhoneError(friendlyError(e.message ?? 'Failed to send OTP.'));
+      setEmailError(friendlyError(e.message ?? 'Failed.'));
     }
   };
 
@@ -331,9 +321,7 @@ export default function LoginScreen({ navigation }: Props) {
         {loginMode === 'bypass' && (
           <View>
             <Text style={styles.sectionTitle}>Welcome to RentEase</Text>
-
             {bypassError ? <View style={styles.errorBox}><Text style={styles.errorText}>⚠️ {bypassError}</Text></View> : null}
-
             <View style={styles.phoneRow}>
               <View style={styles.countryCode}><Text style={styles.countryCodeText}>🇮🇳 +91</Text></View>
               <TextInput
@@ -346,19 +334,12 @@ export default function LoginScreen({ navigation }: Props) {
                 onChangeText={(t) => { setBypassPhone(t.replace(/\D/g, '')); setBypassError(null); }}
               />
             </View>
-
             <View style={{ height: 12 }} />
-
             <FormField
-              label="Your Name"
-              required
-              placeholder="Enter your full name"
-              value={bypassName}
-              onChangeText={(t) => { setBypassName(t); setBypassError(null); }}
+              label="Your Name" required placeholder="Enter your full name"
+              value={bypassName} onChangeText={(t) => { setBypassName(t); setBypassError(null); }}
             />
-
             <Button title="Continue →" onPress={handleBypassLogin} loading={bypassLoading} style={{ marginTop: 4 }} />
-
             {hasBiometrics && (
               <TouchableOpacity style={styles.biometricBtn} onPress={handleBiometricAuth}>
                 <Ionicons name="finger-print" size={24} color={COLORS.primary} />
@@ -371,10 +352,14 @@ export default function LoginScreen({ navigation }: Props) {
         {/* ── EMAIL OTP MODE ── */}
         {loginMode === 'email' && (
           <View>
-            <Text style={styles.sectionTitle}>Login with OTP</Text>
-            <Text style={styles.sectionSub}>Enter your email — we'll send you a one-time password.</Text>
+            <Text style={styles.sectionTitle}>Login with Email OTP</Text>
+            <Text style={styles.sectionSub}>Enter your email address to receive an OTP.</Text>
             {emailError ? <View style={styles.errorBox}><Text style={styles.errorText}>⚠️ {emailError}</Text></View> : null}
-            <FormField label="Email Address" required placeholder="Enter your email" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={(t) => { setEmail(t); setEmailError(null); }} />
+            <FormField
+              label="Email Address" required placeholder="your@email.com"
+              keyboardType="email-address" autoCapitalize="none"
+              value={email} onChangeText={(t) => { setEmail(t); setEmailError(null); }}
+            />
             <Button title="Get OTP →" onPress={handleEmailOtp} loading={emailLoading} style={{ marginTop: 4 }} />
             {hasBiometrics && (
               <TouchableOpacity style={styles.biometricBtn} onPress={handleBiometricAuth}>
@@ -389,7 +374,7 @@ export default function LoginScreen({ navigation }: Props) {
         {loginMode === 'phone' && (
           <View>
             <Text style={styles.sectionTitle}>Login with Mobile OTP</Text>
-            <Text style={styles.sectionSub}>Enter your mobile number — we'll send you an OTP via SMS.</Text>
+            <Text style={styles.sectionSub}>Enter your mobile number to receive an OTP.</Text>
             {phoneError ? <View style={styles.errorBox}><Text style={styles.errorText}>⚠️ {phoneError}</Text></View> : null}
             <View style={styles.phoneRow}>
               <View style={styles.countryCode}><Text style={styles.countryCodeText}>🇮🇳 +91</Text></View>
@@ -397,12 +382,10 @@ export default function LoginScreen({ navigation }: Props) {
                 style={styles.phoneInput}
                 placeholder="10-digit mobile number"
                 placeholderTextColor={COLORS.muted}
-                keyboardType="phone-pad"
-                maxLength={10}
+                keyboardType="phone-pad" maxLength={10}
+                returnKeyType="done" onSubmitEditing={handlePhoneOtp}
                 value={phone}
                 onChangeText={(t) => { setPhone(t.replace(/\D/g, '')); setPhoneError(null); }}
-                returnKeyType="done"
-                onSubmitEditing={handlePhoneOtp}
               />
             </View>
             <Button title="Send OTP →" onPress={handlePhoneOtp} loading={phoneLoading} style={{ marginTop: 12 }} />
@@ -421,20 +404,20 @@ export default function LoginScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: COLORS.white },
-  banner: { backgroundColor: COLORS.primaryDark, alignItems: 'center', paddingBottom: 28, paddingHorizontal: 24 },
-  bannerLogo: { fontSize: 48, marginBottom: 8 },
-  bannerAppName: { fontSize: 32, fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.5 },
-  bannerTagline: { fontSize: 14, color: 'rgba(255,255,255,0.78)', marginTop: 4 },
-  container: { paddingHorizontal: 24, paddingTop: 12 },
-  sectionTitle: { fontSize: 20, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
-  sectionSub: { fontSize: 13, color: COLORS.muted, marginBottom: 20, lineHeight: 18 },
-  errorBox: { backgroundColor: COLORS.dangerLight, padding: 12, borderRadius: 8, marginBottom: 16, borderWidth: 1, borderColor: '#FCA5A5' },
-  errorText: { color: COLORS.danger, fontSize: 13, fontWeight: '500', lineHeight: 18 },
-  phoneRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 10, backgroundColor: COLORS.white, overflow: 'hidden' },
-  countryCode: { paddingHorizontal: 12, paddingVertical: 14, backgroundColor: COLORS.surface, borderRightWidth: 1, borderRightColor: COLORS.border },
+  flex:            { flex: 1, backgroundColor: COLORS.white },
+  banner:          { backgroundColor: COLORS.primaryDark, alignItems: 'center', paddingBottom: 28, paddingHorizontal: 24 },
+  bannerLogo:      { fontSize: 48, marginBottom: 8 },
+  bannerAppName:   { fontSize: 32, fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.5 },
+  bannerTagline:   { fontSize: 14, color: 'rgba(255,255,255,0.78)', marginTop: 4 },
+  container:       { paddingHorizontal: 24, paddingTop: 12 },
+  sectionTitle:    { fontSize: 20, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
+  sectionSub:      { fontSize: 13, color: COLORS.muted, marginBottom: 20, lineHeight: 18 },
+  errorBox:        { backgroundColor: COLORS.dangerLight, padding: 12, borderRadius: 8, marginBottom: 16, borderWidth: 1, borderColor: '#FCA5A5' },
+  errorText:       { color: COLORS.danger, fontSize: 13, fontWeight: '500', lineHeight: 18 },
+  phoneRow:        { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 10, backgroundColor: COLORS.white, overflow: 'hidden' },
+  countryCode:     { paddingHorizontal: 12, paddingVertical: 14, backgroundColor: COLORS.surface, borderRightWidth: 1, borderRightColor: COLORS.border },
   countryCodeText: { fontSize: 15, fontWeight: '600', color: COLORS.text },
-  phoneInput: { flex: 1, padding: 14, fontSize: 18, fontWeight: '600', color: COLORS.text, letterSpacing: 2 },
-  biometricBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16, paddingVertical: 12, borderWidth: 1, borderColor: COLORS.primaryLight, borderRadius: 10, backgroundColor: COLORS.surface },
-  biometricText: { color: COLORS.primary, fontSize: 14, fontWeight: '600' },
+  phoneInput:      { flex: 1, padding: 14, fontSize: 18, fontWeight: '600', color: COLORS.text, letterSpacing: 2 },
+  biometricBtn:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16, paddingVertical: 12, borderWidth: 1, borderColor: COLORS.primaryLight, borderRadius: 10, backgroundColor: COLORS.surface },
+  biometricText:   { color: COLORS.primary, fontSize: 14, fontWeight: '600' },
 });

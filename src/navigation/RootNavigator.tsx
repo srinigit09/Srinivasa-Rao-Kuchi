@@ -56,7 +56,7 @@ export type RootStackParamList = {
 
 export type AuthStackParamList = {
   Login: undefined;
-  OTP: { email?: string; phone?: string; bypassPasswordReset?: boolean; bypassName?: string };
+  OTP: { email?: string; phone?: string };
   ProfileSetup: { email?: string; phone?: string };
 };
 
