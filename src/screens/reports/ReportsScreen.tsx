@@ -241,50 +241,44 @@ export default function ReportsScreen({ navigation }: Props) {
           <Text style={styles.appName}>Reports & Analytics</Text>
         </View>
 
-        {/* Property Filter Dropdown */}
-        <TouchableOpacity
-          style={styles.dropdownBtn}
-          onPress={() => setBuildingDropdown(v => !v)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="business" size={16} color="#fff" />
-          <Text style={styles.dropdownLabel} numberOfLines={1}>{dropdownLabel}</Text>
-          <Ionicons name={buildingDropdown ? 'chevron-up' : 'chevron-down'} size={16} color="rgba(255,255,255,0.8)" />
-        </TouchableOpacity>
-
-        {/* Inline building dropdown */}
-        {buildingDropdown && (
-          <View style={styles.inlineDropdownPanel}>
-            <ScrollView style={{ maxHeight: 260 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled bounces={false}>
+        {/* Property selector — single box, expands in-place */}
+        <View style={styles.dropdownBox}>
+          <TouchableOpacity style={styles.dropdownTriggerRow} onPress={() => setBuildingDropdown(v => !v)} activeOpacity={0.8}>
+            <Ionicons name="business" size={16} color="#fff" />
+            <Text style={styles.dropdownLabel} numberOfLines={1}>{dropdownLabel}</Text>
+            <Ionicons name={buildingDropdown ? 'chevron-up' : 'chevron-down'} size={16} color="rgba(255,255,255,0.8)" />
+          </TouchableOpacity>
+          {buildingDropdown && (
+            <View style={styles.dropdownList}>
               <TouchableOpacity
-                style={[styles.inlineDropdownItem, selectedBuildingId === 'ALL' && styles.inlineDropdownItemActive]}
+                style={[styles.dropdownListItem, selectedBuildingId === 'ALL' && styles.dropdownListItemActive]}
                 onPress={() => { setSelectedBuildingId('ALL'); setBuildingDropdown(false); }}
               >
-                <Ionicons name="globe-outline" size={18} color={selectedBuildingId === 'ALL' ? COLORS.primary : COLORS.muted} />
-                <Text style={[styles.inlineDropdownItemText, selectedBuildingId === 'ALL' && { color: COLORS.primary }]}>
+                <Ionicons name="globe-outline" size={16} color="rgba(255,255,255,0.8)" />
+                <Text style={[styles.dropdownListItemText, selectedBuildingId === 'ALL' && styles.dropdownListItemTextActive]}>
                   All Properties / Societies
                 </Text>
-                {selectedBuildingId === 'ALL' && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
+                {selectedBuildingId === 'ALL' && <Ionicons name="checkmark-circle" size={16} color="#fff" />}
               </TouchableOpacity>
               {buildings.map(item => (
                 <TouchableOpacity
                   key={item.id}
-                  style={[styles.inlineDropdownItem, selectedBuildingId === item.id && styles.inlineDropdownItemActive]}
+                  style={[styles.dropdownListItem, selectedBuildingId === item.id && styles.dropdownListItemActive]}
                   onPress={() => { setSelectedBuildingId(item.id); setBuildingDropdown(false); }}
                 >
-                  <Ionicons name="business-outline" size={18} color={selectedBuildingId === item.id ? COLORS.primary : COLORS.muted} />
+                  <Ionicons name="business-outline" size={16} color="rgba(255,255,255,0.8)" />
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.inlineDropdownItemText, selectedBuildingId === item.id && { color: COLORS.primary }]}>{item.name}</Text>
-                    <Text style={styles.inlineDropdownItemSub}>
+                    <Text style={[styles.dropdownListItemText, selectedBuildingId === item.id && styles.dropdownListItemTextActive]}>{item.name}</Text>
+                    <Text style={styles.dropdownListItemSub}>
                       {getPropBadge(item.building_type)} · {item.total_units} units · {item.vacant_units} vacant
                     </Text>
                   </View>
-                  {selectedBuildingId === item.id && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
+                  {selectedBuildingId === item.id && <Ionicons name="checkmark-circle" size={16} color="#fff" />}
                 </TouchableOpacity>
               ))}
-            </ScrollView>
-          </View>
-        )}
+            </View>
+          )}
+        </View>
 
         {/* Time Filters */}
         <ScrollView
@@ -638,37 +632,26 @@ const styles = StyleSheet.create({
   },
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)' },
-  inlineDropdownPanel: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    marginTop: 6,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 6,
+  dropdownBox: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginBottom: 6,
   },
-  inlineDropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    gap: 10,
+  dropdownTriggerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 12, paddingVertical: 9,
   },
-  inlineDropdownItemActive: { backgroundColor: '#EFF6FF' },
-  inlineDropdownItemText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.text,
+  dropdownList: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)' },
+  dropdownListItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 12, paddingVertical: 11,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)',
   },
-  inlineDropdownItemSub: {
-    fontSize: 11,
-    color: COLORS.muted,
-    marginTop: 1,
-  },
+  dropdownListItemActive: { backgroundColor: 'rgba(255,255,255,0.2)' },
+  dropdownListItemText: { flex: 1, fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.85)' },
+  dropdownListItemTextActive: { color: '#fff', fontWeight: '700' },
+  dropdownListItemSub: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
   modalBox: {
     backgroundColor: COLORS.white,
     borderTopLeftRadius: 20,

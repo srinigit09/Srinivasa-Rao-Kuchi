@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl, ScrollView,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -158,37 +158,31 @@ export default function TenantsScreen({ navigation, route }: Props) {
         onBack={() => navigation.navigate('Tabs' as any)}
       />
 
-      {/* Property Filter Bar */}
-      <TouchableOpacity style={styles.dropdownBtn} onPress={() => setDropdownOpen(v => !v)} activeOpacity={0.8}>
-        <Ionicons name="business" size={16} color={COLORS.primary} />
-        <Text style={styles.dropdownLabel} numberOfLines={1}>{dropdownLabel}</Text>
-        <Ionicons name={dropdownOpen ? 'chevron-up' : 'chevron-down'} size={16} color={COLORS.muted} />
-      </TouchableOpacity>
-
-      {/* Inline building dropdown */}
-      {dropdownOpen && (
-        <View style={styles.inlineDropdownPanel}>
-          <ScrollView style={{ maxHeight: 260 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled bounces={false}>
+      {/* Property selector — single box, expands in-place */}
+      <View style={styles.dropdownBox}>
+        <TouchableOpacity style={styles.dropdownTriggerRow} onPress={() => setDropdownOpen(v => !v)} activeOpacity={0.8}>
+          <Ionicons name="business" size={16} color={COLORS.primary} />
+          <Text style={styles.dropdownLabel} numberOfLines={1}>{dropdownLabel}</Text>
+          <Ionicons name={dropdownOpen ? 'chevron-up' : 'chevron-down'} size={16} color={COLORS.muted} />
+        </TouchableOpacity>
+        {dropdownOpen && (
+          <View style={styles.dropdownList}>
             {buildings.map(b => (
               <TouchableOpacity
                 key={b.id}
-                style={[styles.inlineDropdownItem, selectedBuildingId === b.id && styles.inlineDropdownItemActive]}
+                style={[styles.dropdownListItem, selectedBuildingId === b.id && styles.dropdownListItemActive]}
                 onPress={() => handleBuildingSelect(b.id)}
               >
-                <Ionicons
-                  name="business-outline"
-                  size={18}
-                  color={selectedBuildingId === b.id ? COLORS.primary : COLORS.muted}
-                />
-                <Text style={[styles.inlineDropdownItemText, selectedBuildingId === b.id && { color: COLORS.primary }]}>
+                <Ionicons name="business-outline" size={16} color={selectedBuildingId === b.id ? COLORS.primary : COLORS.muted} />
+                <Text style={[styles.dropdownListItemText, selectedBuildingId === b.id && styles.dropdownListItemTextActive]}>
                   {b.name}
                 </Text>
-                {selectedBuildingId === b.id && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
+                {selectedBuildingId === b.id && <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} />}
               </TouchableOpacity>
             ))}
-          </ScrollView>
-        </View>
-      )}
+          </View>
+        )}
+      </View>
 
       {/* Resident Type Segmented Filter (All, Tenants, Owners, Guests) */}
       <View style={styles.segmentRow}>
@@ -383,16 +377,22 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 44 },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text },
   emptyText: { fontSize: 13, color: COLORS.muted },
-  inlineDropdownPanel: {
-    backgroundColor: COLORS.white, borderRadius: 12, marginTop: 0,
-    borderWidth: 1, borderColor: COLORS.border,
-    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, elevation: 4,
+  dropdownBox: {
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    overflow: 'hidden',
   },
-  inlineDropdownItem: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
+  dropdownTriggerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 16, paddingVertical: 12,
+  },
+  dropdownList: { borderTopWidth: 1, borderTopColor: COLORS.border },
+  dropdownListItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 16, paddingVertical: 13,
     borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
-  inlineDropdownItemActive: { backgroundColor: '#EFF6FF' },
-  inlineDropdownItemText: { flex: 1, fontSize: 14, fontWeight: '600', color: COLORS.text },
+  dropdownListItemActive: { backgroundColor: '#EFF6FF' },
+  dropdownListItemText: { flex: 1, fontSize: 14, fontWeight: '600', color: COLORS.text },
+  dropdownListItemTextActive: { color: COLORS.primary },
 });

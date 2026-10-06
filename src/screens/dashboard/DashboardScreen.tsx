@@ -221,62 +221,58 @@ export default function DashboardScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
 
-        {/* Property & Community selector */}
-        <TouchableOpacity style={styles.dropdownBtn} onPress={() => setDropdownOpen(v => !v)} activeOpacity={0.8}>
-          <Ionicons name="business-outline" size={16} color="#fff" />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.dropdownLabel} numberOfLines={1}>{dropdownLabel}</Text>
-            {selectedBuilding && (
-              <Text style={styles.dropdownSubLabel}>
-                {getPropBadge(selectedBuilding.building_type)}
-                {selectedBuilding.society_name ? ` · ${selectedBuilding.society_name}` : ''}
-              </Text>
-            )}
-          </View>
-          <Ionicons name={dropdownOpen ? 'chevron-up' : 'chevron-down'} size={16} color="rgba(255,255,255,0.8)" />
-        </TouchableOpacity>
+        {/* Property selector — single box, expands in-place when open */}
+        <View style={[styles.dropdownBox, dropdownOpen && styles.dropdownBoxOpen]}>
+          {/* Trigger row — always visible */}
+          <TouchableOpacity
+            style={styles.dropdownTriggerRow}
+            onPress={() => setDropdownOpen(v => !v)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="business-outline" size={16} color="#fff" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.dropdownLabel} numberOfLines={1}>{dropdownLabel}</Text>
+              {selectedBuilding && (
+                <Text style={styles.dropdownSubLabel}>
+                  {getPropBadge(selectedBuilding.building_type)}
+                  {selectedBuilding.society_name ? ` · ${selectedBuilding.society_name}` : ''}
+                </Text>
+              )}
+            </View>
+            <Ionicons name={dropdownOpen ? 'chevron-up' : 'chevron-down'} size={16} color="rgba(255,255,255,0.8)" />
+          </TouchableOpacity>
 
-        {/* Inline dropdown — appears directly below the selector button */}
-        {dropdownOpen && (
-          <View style={styles.inlineDropdownPanel}>
-            <ScrollView
-              style={{ maxHeight: 260 }}
-              keyboardShouldPersistTaps="handled"
-              nestedScrollEnabled
-              bounces={false}
-            >
-              {(data?.buildings ?? []).map(item => {
-                const isSelected = selectedBuildingId === item.id;
-                return (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={[styles.inlineDropdownItem, isSelected && styles.inlineDropdownItemActive]}
-                    onPress={() => { setSelectedBuildingId(item.id); setDropdownOpen(false); }}
-                  >
-                    <Ionicons
-                      name="business-outline"
-                      size={18}
-                      color={isSelected ? COLORS.primary : COLORS.muted}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.inlineDropdownItemText, isSelected && { color: COLORS.primary }]}>{item.name}</Text>
-                      <Text style={styles.inlineDropdownItemSub}>
-                        {getPropBadge(item.building_type)} · {item.total_units} units · {item.vacant_units} vacant
-                      </Text>
-                    </View>
-                    {isSelected && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <TouchableOpacity
-              style={styles.inlineViewBuildingBtn}
-              onPress={() => { setDropdownOpen(false); navigation.navigate('BuildingDetail', { buildingId: selectedBuildingId }); }}
-            >
-              <Text style={styles.inlineViewBuildingText}>Open Property / Society Details →</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+          {/* List — appears inside the same box below the trigger row */}
+          {dropdownOpen && (
+            <View style={styles.dropdownList}>
+              {(data?.buildings ?? []).length === 0 ? (
+                <Text style={styles.dropdownEmptyText}>No properties found</Text>
+              ) : (
+                (data?.buildings ?? []).map(item => {
+                  const isSelected = selectedBuildingId === item.id;
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[styles.dropdownListItem, isSelected && styles.dropdownListItemActive]}
+                      onPress={() => { setSelectedBuildingId(item.id); setDropdownOpen(false); }}
+                    >
+                      <Ionicons name="business-outline" size={16} color={isSelected ? COLORS.primary : 'rgba(255,255,255,0.7)'} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.dropdownListItemText, isSelected && styles.dropdownListItemTextActive]}>
+                          {item.name}
+                        </Text>
+                        <Text style={styles.dropdownListItemSub}>
+                          {getPropBadge(item.building_type)} · {item.total_units} units · {item.vacant_units} vacant
+                        </Text>
+                      </View>
+                      {isSelected && <Ionicons name="checkmark-circle" size={18} color={COLORS.primary} />}
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </View>
+          )}
+        </View>
       </View>
 
       {/* ── Quick Actions ── */}
@@ -435,13 +431,19 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
   },
-  dropdownBtn: {
+  dropdownBox: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  dropdownBoxOpen: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  dropdownTriggerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.15)',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingVertical: 10,
     gap: 8,
   },
   dropdownLabel: {
@@ -453,6 +455,42 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: 'rgba(255,255,255,0.8)',
     marginTop: 1,
+  },
+  dropdownList: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.2)',
+  },
+  dropdownListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  dropdownListItemActive: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  dropdownListItemText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.9)',
+  },
+  dropdownListItemTextActive: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  dropdownListItemSub: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.6)',
+    marginTop: 2,
+  },
+  dropdownEmptyText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.6)',
+    textAlign: 'center',
+    paddingVertical: 14,
   },
   quickActionsPanel: {
     flexDirection: 'row',
@@ -626,48 +664,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.muted,
     marginTop: 2,
-  },
-  inlineDropdownPanel: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    marginTop: 6,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  inlineDropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    gap: 10,
-  },
-  inlineDropdownItemActive: {
-    backgroundColor: '#EFF6FF',
-  },
-  inlineDropdownItemText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  inlineDropdownItemSub: {
-    fontSize: 11,
-    color: COLORS.muted,
-    marginTop: 1,
-  },
-  inlineViewBuildingBtn: {
-    paddingVertical: 12,
-    backgroundColor: COLORS.primaryLight,
-    alignItems: 'center',
-  },
-  inlineViewBuildingText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.primary,
   },
 });
