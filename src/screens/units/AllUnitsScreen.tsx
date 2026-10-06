@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Modal, TextInput,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Modal, TextInput, ScrollView,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -157,11 +157,36 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
       />
 
       {/* Building Dropdown */}
-      <TouchableOpacity style={styles.dropdownBtn} onPress={() => setDropdownOpen(true)} activeOpacity={0.8}>
+      <TouchableOpacity style={styles.dropdownBtn} onPress={() => setDropdownOpen(v => !v)} activeOpacity={0.8}>
         <Ionicons name="business-outline" size={16} color={COLORS.primary} />
         <Text style={styles.dropdownLabel} numberOfLines={1}>{dropdownLabel}</Text>
-        <Ionicons name="chevron-down" size={16} color={COLORS.muted} />
+        <Ionicons name={dropdownOpen ? 'chevron-up' : 'chevron-down'} size={16} color={COLORS.muted} />
       </TouchableOpacity>
+
+      {/* Inline building dropdown */}
+      {dropdownOpen && (
+        <View style={styles.inlineDropdownPanel}>
+          <ScrollView style={{ maxHeight: 260 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled bounces={false}>
+            {buildings.map(b => (
+              <TouchableOpacity
+                key={b.id}
+                style={[styles.inlineDropdownItem, selectedBuildingId === b.id && styles.inlineDropdownItemActive]}
+                onPress={() => { setSelectedBuildingId(b.id); setDropdownOpen(false); }}
+              >
+                <Ionicons
+                  name={b.building_type === 'pg' ? 'bed-outline' : 'business-outline'}
+                  size={18}
+                  color={selectedBuildingId === b.id ? COLORS.primary : COLORS.muted}
+                />
+                <Text style={[styles.inlineDropdownItemText, selectedBuildingId === b.id && { color: COLORS.primary }]}>
+                  {b.name}
+                </Text>
+                {selectedBuildingId === b.id && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       <FlatList
         data={filtered}
@@ -361,32 +386,6 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
         </TouchableOpacity>
       </Modal>
 
-      {/* ── Building Picker Modal ── */}
-      <Modal visible={dropdownOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setDropdownOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setDropdownOpen(false)} />
-          <View style={styles.dropdownSheet}>
-            <Text style={styles.dropdownTitle}>Select Property</Text>
-            {buildings.map(b => (
-              <TouchableOpacity
-                key={b.id}
-                style={[styles.dropdownItem, selectedBuildingId === b.id && styles.dropdownItemActive]}
-                onPress={() => { setSelectedBuildingId(b.id); setDropdownOpen(false); }}
-              >
-                <Ionicons
-                  name={b.building_type === 'pg' ? 'bed-outline' : 'business-outline'}
-                  size={18}
-                  color={selectedBuildingId === b.id ? COLORS.primary : COLORS.muted}
-                />
-                <Text style={[styles.dropdownItemText, selectedBuildingId === b.id && { color: COLORS.primary }]}>
-                  {b.name}
-                </Text>
-                {selectedBuildingId === b.id && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -458,20 +457,17 @@ const styles = StyleSheet.create({
   },
   sheetTenantName: { flex: 1, fontSize: 14, color: COLORS.text, fontWeight: '500' },
 
-  // Building picker modal
-  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
-  modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)' },
-  dropdownSheet: {
-    backgroundColor: COLORS.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    paddingVertical: 8, paddingBottom: 36, minHeight: 220,
-    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, elevation: 12,
+  // Inline building dropdown
+  inlineDropdownPanel: {
+    backgroundColor: COLORS.white, borderRadius: 12, marginTop: 0,
+    borderWidth: 1, borderColor: COLORS.border,
+    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, elevation: 4,
   },
-  dropdownTitle: {
-    fontSize: 13, fontWeight: '700', color: COLORS.muted,
-    paddingHorizontal: 18, paddingVertical: 10,
-    letterSpacing: 0.5, textTransform: 'uppercase',
+  inlineDropdownItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 13,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
-  dropdownItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14 },
-  dropdownItemActive: { backgroundColor: COLORS.primaryLight },
-  dropdownItemText: { flex: 1, fontSize: 15, fontWeight: '600', color: COLORS.text },
+  inlineDropdownItemActive: { backgroundColor: COLORS.primaryLight },
+  inlineDropdownItemText: { flex: 1, fontSize: 15, fontWeight: '600', color: COLORS.text },
 });

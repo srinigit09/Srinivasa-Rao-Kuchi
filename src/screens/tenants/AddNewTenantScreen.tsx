@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, RefreshControl,
-  TextInput, FlatList,
+  TextInput, FlatList, ScrollView,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -272,37 +272,39 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
                     </TouchableOpacity>
                   )}
                 </View>
-                {filtered.length === 0 ? (
-                  <Text style={styles.inlineEmptyText}>No matching vacant units</Text>
-                ) : (
-                  filtered.map(item => {
-                    const isSelected = selected?.id === item.id;
-                    const bedsFree = item.building_type === 'pg' ? item.total_beds - item.active_count : null;
-                    return (
-                      <TouchableOpacity
-                        key={item.id}
-                        style={[styles.inlineDropdownItem, isSelected && styles.inlineDropdownItemActive]}
-                        onPress={() => { selectUnit(item); setDropdownOpen(false); }}
-                      >
-                        <Ionicons
-                          name={item.building_type === 'pg' ? 'bed-outline' : 'home-outline'}
-                          size={16}
-                          color={isSelected ? COLORS.primary : COLORS.muted}
-                        />
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.inlineDropdownText, isSelected && { color: COLORS.primary, fontWeight: '700' }]}>
-                            {item.unit_number} — {item.unit_type}
-                          </Text>
-                          <Text style={styles.inlineDropdownSub}>
-                            {item.building_name} · {formatCurrency(item.rent_per_bed)}
-                            {item.building_type === 'pg' ? ` / bed · ${bedsFree} free` : ' / month'}
-                          </Text>
-                        </View>
-                        {isSelected && <Ionicons name="checkmark" size={16} color={COLORS.primary} />}
-                      </TouchableOpacity>
-                    );
-                  })
-                )}
+                <ScrollView style={{ maxHeight: 240 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+                  {filtered.length === 0 ? (
+                    <Text style={styles.inlineEmptyText}>No matching vacant units</Text>
+                  ) : (
+                    filtered.map(item => {
+                      const isSelected = selected?.id === item.id;
+                      const bedsFree = item.building_type === 'pg' ? item.total_beds - item.active_count : null;
+                      return (
+                        <TouchableOpacity
+                          key={item.id}
+                          style={[styles.inlineDropdownItem, isSelected && styles.inlineDropdownItemActive]}
+                          onPress={() => { selectUnit(item); setDropdownOpen(false); }}
+                        >
+                          <Ionicons
+                            name={item.building_type === 'pg' ? 'bed-outline' : 'home-outline'}
+                            size={16}
+                            color={isSelected ? COLORS.primary : COLORS.muted}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.inlineDropdownText, isSelected && { color: COLORS.primary, fontWeight: '700' }]}>
+                              {item.unit_number} — {item.unit_type}
+                            </Text>
+                            <Text style={styles.inlineDropdownSub}>
+                              {item.building_name} · {formatCurrency(item.rent_per_bed)}
+                              {item.building_type === 'pg' ? ` / bed · ${bedsFree} free` : ' / month'}
+                            </Text>
+                          </View>
+                          {isSelected && <Ionicons name="checkmark" size={16} color={COLORS.primary} />}
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
+                </ScrollView>
               </View>
             )}
 
@@ -440,7 +442,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
     overflow: 'hidden',
     shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, elevation: 4,
-    maxHeight: 280,
   },
   inlineDropdownItem: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
