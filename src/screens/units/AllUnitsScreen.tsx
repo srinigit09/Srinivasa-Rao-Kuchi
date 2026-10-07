@@ -120,13 +120,17 @@ export default function AllUnitsScreen({ navigation, route }: Props) {
     setLoading(false);
   }, [user, selectedBuildingId]);
 
+  // Apply context building only on the very first focus — after that the user's
+  // own selection in this screen takes precedence.
+  const appliedContextRef = React.useRef(false);
   useFocusEffect(useCallback(() => {
-    if (contextBuildingId && contextBuildingId !== selectedBuildingId) {
+    if (!appliedContextRef.current && contextBuildingId && contextBuildingId !== selectedBuildingId) {
+      appliedContextRef.current = true;
       setSelectedBuildingId(contextBuildingId);
     }
     load();
     return () => setDropdownOpen(false);
-  }, [load, contextBuildingId]));
+  }, [load]));
 
   const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 

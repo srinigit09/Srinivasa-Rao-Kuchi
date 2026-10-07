@@ -25,9 +25,7 @@
         "backgroundColor": "#2563EB"
       },
       "package": "com.rentease.app",
-      "permissions": [
-        "android.permission.READ_CONTACTS"
-      ],
+      "permissions": [],
       "enableProguardInReleaseBuilds": true,
       "enableShrinkResourcesInReleaseBuilds": true,
       "abiFilters": [

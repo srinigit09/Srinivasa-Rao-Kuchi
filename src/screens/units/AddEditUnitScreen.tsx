@@ -75,10 +75,26 @@ export default function AddEditUnitScreen({ navigation, route }: Props) {
   const save = async () => {
     if (!validate()) return;
     setLoading(true);
+    const trimmedUnitNumber = unitNumber.trim();
+
+    // Duplicate unit number check within the same building — skip for edits of the same record
+    const dupQuery = supabase
+      .from('units')
+      .select('id')
+      .eq('building_id', buildingId)
+      .eq('unit_number', trimmedUnitNumber);
+    if (unitId) dupQuery.neq('id', unitId);
+    const { data: dupData } = await dupQuery.limit(1);
+    if (dupData && dupData.length > 0) {
+      setLoading(false);
+      Alert.alert('Duplicate Unit', `Unit "${trimmedUnitNumber}" already exists in this property. Please use a different number.`);
+      return;
+    }
+
     const payload: Record<string, any> = {
       building_id: buildingId,
       owner_id: user!.id,
-      unit_number: unitNumber.trim(),
+      unit_number: trimmedUnitNumber,
       unit_type: unitType,
       floor_number: floorNumber.trim() || null,
       total_beds: isPG ? (parseInt(totalBeds) || 1) : 1,

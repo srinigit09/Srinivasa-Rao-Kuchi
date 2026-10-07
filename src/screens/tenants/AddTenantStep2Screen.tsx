@@ -1,9 +1,10 @@
-import React, { useState, useLayoutEffect } from 'react';
+import React, { useState, useLayoutEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
@@ -39,6 +40,19 @@ export default function AddTenantStep2Screen({ navigation, route }: Props) {
   const [idType, setIdType] = useState('');
   const [idNumber, setIdNumber] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Reset all form fields each time this screen comes into focus so that
+  // returning from Step 3 (e.g. after cancel) shows a clean form
+  useFocusEffect(useCallback(() => {
+    setResidentType('tenant');
+    setStayType('month');
+    setFullName('');
+    setPhone('');
+    setEmail('');
+    setIdType('');
+    setIdNumber('');
+    setErrors({});
+  }, []));
 
   const validate = () => {
     const e: Record<string, string> = {};

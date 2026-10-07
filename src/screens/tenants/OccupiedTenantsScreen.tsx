@@ -94,14 +94,17 @@ export default function OccupiedTenantsScreen({ navigation, route }: Props) {
     setLoading(false);
   }, [user, selectedBuildingId]);
 
+  // Apply context building only on the very first focus — after that the user's
+  // own selection in this screen takes precedence.
+  const appliedContextRef = React.useRef(false);
   useFocusEffect(useCallback(() => {
-    // Sync with Dashboard selection when screen gains focus (if user hasn't overridden locally)
-    if (contextBuildingId && contextBuildingId !== selectedBuildingId) {
+    if (!appliedContextRef.current && contextBuildingId && contextBuildingId !== selectedBuildingId) {
+      appliedContextRef.current = true;
       setSelectedBuildingId(contextBuildingId);
     }
     load();
     return () => setDropdownOpen(false);
-  }, [load, contextBuildingId]));
+  }, [load]));
   const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 
   const handleSearch = (q: string) => {

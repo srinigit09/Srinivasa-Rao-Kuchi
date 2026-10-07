@@ -116,21 +116,26 @@ export default function TenantsScreen({ navigation, route }: Props) {
     setFiltered(result);
   };
 
+  // Apply context building only on the very first focus (unless a fresh preselected
+  // building is passed from Dashboard). After first apply, the user's own selection
+  // in this screen takes precedence — Dashboard refreshes must not override it.
+  const appliedContextRef = React.useRef(false);
   useFocusEffect(useCallback(() => {
     const preselected = (route.params as any)?.preselectedBuildingId;
     if (preselected && appliedPreselectedRef.current !== preselected) {
       // Fresh navigation from Dashboard with a specific building
       appliedPreselectedRef.current = preselected;
       load(false, preselected);
-    } else if (contextBuildingId && contextBuildingId !== selectedBuildingId) {
-      // Sync with Dashboard context selection
+    } else if (!appliedContextRef.current && contextBuildingId && contextBuildingId !== selectedBuildingId) {
+      // First-time sync with Dashboard context
+      appliedContextRef.current = true;
       setSelectedBuildingId(contextBuildingId);
       load(false, contextBuildingId);
     } else {
       load();
     }
     return () => setDropdownOpen(false);
-  }, [load, route.params, contextBuildingId]));
+  }, [load, route.params]));
 
   const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 

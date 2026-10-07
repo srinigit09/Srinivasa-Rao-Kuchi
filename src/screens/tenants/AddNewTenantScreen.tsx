@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, RefreshControl,
-  TextInput, FlatList, ScrollView,
+  TextInput, FlatList,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -130,14 +130,15 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
   }, [user]);
 
   useFocusEffect(useCallback(() => {
-    // Only apply the preselected building when it's a fresh navigation from Dashboard
-    // (i.e. this is the first focus with this particular preselectedBuildingId value)
-    // When returning from a sub-screen (AddTenantStep2 etc), preserve user's last choice
+    // Always reset the selected unit when the screen gains focus so stale
+    // selections from a previous session don't carry over
+    setSelected(null);
+    setSearch('');
+    setDropdownOpen(false);
+
     if (preselectedBuildingId && appliedPreselectedRef.current !== preselectedBuildingId) {
       appliedPreselectedRef.current = preselectedBuildingId;
       currentBuildingRef.current = preselectedBuildingId;
-      setSelected(null);
-      setSearch('');
       load(false, preselectedBuildingId);
     } else {
       load(false, currentBuildingRef.current || undefined);
@@ -196,33 +197,32 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
         onBack={() => navigation.goBack()}
       />
 
-      {/* Property selector bar — inline dropdown below bar */}
-      <View>
+      {/* Property selector — single box, expands in-place */}
+      <View style={styles.buildingDropdownBox}>
         <TouchableOpacity
-          style={styles.buildingBar}
+          style={styles.buildingDropdownTrigger}
           onPress={() => { setBuildingDropdownOpen(v => !v); setDropdownOpen(false); }}
           activeOpacity={0.8}
         >
           <Ionicons name="business" size={16} color={COLORS.primary} />
-          <Text style={styles.buildingBarLabel} numberOfLines={1}>
+          <Text style={styles.buildingDropdownLabel} numberOfLines={1}>
             {selectedBuilding?.name ?? 'Select Property / Community'}
           </Text>
           <Ionicons name={buildingDropdownOpen ? 'chevron-up' : 'chevron-down'} size={16} color={COLORS.muted} />
         </TouchableOpacity>
-
         {buildingDropdownOpen && (
-          <View style={styles.inlineDropdown}>
+          <View style={styles.buildingDropdownList}>
             {buildings.map(b => (
               <TouchableOpacity
                 key={b.id}
-                style={[styles.inlineDropdownItem, selectedBuildingId === b.id && styles.inlineDropdownItemActive]}
+                style={[styles.buildingDropdownItem, selectedBuildingId === b.id && styles.buildingDropdownItemActive]}
                 onPress={() => { handleBuildingSelect(b.id); setBuildingDropdownOpen(false); }}
               >
                 <Ionicons name="business-outline" size={16} color={selectedBuildingId === b.id ? COLORS.primary : COLORS.muted} />
-                <Text style={[styles.inlineDropdownText, selectedBuildingId === b.id && { color: COLORS.primary, fontWeight: '700' }]}>
+                <Text style={[styles.buildingDropdownItemText, selectedBuildingId === b.id && { color: COLORS.primary, fontWeight: '700' }]}>
                   {b.name}
                 </Text>
-                {selectedBuildingId === b.id && <Ionicons name="checkmark" size={16} color={COLORS.primary} />}
+                {selectedBuildingId === b.id && <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} />}
               </TouchableOpacity>
             ))}
           </View>
@@ -238,43 +238,41 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
           <View style={styles.body}>
             <Text style={styles.sectionLabel}>Select Vacant Unit</Text>
 
-            {/* Searchable dropdown trigger — inline list below */}
-            <TouchableOpacity
-              style={styles.dropdownTrigger}
-              onPress={() => { setDropdownOpen(v => !v); setBuildingDropdownOpen(false); if (!dropdownOpen) { setSearch(''); setFiltered(units); } }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="home-outline" size={18} color={selected ? COLORS.primary : COLORS.muted} />
-              <Text style={[styles.dropdownTriggerText, !selected && { color: COLORS.muted }]} numberOfLines={1}>
-                {selected
-                  ? `${selected.unit_number} — ${selected.building_name}`
-                  : 'Tap to select a unit...'}
-              </Text>
-              <Ionicons name={dropdownOpen ? 'chevron-up' : 'chevron-down'} size={16} color={COLORS.muted} />
-            </TouchableOpacity>
+            {/* Unit selector — single box, expands in-place when open */}
+            <View style={styles.unitDropdownBox}>
+              {/* Trigger row */}
+              <TouchableOpacity
+                style={styles.unitDropdownTrigger}
+                onPress={() => { setDropdownOpen(v => !v); setBuildingDropdownOpen(false); if (!dropdownOpen) { setSearch(''); setFiltered(units); } }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="home-outline" size={18} color={selected ? COLORS.primary : COLORS.muted} />
+                <Text style={[styles.unitDropdownTriggerText, !selected && { color: COLORS.muted }]} numberOfLines={1}>
+                  {selected ? `${selected.unit_number} — ${selected.building_name}` : 'Tap to select a unit...'}
+                </Text>
+                <Ionicons name={dropdownOpen ? 'chevron-up' : 'chevron-down'} size={16} color={COLORS.muted} />
+              </TouchableOpacity>
 
-            {/* Inline unit search + list */}
-            {dropdownOpen && (
-              <View style={styles.inlineDropdown}>
-                <View style={styles.inlineSearchRow}>
-                  <Ionicons name="search" size={15} color={COLORS.muted} />
-                  <TextInput
-                    style={styles.inlineSearchInput}
-                    placeholder="Search unit, property..."
-                    placeholderTextColor={COLORS.muted}
-                    value={search}
-                    onChangeText={handleSearch}
-                    autoFocus
-                  />
-                  {search.length > 0 && (
-                    <TouchableOpacity onPress={() => { setSearch(''); setFiltered(units); }}>
-                      <Ionicons name="close-circle" size={15} color={COLORS.muted} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-                <ScrollView style={{ maxHeight: 240 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+              {/* List — opens inside the same box */}
+              {dropdownOpen && (
+                <View style={styles.unitDropdownList}>
+                  <View style={styles.unitSearchRow}>
+                    <Ionicons name="search" size={15} color={COLORS.muted} />
+                    <TextInput
+                      style={styles.unitSearchInput}
+                      placeholder="Search unit, property..."
+                      placeholderTextColor={COLORS.muted}
+                      value={search}
+                      onChangeText={handleSearch}
+                    />
+                    {search.length > 0 && (
+                      <TouchableOpacity onPress={() => { setSearch(''); setFiltered(units); }}>
+                        <Ionicons name="close-circle" size={15} color={COLORS.muted} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
                   {filtered.length === 0 ? (
-                    <Text style={styles.inlineEmptyText}>No matching vacant units</Text>
+                    <Text style={styles.unitDropdownEmpty}>No matching vacant units</Text>
                   ) : (
                     filtered.map(item => {
                       const isSelected = selected?.id === item.id;
@@ -282,7 +280,7 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
                       return (
                         <TouchableOpacity
                           key={item.id}
-                          style={[styles.inlineDropdownItem, isSelected && styles.inlineDropdownItemActive]}
+                          style={[styles.unitDropdownItem, isSelected && styles.unitDropdownItemActive]}
                           onPress={() => { selectUnit(item); setDropdownOpen(false); }}
                         >
                           <Ionicons
@@ -291,22 +289,22 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
                             color={isSelected ? COLORS.primary : COLORS.muted}
                           />
                           <View style={{ flex: 1 }}>
-                            <Text style={[styles.inlineDropdownText, isSelected && { color: COLORS.primary, fontWeight: '700' }]}>
+                            <Text style={[styles.unitDropdownItemText, isSelected && { color: COLORS.primary, fontWeight: '700' }]}>
                               {item.unit_number} — {item.unit_type}
                             </Text>
-                            <Text style={styles.inlineDropdownSub}>
+                            <Text style={styles.unitDropdownItemSub}>
                               {item.building_name} · {formatCurrency(item.rent_per_bed)}
                               {item.building_type === 'pg' ? ` / bed · ${bedsFree} free` : ' / month'}
                             </Text>
                           </View>
-                          {isSelected && <Ionicons name="checkmark" size={16} color={COLORS.primary} />}
+                          {isSelected && <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} />}
                         </TouchableOpacity>
                       );
                     })
                   )}
-                </ScrollView>
-              </View>
-            )}
+                </View>
+              )}
+            </View>
 
             {/* Selected unit detail card */}
             {selected && (
@@ -386,22 +384,58 @@ export default function AddNewTenantScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  buildingBar: {
+  buildingDropdownBox: {
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    overflow: 'hidden',
+  },
+  buildingDropdownTrigger: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border,
     paddingHorizontal: 16, paddingVertical: 12,
   },
-  buildingBarLabel: { flex: 1, fontSize: 14, fontWeight: '700', color: COLORS.text },
+  buildingDropdownLabel: { flex: 1, fontSize: 14, fontWeight: '700', color: COLORS.text },
+  buildingDropdownList: { borderTopWidth: 1, borderTopColor: COLORS.border },
+  buildingDropdownItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 16, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+  },
+  buildingDropdownItemActive: { backgroundColor: '#EFF6FF' },
+  buildingDropdownItemText: { flex: 1, fontSize: 14, fontWeight: '600', color: COLORS.text },
   body: { padding: 20, gap: 16 },
   sectionLabel: { fontSize: 13, fontWeight: '700', color: COLORS.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  dropdownTrigger: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: COLORS.white, borderRadius: 12, padding: 14,
-    borderWidth: 1.5, borderColor: COLORS.border,
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+  unitDropdownBox: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
   },
-  dropdownTriggerText: { flex: 1, fontSize: 15, fontWeight: '600', color: COLORS.text },
+  unitDropdownTrigger: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    padding: 14,
+  },
+  unitDropdownTriggerText: { flex: 1, fontSize: 15, fontWeight: '600', color: COLORS.text },
+  unitDropdownList: {
+    borderTopWidth: 1, borderTopColor: COLORS.border,
+  },
+  unitSearchRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  unitSearchInput: { flex: 1, fontSize: 14, color: COLORS.text },
+  unitDropdownItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+  },
+  unitDropdownItemActive: { backgroundColor: COLORS.primaryLight },
+  unitDropdownItemText: { flex: 1, fontSize: 14, fontWeight: '600', color: COLORS.text },
+  unitDropdownItemSub: { fontSize: 11, color: COLORS.muted, marginTop: 1 },
+  unitDropdownEmpty: { fontSize: 13, color: COLORS.muted, textAlign: 'center', paddingVertical: 16 },
 
   selectedCard: {
     flexDirection: 'row', alignItems: 'center',
@@ -434,29 +468,4 @@ const styles = StyleSheet.create({
   },
   addUnitBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 
-  // Inline dropdown styles
-  inlineDropdown: {
-    backgroundColor: COLORS.white,
-    borderWidth: 1, borderColor: COLORS.border,
-    borderRadius: 10,
-    marginTop: 2,
-    overflow: 'hidden',
-    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, elevation: 4,
-  },
-  inlineDropdownItem: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: 14, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: COLORS.border,
-  },
-  inlineDropdownItemActive: { backgroundColor: COLORS.primaryLight },
-  inlineDropdownText: { flex: 1, fontSize: 14, fontWeight: '600', color: COLORS.text },
-  inlineDropdownSub: { fontSize: 11, color: COLORS.muted, marginTop: 1 },
-  inlineSearchRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 12, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-  },
-  inlineSearchInput: { flex: 1, fontSize: 14, color: COLORS.text },
-  inlineEmptyText: { fontSize: 13, color: COLORS.muted, textAlign: 'center', paddingVertical: 16 },
 });

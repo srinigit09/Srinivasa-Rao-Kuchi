@@ -74,8 +74,24 @@ export default function AddEditBuildingScreen({ navigation, route }: Props) {
   const save = async () => {
     if (!validate()) return;
     setLoading(true);
+    const trimmedName = name.trim();
+
+    // Duplicate name check — skip for edits of the same record
+    const dupQuery = supabase
+      .from('buildings')
+      .select('id')
+      .eq('owner_id', user!.id)
+      .eq('name', trimmedName);
+    if (editId) dupQuery.neq('id', editId);
+    const { data: dupData } = await dupQuery.limit(1);
+    if (dupData && dupData.length > 0) {
+      setLoading(false);
+      Alert.alert('Duplicate Property', `A property named "${trimmedName}" already exists. Please use a different name.`);
+      return;
+    }
+
     const payload = {
-      name: name.trim(),
+      name: trimmedName,
       address: address.trim() || null,
       building_type: type,
       society_name: societyName.trim() || null,

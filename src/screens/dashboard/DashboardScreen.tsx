@@ -59,6 +59,10 @@ export default function DashboardScreen({ navigation }: Props) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const insets = useSafeAreaInsets();
 
+  // Ref so load() can read the latest selectedBuildingId without it being a dep
+  const selectedBuildingIdRef = React.useRef(selectedBuildingId);
+  React.useEffect(() => { selectedBuildingIdRef.current = selectedBuildingId; }, [selectedBuildingId]);
+
   const load = useCallback(async (silent = false) => {
     if (!user) return;
     if (!silent) setLoading(true);
@@ -120,20 +124,24 @@ export default function DashboardScreen({ navigation }: Props) {
       activeNoticesCount: noticeRes.count ?? 0,
     });
 
-    // Auto-select first building if none selected yet
-    setSelectedBuildingId(
-      selectedBuildingId && allBuildings.find(b => b.id === selectedBuildingId)
-        ? selectedBuildingId
-        : (allBuildings[0]?.id ?? '')
-    );
+    // Only update context selection when current value is missing or no longer valid.
+    // This prevents silent refreshes from overwriting a selection the user made
+    // in a sub-screen while the Dashboard was running in the background.
+    const current = selectedBuildingIdRef.current;
+    if (!current || !allBuildings.find(b => b.id === current)) {
+      setSelectedBuildingId(allBuildings[0]?.id ?? '');
+    }
 
     setLoading(false);
   }, [user]);
 
+  // useFocusEffect deps: only [load]. Removing `data` from deps means the cleanup
+  // (which used to call setDropdownOpen(false)) no longer fires mid-load.
   useFocusEffect(useCallback(() => {
-    if (data) { load(true); } else { load(); }
-    return () => setDropdownOpen(false);
-  }, [load, data]));
+    load();
+    // Intentionally no cleanup — closing the dropdown on blur was causing it
+    // to snap shut whenever a data refresh completed while it was open.
+  }, [load]));
   const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 
   // ── derived stats — always filtered by selected building ─────────────────
