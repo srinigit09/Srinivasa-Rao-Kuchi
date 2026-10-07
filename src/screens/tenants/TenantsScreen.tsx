@@ -8,6 +8,7 @@ import { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { useSelectedBuilding } from '../../context/SelectedBuildingContext';
 import { COLORS, PROPERTY_TYPES } from '../../constants';
 import { Tenant, BuildingType } from '../../types';
 import { AppStackParamList } from '../../navigation/RootNavigator';
@@ -27,9 +28,10 @@ interface BuildingSummary {
 
 export default function TenantsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
+  const { selectedBuildingId: contextBuildingId } = useSelectedBuilding();
 
   const [buildings, setBuildings] = useState<BuildingSummary[]>([]);
-  const [selectedBuildingId, setSelectedBuildingId] = useState<string>('');
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>(contextBuildingId ?? '');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   // Track the last preselectedBuildingId we applied — only re-apply when it changes
   const appliedPreselectedRef = useRef<string>('');
@@ -115,16 +117,20 @@ export default function TenantsScreen({ navigation, route }: Props) {
   };
 
   useFocusEffect(useCallback(() => {
-    // Only apply the preselected building once per new navigation from Dashboard
-    // so user's manual dropdown selection is preserved on sub-screen return
     const preselected = (route.params as any)?.preselectedBuildingId;
     if (preselected && appliedPreselectedRef.current !== preselected) {
+      // Fresh navigation from Dashboard with a specific building
       appliedPreselectedRef.current = preselected;
       load(false, preselected);
+    } else if (contextBuildingId && contextBuildingId !== selectedBuildingId) {
+      // Sync with Dashboard context selection
+      setSelectedBuildingId(contextBuildingId);
+      load(false, contextBuildingId);
     } else {
       load();
     }
-  }, [load, route.params]));
+    return () => setDropdownOpen(false);
+  }, [load, route.params, contextBuildingId]));
 
   const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 

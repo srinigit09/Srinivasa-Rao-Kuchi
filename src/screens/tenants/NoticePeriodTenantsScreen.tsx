@@ -7,6 +7,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { useSelectedBuilding } from '../../context/SelectedBuildingContext';
 import { COLORS } from '../../constants';
 import { formatDate } from '../../utils';
 import { AppStackParamList } from '../../navigation/RootNavigator';
@@ -32,10 +33,10 @@ interface BuildingSummary {
 
 export default function NoticePeriodTenantsScreen({ navigation, route }: Props) {
   const { user } = useAuth();
-  const { buildingId: initialBuildingId } = route.params ?? {};
+  const { selectedBuildingId: contextBuildingId } = useSelectedBuilding();
 
   const [buildings, setBuildings] = useState<BuildingSummary[]>([]);
-  const [selectedBuildingId, setSelectedBuildingId] = useState<string>(initialBuildingId ?? '');
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>(contextBuildingId ?? '');
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const [tenants, setTenants] = useState<NoticeRow[]>([]);
@@ -90,7 +91,13 @@ export default function NoticePeriodTenantsScreen({ navigation, route }: Props) 
     setLoading(false);
   }, [user, selectedBuildingId]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => {
+    if (contextBuildingId && contextBuildingId !== selectedBuildingId) {
+      setSelectedBuildingId(contextBuildingId);
+    }
+    load();
+    return () => setDropdownOpen(false);
+  }, [load, contextBuildingId]));
   const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 
   const handleSearch = (q: string) => {

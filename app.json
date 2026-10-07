@@ -26,8 +26,7 @@
       },
       "package": "com.rentease.app",
       "permissions": [
-        "android.permission.READ_CONTACTS",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.READ_CONTACTS"
       ],
       "enableProguardInReleaseBuilds": true,
       "enableShrinkResourcesInReleaseBuilds": true,

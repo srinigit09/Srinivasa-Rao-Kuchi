@@ -206,7 +206,7 @@ export default function ReportsScreen({ navigation }: Props) {
     setPendingCount(pend);
   }, [user, selectedFilter, customFrom, customTo, selectedBuildingId]);
 
-  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+  useFocusEffect(useCallback(() => { loadData(); return () => setBuildingDropdown(false); }, [loadData]));
 
   const onRefresh = async () => {
     setRefreshing(true);

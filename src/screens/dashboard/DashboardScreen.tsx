@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { useSelectedBuilding } from '../../context/SelectedBuildingContext';
 import { COLORS, PROPERTY_TYPES } from '../../constants';
 import { formatCurrency, formatMonth, isOverdue } from '../../utils';
 import Card from '../../components/common/Card';
@@ -51,10 +52,10 @@ interface DashboardData {
 
 export default function DashboardScreen({ navigation }: Props) {
   const { user, signOut } = useAuth();
+  const { selectedBuildingId, setSelectedBuildingId } = useSelectedBuilding();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedBuildingId, setSelectedBuildingId] = useState<string>('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const insets = useSafeAreaInsets();
 
@@ -120,8 +121,10 @@ export default function DashboardScreen({ navigation }: Props) {
     });
 
     // Auto-select first building if none selected yet
-    setSelectedBuildingId(prev =>
-      prev && allBuildings.find(b => b.id === prev) ? prev : (allBuildings[0]?.id ?? '')
+    setSelectedBuildingId(
+      selectedBuildingId && allBuildings.find(b => b.id === selectedBuildingId)
+        ? selectedBuildingId
+        : (allBuildings[0]?.id ?? '')
     );
 
     setLoading(false);
@@ -129,6 +132,7 @@ export default function DashboardScreen({ navigation }: Props) {
 
   useFocusEffect(useCallback(() => {
     if (data) { load(true); } else { load(); }
+    return () => setDropdownOpen(false);
   }, [load, data]));
   const onRefresh = async () => { setRefreshing(true); await load(true); setRefreshing(false); };
 
