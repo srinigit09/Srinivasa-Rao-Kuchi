@@ -54,10 +54,11 @@ html, body {
 
 <script>
   const api = window.electronAPI;
-  let config   = null;
-  let isFiring = false;
-  let armed    = false;
-  let armTimer = null;
+  let config         = null;
+  let isFiring       = false;
+  let armed          = false;
+  let armTimer       = null;
+  let sentSolidTimer = null;
 
   // ── Colour presets — [r, g, b] ────────────────────────────────────
   const COLOURS = [
@@ -94,7 +95,10 @@ html, body {
 
   function applyConfig(cfg) {
     config = cfg;
-    isSolid = cfg?.alertButtonSolid ?? false;
+    // If the sent-solid timer is active, preserve the temporary solid state visually
+    if (!sentSolidTimer) {
+      isSolid = cfg?.alertButtonSolid ?? false;
+    }
     applyColour(cfg?.alertButtonColour ?? 3);
   }
   api.getConfig().then(applyConfig);
@@ -166,6 +170,22 @@ html, body {
         body   : '{}',
       });
     } catch { /* best effort */ }
+
+    // Temporarily show solid for 20 s (visual only — does not save to config)
+    const colourIdx = config?.alertButtonColour ?? 3;
+    const wasAlreadySolid = isSolid;
+    if (!isSolid) {
+      isSolid = true;
+      applyColour(colourIdx);
+    }
+    if (sentSolidTimer) clearTimeout(sentSolidTimer);
+    sentSolidTimer = setTimeout(() => {
+      sentSolidTimer = null;
+      if (!wasAlreadySolid) {
+        isSolid = false;
+        applyColour(colourIdx);
+      }
+    }, 20000);
 
     setTimeout(() => {
       document.getElementById('btnLabel').textContent = 'PANIC';
