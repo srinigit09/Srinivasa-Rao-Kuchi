@@ -281,6 +281,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     sel.disabled = true;
     verifiedHospitalCode = null;
     verifiedHospitalName = null;
+    flash('', false); // clear any previous error
 
     const url = normaliseUrl(serverUrl);
     if (writeBackUrl) document.getElementById('serverUrl').value = url;
