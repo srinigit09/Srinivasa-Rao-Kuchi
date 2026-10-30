@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline';">
+<title>Panic Alarm Key Issuer</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; font-size: 14px; line-height: 1.5; color: #1f2328; background: #fff; padding: 24px; }
+h1 { font-size: 18px; margin-bottom: 4px; }
+h2 { font-size: 14px; margin-bottom: 10px; }
+.sub { color: #57606a; font-size: 13px; margin-bottom: 18px; }
+.panel { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+label { display: block; font-size: 12px; font-weight: 600; color: #57606a; margin: 10px 0 4px; }
+input[type=text], input[type=password], input[type=date], textarea, select {
+  width: 100%; padding: 9px 11px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; font-size: 14px; color: #1f2328;
+}
+textarea { height: 76px; resize: none; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+input:focus, textarea:focus, select:focus { outline: none; border-color: #3b82d4; }
+button { padding: 9px 16px; border-radius: 6px; border: 1px solid #d0d7de; background: #fff; color: #1f2328; font-size: 13px; cursor: pointer; }
+button.primary { background: #3b82d4; border-color: #3b82d4; color: #fff; font-weight: 600; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.msg { padding: 9px 12px; border-radius: 6px; font-size: 13px; margin-bottom: 14px; display: none; }
+.msg.err { background: #fef2f2; border: 1px solid #fecaca; color: #b42318; }
+.msg.ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+.code { font: 13px ui-monospace, Menlo, Consolas, monospace; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; word-break: break-all; user-select: all; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; }
+th { color: #57606a; font-weight: 600; }
+.tabs { display: flex; gap: 6px; margin-bottom: 16px; border-bottom: 1px solid #e5e7eb; }
+.tab { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 14px; }
+.tab.active { border-bottom-color: #3b82d4; color: #3b82d4; font-weight: 600; }
+.muted { color: #57606a; font-size: 12px; }
+.hidden { display: none; }
+.warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; padding: 10px 12px; border-radius: 6px; font-size: 13px; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+<h1>Panic Alarm Key Issuer</h1>
+<p class="sub">Creates Activation Codes and Reset Codes for customer servers.</p>
+<div class="msg err" id="err"></div>
+<div class="msg ok" id="ok"></div>
+
+<!-- First run: create keys -->
+<div id="viewCreate" class="hidden">
+  <div class="panel">
+    <h2>Create your keys (one time)</h2>
+    <div class="warn">This makes 3 key pairs. The passphrase protects the private keys. <strong>If you lose the passphrase or the key backups, existing customer servers cannot be re-licensed.</strong> Write the passphrase down and store it safely.</div>
+    <label for="newPass">Passphrase (at least 12 characters)</label>
+    <input type="password" id="newPass" autocomplete="new-password">
+    <label for="newPass2">Repeat passphrase</label>
+    <input type="password" id="newPass2" autocomplete="new-password">
+    <div class="row"><button class="primary" id="btnCreate">Create keys</button></div>
+  </div>
+</div>
+
+<!-- Locked -->
+<div id="viewUnlock" class="hidden">
+  <div class="panel">
+    <h2>Unlock</h2>
+    <label for="unlockPass">Passphrase</label>
+    <input type="password" id="unlockPass" autocomplete="current-password">
+    <div class="row"><button class="primary" id="btnUnlock">Unlock</button></div>
+  </div>
+</div>
+
+<!-- Main -->
+<div id="viewMain" class="hidden">
+  <div class="tabs">
+    <button class="tab active" data-tab="issue">Issue code</button>
+    <button class="tab" data-tab="history">Issued codes</button>
+    <button class="tab" data-tab="keys">Keys</button>
+    <span style="flex:1"></span>
+    <button id="btnLock">Lock</button>
+  </div>
+
+  <div id="tab-issue">
+    <div class="panel">
+      <label for="purpose">What do you want to issue?</label>
+      <select id="purpose">
+        <option value="activate">Activation Code (license a server)</option>
+        <option value="reset">Reset Code (admin password reset)</option>
+      </select>
+      <label for="requestCode">Request Code from the customer</label>
+      <textarea id="requestCode" spellcheck="false" placeholder="Paste the Request Code shown on the customer's server"></textarea>
+      <div id="activateFields">
+        <label for="customer">Customer name (shown on the server, max 40 characters)</label>
+        <input type="text" id="customer" maxlength="40">
+        <label>License length</label>
+        <div class="row" style="margin-top:0">
+          <label style="margin:0;font-weight:400"><input type="radio" name="len" value="permanent" checked> Permanent</label>
+          <label style="margin:0;font-weight:400"><input type="radio" name="len" value="date"> Until</label>
+          <input type="date" id="expiry" style="width:auto" disabled>
+        </div>
+      </div>
+      <div class="row"><button class="primary" id="btnIssue">Generate code</button></div>
+      <p class="muted" id="activeInfo" style="margin-top:10px"></p>
+    </div>
+    <div class="panel hidden" id="resultPanel">
+      <h2 id="resultTitle">Code</h2>
+      <div class="code" id="resultCode"></div>
+      <div class="row"><button id="btnCopyCode">Copy code</button><span class="muted">Send this code to the customer.</span></div>
+    </div>
+  </div>
+
+  <div id="tab-history" class="hidden">
+    <div class="panel">
+      <table><thead><tr><th>Date</th><th>Type</th><th>Customer</th><th>Valid</th><th>Key</th></tr></thead><tbody id="historyBody"></tbody></table>
+      <p class="muted" id="historyEmpty" style="margin-top:8px">Nothing issued yet.</p>
+    </div>
+  </div>
+
+  <div id="tab-keys" class="hidden">
+    <div class="panel">
+      <h2>Key pairs</h2>
+      <table><thead><tr><th>Key</th><th>Public key (starts with)</th><th>Private part</th><th>Status</th><th></th></tr></thead><tbody id="keysBody"></tbody></table>
+      <p class="muted" style="margin-top:10px">Key 1 is used first. Keys 2 and 3 are spares already built into the server app: switch to one of them if a key is ever lost or leaked, with no new server build. Save a backup of every key and keep the spares offline.</p>
+    </div>
+    <div class="panel">
+      <h2>Server build</h2>
+      <p class="muted" style="margin-bottom:10px">Export the public keys once and replace <code>server/license-keys.js</code> with the file, then build the server installer.</p>
+      <button id="btnExportKeys">Export license-keys.js</button>
+      <button id="btnImport" style="margin-left:8px">Restore a key from backup</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

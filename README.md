@@ -104,8 +104,10 @@ node server.js          # bare Node.js (terminal)
 npm run start-desktop   # Electron desktop app (with login window)
 ```
 
-Admin panel: `http://localhost:4000/admin/`  
-Default login: `admin` / `admin@PanicAlarm2026`
+Admin panel: `http://localhost:4000/admin/`
+Two-step access: (1) activate the server once on first launch with a vendor Activation Code (see `key-issuer/`), then (2) sign in with the admin account.
+Default admin login: `admin` / `admin@PanicAlarm2026` (a new password is required at first sign-in).
+The activation screen is part of the desktop app (`npm run start-desktop`); a bare `node server.js` has no screen to enter the code.
 
 ### Client
 
@@ -189,3 +191,22 @@ Access via the server desktop app login screen, or directly at `http://<server-i
 
 *Panic Alarm System — Hospital Intranet Emergency Notification*  
 *Built with Node.js + Electron + SQLite — no cloud, no subscription*
+
+### Vendor: Key Issuer (licensing)
+
+`key-issuer/` is a separate desktop app for the vendor. It never ships to customers.
+
+```bash
+cd key-issuer
+npm install
+npm test                 # sign/verify round-trip tests
+npm run start            # or: npm run build-win / build-mac for an installer
+```
+
+One-time setup:
+1. Open the Key Issuer → **Create keys** (3 key pairs, protected by your passphrase).
+2. **Keys** tab → *Backup…* for every key; store the backups and passphrase safely (spares offline).
+3. *Export license-keys.js*, replace `server/license-keys.js` with it, then build the server installer.
+
+Per customer: paste their Request Code → customer name, Permanent or an end date → *Generate code* → send the code.
+Switching to key 2 or 3 later needs **no** new server build.

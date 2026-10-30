@@ -35,23 +35,25 @@ Everything is bundled inside — Node.js, the database, all libraries, the deskt
 1. Double-click `PanicAlarmServer-1.0.0-arm64.dmg`
 2. Drag **PanicAlarmServer** into the Applications folder
 3. Open **PanicAlarmServer** from Applications (or Launchpad)
-4. A login window appears — enter credentials:
-   - **Username:** `admin`
-   - **Password:** `admin@PanicAlarm2026`
-5. The admin panel opens in a window ✅
-6. The 🖥️ icon in the menu bar shows the server is running
-7. Note the **Server IP address** shown on the login screen (e.g. `<server-ip>`) — you need this for client setup
+4. Continue with **Activate the server** below
 
 ### On Windows:
-1. Double-click `PanicAlarmServer Setup 1.0.0.exe`
-2. Click through the installer wizard → Finish
-3. **PanicAlarm Server** opens automatically
-4. Login with `admin` / `admin@PanicAlarm2026`
-5. The admin panel window opens ✅
-6. Note the **Server IP address** shown on the login screen
+1. Double-click `PanicAlarmServer Setup 1.0.0.exe` — it installs and opens the server
+2. Continue with **Activate the server** below
 
-> **Change the admin password** immediately after first login:
-> Admin Panel → (top-right menu) → Change Password
+### Activate the server (first launch)
+The server stays locked until the vendor licenses this computer:
+1. The login window shows a **Request Code** (for example `2U2J-HWLG-5M4G-TXSO-KK2L-YVI4`). Click **Copy Request Code**.
+2. Send it to the vendor (phone, WhatsApp or email).
+3. The vendor replies with an **Activation Code** (about 150 characters). Paste it into the box and click **ACTIVATE**.
+4. **Admin login:** `admin` / `admin@PanicAlarm2026`. The first sign-in forces you to choose a new password.
+5. The admin panel opens ✅. Note the **Server IP address** shown on the login screen — you need it for client setup.
+
+Notes:
+- The code works only on this computer. If the computer is replaced, send the vendor the new Request Code.
+- The vendor may set an end date; the login window shows "valid until …". After that date the server locks again until a new Activation Code is pasted.
+- 5 wrong codes lock activation for 15 minutes.
+- **Forgot the admin password?** On the login screen click *Forgot admin password?*, send the Request Code shown there to the vendor, and paste the **Reset Code** you get back together with a new password.
 
 ---
 

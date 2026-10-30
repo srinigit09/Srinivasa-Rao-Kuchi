@@ -1,6 +1,7 @@
 # ── Build outputs — never commit these ────────────────────────────
 client/dist/
 server/dist/
+key-issuer/dist/
 
 # ── Node modules — always regenerate with npm install ─────────────
 node_modules/

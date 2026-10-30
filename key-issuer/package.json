@@ -1,0 +1,27 @@
+{
+  "name": "panic-alarm-key-issuer",
+  "version": "1.0.0",
+  "description": "Panic Alarm Key Issuer — vendor tool that creates Activation and Reset Codes",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/issuer.test.js",
+    "build-win": "electron-builder --win --x64",
+    "build-mac": "electron-builder --mac --arm64"
+  },
+  "devDependencies": {
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.hospital.panicalarm.keyissuer",
+    "productName": "PanicAlarmKeyIssuer",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "preload.js", "vault.js", "license-codec.js", "package.json", "renderer/**/*"],
+    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }] },
+    "mac": { "target": [{ "target": "dmg", "arch": ["arm64"] }], "identity": null, "category": "public.app-category.business" }
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": { "node": ">=18.0.0" }
+}

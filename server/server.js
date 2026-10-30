@@ -1,6 +1,30 @@
 'use strict';
 
-require('dotenv').config();
+// Load environment variables (Properties)
+try {
+  const dotenv = require('dotenv');
+  const fs = require('fs');
+  const path = require('path');
+  const cwdDir = process.cwd();
+  
+  const loadEnvFile = (filename) => {
+    const p = path.join(cwdDir, filename);
+    if (fs.existsSync(p)) {
+      dotenv.config({ path: p });
+      return true;
+    }
+    return false;
+  };
+
+  const loadedServer = loadEnvFile('server.env');
+  const loadedBootstrap = loadEnvFile('bootstrap.env');
+  if (!loadedServer && !loadedBootstrap) {
+    loadEnvFile('.env');
+  }
+} catch {
+  // fallback if any loading issue occurs
+  require('dotenv').config();
+}
 
 const express     = require('express');
 const http        = require('http');
@@ -10,8 +34,9 @@ const bcrypt      = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const os          = require('os');
 const path        = require('path');
-const crypto      = require('crypto');
-const { requireAdmin, requireClient, adminLogin, signClientToken, signAdminToken } = require('./auth');
+const fs          = require('fs');
+const { createLicense } = require('./license');
+const { requireAdmin, requireClient, adminLogin, signClientToken, signAdminToken, DEFAULT_ADMIN_PASSWORD } = require('./auth');
 const {
   db,
   findAdmin, updateAdminPassword,
@@ -33,28 +58,6 @@ const io     = new Server(server, { cors: { origin: '*', methods: ['GET','POST',
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
-
-// ── Encryption helpers (AES-256-GCM) for installation key storage ──────────
-const ENC_SECRET = process.env.ENC_SECRET || 'panic-alarm-enc-key-2026-default';
-
-function encryptValue(plaintext) {
-  const key = crypto.scryptSync(ENC_SECRET, 'pa-salt-2026', 32);
-  const iv  = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const enc = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return iv.toString('hex') + ':' + tag.toString('hex') + ':' + enc.toString('hex');
-}
-
-function decryptValue(stored) {
-  try {
-    const [ivHex, tagHex, encHex] = stored.split(':');
-    const key = crypto.scryptSync(ENC_SECRET, 'pa-salt-2026', 32);
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'));
-    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
-    return decipher.update(Buffer.from(encHex, 'hex')) + decipher.final('utf8');
-  } catch { return null; }
-}
 
 // ── Middleware ─────────────────────────────────────────────────
 app.use(cors());
@@ -98,81 +101,69 @@ app.get('/api/public/server-info', (req, res) => {
   });
 });
 
-// ── Installation key verification ─────────────────────────────
-// POST /api/public/verify-key
-app.post('/api/public/verify-key', (req, res) => {
-  const { key } = req.body || {};
-  const stored = getSetting.get('install_key');
-  if (!stored) {
-    // First-time: store the key encrypted
-    if (key !== 'panicalarm@09')
-      return res.status(401).json({ error: 'Invalid installation key' });
-    setSetting.run('install_key', encryptValue(key));
-    return res.json({ ok: true });
-  }
-  // Verify against stored encrypted key
-  const decrypted = decryptValue(stored.value);
-  if (!decrypted || decrypted !== key)
-    return res.status(401).json({ error: 'Invalid installation key' });
-  res.json({ ok: true });
+// ── License / activation ──────────────────────────────────────
+// The server only holds the vendor's PUBLIC keys (license-keys.js): it can verify Activation and
+// Reset Codes but can never create them. See license.js and license-codec.js.
+const license = createLicense({
+  store: {
+    get: (k) => { const r = getSetting.get(k); return r ? r.value : null; },
+    set: (k, v) => setSetting.run(k, v),
+  },
+  publicKeys: require('./license-keys'),
 });
 
-// ── OTP for key reset ─────────────────────────────────────────
-const otpStore = new Map(); // alarmId → { otp, expiresAt }
+// Activation and password-reset routes are only meant for the server's own login window,
+// so other computers on the network cannot use them (or lock them with wrong guesses).
+function localOnly(req, res, next) {
+  const addr = req.socket.remoteAddress || '';
+  if (addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1') return next();
+  return res.status(403).json({ error: 'This action is only available on the server computer' });
+}
 
-// POST /api/admin/request-key-reset  (no auth required — used before login)
-app.post('/api/admin/request-key-reset', async (req, res) => {
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
-  otpStore.set('key-reset', { otp, expiresAt });
+function sendCheckFailure(res, r) {
+  const body = { error: r.error };
+  if (r.retryAfterSec) { res.set('Retry-After', String(r.retryAfterSec)); body.retryAfterSec = r.retryAfterSec; }
+  return res.status(r.status).json(body);
+}
 
-  // Send OTP via nodemailer if available, otherwise just log it
-  try {
-    const nodemailer = require('nodemailer');
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS;
-    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-    const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
-
-    if (smtpUser && smtpPass) {
-      const transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: smtpPort,
-        secure: smtpPort === 465,
-        auth: { user: smtpUser, pass: smtpPass },
-      });
-      await transporter.sendMail({
-        from   : smtpUser,
-        to     : 'srinivasa.kuchi@gmail.com',
-        subject: 'Panic Alarm Server — Key Reset OTP',
-        text   : `Your OTP for Panic Alarm Server key reset is: ${otp}\n\nThis code expires in 10 minutes.`,
-      });
-      res.json({ message: 'OTP sent to administrator email' });
-    } else {
-      // SMTP not configured — log OTP to server console only
-      console.log(`[KEY-RESET] OTP: ${otp} (expires in 10 min) — configure SMTP_USER/SMTP_PASS to email this`);
-      res.json({ message: 'OTP generated (check server console — SMTP not configured)' });
-    }
-  } catch (e) {
-    console.error('[KEY-RESET] Email error:', e.message);
-    console.log(`[KEY-RESET] OTP: ${otp}`);
-    res.json({ message: 'OTP generated (check server console)' });
-  }
+// GET /api/public/install-status  → { activated, requestCode, licensee?, expiresOn?, reason? }
+app.get('/api/public/install-status', localOnly, (req, res) => {
+  res.json(license.getStatus());
 });
 
-// POST /api/admin/reset-key  { otp, newKey }
-app.post('/api/admin/reset-key', (req, res) => {
-  const { otp, newKey } = req.body || {};
-  const entry = otpStore.get('key-reset');
-  if (!entry || entry.otp !== otp || Date.now() > entry.expiresAt) {
-    return res.status(401).json({ error: 'Invalid or expired OTP' });
-  }
-  if (!newKey || newKey.trim().length < 6) {
-    return res.status(400).json({ error: 'New key must be at least 6 characters' });
-  }
-  otpStore.delete('key-reset');
-  setSetting.run('install_key', encryptValue(newKey.trim()));
-  res.json({ message: 'Installation key updated successfully' });
+// POST /api/public/activate  { code }
+app.post('/api/public/activate', localOnly, (req, res) => {
+  const { code } = req.body || {};
+  if (typeof code !== 'string' || code.length < 20 || code.length > 600)
+    return res.status(400).json({ error: 'Paste the full Activation Code' });
+  const r = license.activate(code);
+  if (!r.ok) return sendCheckFailure(res, r);
+  console.log('[License] Server activated');
+  res.json({ ok: true, status: r.status });
+});
+
+// GET /api/public/reset-request  → { requestCode }  (code the vendor needs for an admin password reset)
+app.get('/api/public/reset-request', localOnly, (req, res) => {
+  if (!license.isActivated()) return res.status(403).json({ error: 'Activate the server first', activationRequired: true });
+  res.json({ requestCode: license.resetRequestCode() });
+});
+
+// POST /api/public/reset-admin-password  { code, newPassword }
+app.post('/api/public/reset-admin-password', localOnly, (req, res) => {
+  const { code, newPassword } = req.body || {};
+  if (!license.isActivated()) return res.status(403).json({ error: 'Activate the server first', activationRequired: true });
+  if (typeof code !== 'string' || code.length < 20 || code.length > 600)
+    return res.status(400).json({ error: 'Paste the full Reset Code' });
+  if (typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 128 || newPassword === DEFAULT_ADMIN_PASSWORD)
+    return res.status(400).json({ error: 'New password must be 8–128 characters and not the default password' });
+  const r = license.checkReset(code);
+  if (!r.ok) return sendCheckFailure(res, r);
+  const admin = db.prepare('SELECT id FROM admin_users ORDER BY id LIMIT 1').get();
+  if (!admin) return res.status(500).json({ error: 'No admin account found' });
+  updateAdminPassword.run(bcrypt.hashSync(newPassword, 12), admin.id);
+  license.consumeReset();
+  console.log('[License] Admin password reset with vendor code');
+  res.json({ message: 'Admin password reset. Sign in with the new password.' });
 });
 
 // ══════════════════════════════════════════════════════════════
@@ -182,16 +173,24 @@ app.post('/api/admin/reset-key', (req, res) => {
 // POST /api/admin/login
 app.post('/api/admin/login', (req, res) => {
   const { username, password } = req.body || {};
+  if (!license.isActivated())
+    return res.status(403).json({ error: 'This server is not activated', activationRequired: true });
   if (!username || !password)
     return res.status(400).json({ error: 'Username and password required' });
-  const token = adminLogin(username, password);
-  if (!token) return res.status(401).json({ error: 'Invalid credentials' });
-  res.json({ token });
+  const result = adminLogin(username, password);
+  if (!result) return res.status(401).json({ error: 'Invalid credentials' });
+  res.json(result);
 });
 
 // POST /api/admin/change-password
 app.post('/api/admin/change-password', requireAdmin, (req, res) => {
   const { currentPassword, newPassword } = req.body || {};
+  if (typeof currentPassword !== 'string' || typeof newPassword !== 'string')
+    return res.status(400).json({ error: 'Current and new password required' });
+  if (newPassword.length < 8 || newPassword.length > 128)
+    return res.status(400).json({ error: 'New password must be 8–128 characters' });
+  if (newPassword === DEFAULT_ADMIN_PASSWORD)
+    return res.status(400).json({ error: 'Choose a password different from the default one' });
   const user = findAdmin.get(req.admin.username);
   if (!bcrypt.compareSync(currentPassword, user.password))
     return res.status(400).json({ error: 'Current password incorrect' });

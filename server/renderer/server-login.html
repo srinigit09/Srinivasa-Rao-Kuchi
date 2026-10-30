@@ -7,7 +7,7 @@
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
-  width: 400px; height: 560px; overflow: hidden;
+  width: 440px; height: 680px; overflow: hidden;
   font-family: -apple-system, "Segoe UI", sans-serif;
   background: #ffffff; color: #1f2328;
   display: flex; align-items: center; justify-content: center;
@@ -16,10 +16,10 @@ html, body {
 .card {
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 12px; padding: 36px 32px; width: 360px;
+  border-radius: 12px; padding: 28px 28px; width: 400px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.08);
 }
-.logo { text-align: center; margin-bottom: 24px; }
+.logo { text-align: center; margin-bottom: 16px; }
 .logo .icon { font-size: 44px; }
 .logo h1 { font-size: 16px; color: #1f2328; margin-top: 8px; font-weight: 700; letter-spacing: 0.5px; }
 .logo p  { font-size: 12px; color: #57606a; margin-top: 4px; }
@@ -75,9 +75,24 @@ input:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgba(5
 }
 hr { border: none; border-top: 1px solid #e5e7eb; margin: 14px 0; }
 
-/* Reset key section — hidden by default */
+/* Sections other than login are hidden by default */
 .reset-section { display: none; }
 .reset-section label { margin-top: 10px; }
+textarea {
+  width: 100%; padding: 10px 12px; height: 84px; resize: none;
+  background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 7px;
+  color: #1f2328; font-size: 12px; font-family: ui-monospace, Menlo, Consolas, monospace; margin-bottom: 14px;
+}
+textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgba(59,130,212,0.15); }
+.code-box {
+  background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 7px; padding: 10px 12px;
+  font: 600 14px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 1px; text-align: center;
+  word-break: break-all; user-select: all; margin-bottom: 8px;
+}
+.btn-small {
+  font-size: 11px; padding: 4px 12px; cursor: pointer; border: 1px solid #d0d7de;
+  border-radius: 4px; background: #f6f8fa; color: #1f2328; margin-bottom: 14px;
+}
 </style>
 </head>
 <body>
@@ -90,8 +105,21 @@ hr { border: none; border-top: 1px solid #e5e7eb; margin: 14px 0; }
 
   <div class="server-badge" id="serverBadge">⏳ Server starting…</div>
 
+  <!-- Activation (shown until the server is activated) -->
+  <div class="reset-section" id="activateSection">
+    <p style="font-size:12px;color:#3b82d4;font-weight:700;margin-bottom:4px;">STEP 1 OF 2 — ACTIVATE THIS SERVER</p>
+    <p style="font-size:12px;color:#57606a;margin-bottom:12px;">Send this <strong>Request Code</strong> to your vendor. The vendor replies with an <strong>Activation Code</strong>; paste it below.</p>
+    <label>Request Code (this computer)</label>
+    <div class="code-box" id="requestCode">…</div>
+    <button class="btn-small" id="btnCopyRequest" type="button">Copy Request Code</button>
+    <label>Activation Code from the vendor</label>
+    <textarea id="activationCode" placeholder="Paste the Activation Code here" autocomplete="off" spellcheck="false"></textarea>
+    <button class="btn-login" id="btnActivate">ACTIVATE</button>
+  </div>
+
   <!-- Login form -->
   <div id="loginSection">
+    <p id="licenseLine" style="font-size:11px;color:#16a34a;text-align:center;margin-bottom:12px;"></p>
     <label>Username</label>
     <input type="text" id="username" placeholder="admin" autocomplete="username" value="admin">
 
@@ -99,19 +127,20 @@ hr { border: none; border-top: 1px solid #e5e7eb; margin: 14px 0; }
     <input type="password" id="password" placeholder="Password" autocomplete="current-password">
 
     <button class="btn-login" id="btnLogin">SIGN IN</button>
-    <button class="btn-link" id="btnShowReset">Forgot key? Reset installation key</button>
+    <button class="btn-link" id="btnShowReset">Forgot admin password?</button>
   </div>
 
-  <!-- Key reset section -->
+  <!-- Admin password reset (vendor Reset Code) -->
   <div class="reset-section" id="resetSection">
-    <p style="font-size:12px;color:#57606a;margin-bottom:12px;">An OTP will be sent to the administrator email address.</p>
-    <button class="btn-login" id="btnSendOtp">SEND OTP</button>
-    <hr>
-    <label>OTP Code</label>
-    <input type="text" id="otpCode" placeholder="6-digit OTP" maxlength="6">
-    <label>New Installation Key</label>
-    <input type="text" id="newKey" placeholder="New key (min 6 characters)">
-    <button class="btn-login" id="btnResetKey">RESET KEY</button>
+    <p style="font-size:12px;color:#57606a;margin-bottom:12px;">Send this <strong>Request Code</strong> to your vendor and ask for a <strong>Reset Code</strong>.</p>
+    <label>Request Code (this computer)</label>
+    <div class="code-box" id="resetRequestCode">…</div>
+    <button class="btn-small" id="btnCopyResetRequest" type="button">Copy Request Code</button>
+    <label>Reset Code from the vendor</label>
+    <textarea id="resetCode" placeholder="Paste the Reset Code here" autocomplete="off" spellcheck="false"></textarea>
+    <label>New admin password</label>
+    <input type="password" id="newPassword" placeholder="At least 8 characters" autocomplete="new-password">
+    <button class="btn-login" id="btnResetPassword">RESET PASSWORD</button>
     <button class="btn-link" id="btnBackToLogin">← Back to login</button>
   </div>
 
@@ -152,6 +181,85 @@ hr { border: none; border-top: 1px solid #e5e7eb; margin: 14px 0; }
 
   loadServerInfo();
   setTimeout(loadServerInfo, 1500);
+
+  // ── Activation ─────────────────────────────────────────────────
+  function showSection(name) {
+    document.getElementById('activateSection').style.display = name === 'activate' ? 'block' : 'none';
+    document.getElementById('loginSection').style.display    = name === 'login'    ? 'block' : 'none';
+    document.getElementById('resetSection').style.display    = name === 'reset'    ? 'block' : 'none';
+  }
+
+  let currentStatus = null;
+  async function api(path, options) {
+    const info = await sapi.getServerInfo();
+    const resp = await fetch(`http://localhost:${info.port}${path}`, options);
+    return { resp, data: await resp.json() };
+  }
+  function postJson(body) {
+    return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+  }
+
+  function applyStatus(status) {
+    currentStatus = status;
+    document.getElementById('requestCode').textContent = status.requestCode;
+    const line = document.getElementById('licenseLine');
+    line.textContent = status.activated
+      ? 'Licensed' + (status.licensee ? ' to ' + status.licensee : '') +
+        (status.expiresOn ? ' · valid until ' + status.expiresOn : ' · permanent')
+      : '';
+    showSection(status.activated ? 'login' : 'activate');
+    if (!status.activated && status.reason === 'expired') showErr('Your license has expired. Send the Request Code to the vendor for a new Activation Code.');
+    if (!status.keysConfigured) showErr('This build has no vendor license keys configured. Contact the vendor.');
+  }
+
+  async function checkActivation(attempt = 0) {
+    try {
+      const { data } = await api('/api/public/install-status');
+      applyStatus(data);
+    } catch {
+      if (attempt < 20) setTimeout(() => checkActivation(attempt + 1), 500);
+      else showErr('Cannot reach server. Please quit and relaunch the app.');
+    }
+  }
+  showSection('none');
+  checkActivation();
+
+  function copyText(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+      const old = btn.textContent; btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = old; }, 1500);
+    }).catch(() => {});
+  }
+  document.getElementById('btnCopyRequest').addEventListener('click', e =>
+    copyText(document.getElementById('requestCode').textContent, e.target));
+  document.getElementById('btnCopyResetRequest').addEventListener('click', e =>
+    copyText(document.getElementById('resetRequestCode').textContent, e.target));
+
+  document.getElementById('btnActivate').addEventListener('click', doActivate);
+
+  async function doActivate() {
+    clearMessages();
+    const code = document.getElementById('activationCode').value.trim();
+    if (code.length < 20) { showErr('Paste the full Activation Code'); return; }
+
+    const btn = document.getElementById('btnActivate');
+    btn.disabled = true;
+    try {
+      const { resp, data } = await api('/api/public/activate', postJson({ code }));
+      if (resp.ok) {
+        document.getElementById('activationCode').value = '';
+        applyStatus(data.status);
+        showOk('Step 2 of 2: server activated. Sign in with the admin account.');
+        document.getElementById('password').focus();
+      } else {
+        showErr(data.error || 'Activation failed');
+      }
+    } catch (e) {
+      showErr('Cannot connect to server: ' + e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
 
   function clearMessages() {
     document.getElementById('errMsg').style.display = 'none';
@@ -202,63 +310,40 @@ hr { border: none; border-top: 1px solid #e5e7eb; margin: 14px 0; }
     }
   }
 
-  // ── Key reset flow ─────────────────────────────────────────────
-  document.getElementById('btnShowReset').addEventListener('click', () => {
-    document.getElementById('loginSection').style.display = 'none';
-    document.getElementById('resetSection').style.display = 'block';
+  // ── Admin password reset (vendor Reset Code) ───────────────────
+  document.getElementById('btnShowReset').addEventListener('click', async () => {
     clearMessages();
-  });
-
-  document.getElementById('btnBackToLogin').addEventListener('click', () => {
-    document.getElementById('resetSection').style.display = 'none';
-    document.getElementById('loginSection').style.display = 'block';
-    clearMessages();
-  });
-
-  document.getElementById('btnSendOtp').addEventListener('click', async () => {
-    clearMessages();
-    const btn = document.getElementById('btnSendOtp');
-    btn.disabled = true;
-    document.getElementById('spinner').style.display = 'block';
     try {
-      const info = await sapi.getServerInfo();
-      const serverUrl = `http://localhost:${info.port}`;
-      const resp = await fetch(`${serverUrl}/api/admin/request-key-reset`, { method: 'POST' });
-      const data = await resp.json();
-      showOk(data.message || 'OTP sent');
+      const { resp, data } = await api('/api/public/reset-request');
+      if (!resp.ok) { showErr(data.error || 'Cannot start reset'); return; }
+      document.getElementById('resetRequestCode').textContent = data.requestCode;
+      showSection('reset');
     } catch (e) {
-      showErr('Failed to send OTP: ' + e.message);
-    } finally {
-      btn.disabled = false;
-      document.getElementById('spinner').style.display = 'none';
+      showErr('Cannot connect to server: ' + e.message);
     }
   });
 
-  document.getElementById('btnResetKey').addEventListener('click', async () => {
+  document.getElementById('btnBackToLogin').addEventListener('click', () => {
+    showSection('login');
     clearMessages();
-    const otp    = document.getElementById('otpCode').value.trim();
-    const newKey = document.getElementById('newKey').value.trim();
-    if (!otp || !newKey) { showErr('OTP and new key are required'); return; }
+  });
 
-    const btn = document.getElementById('btnResetKey');
+  document.getElementById('btnResetPassword').addEventListener('click', async () => {
+    clearMessages();
+    const code = document.getElementById('resetCode').value.trim();
+    const newPassword = document.getElementById('newPassword').value;
+    if (code.length < 20) { showErr('Paste the full Reset Code'); return; }
+    if (newPassword.length < 8) { showErr('New password must be at least 8 characters'); return; }
+
+    const btn = document.getElementById('btnResetPassword');
     btn.disabled = true;
-    document.getElementById('spinner').style.display = 'block';
     try {
-      const info = await sapi.getServerInfo();
-      const serverUrl = `http://localhost:${info.port}`;
-      const resp = await fetch(`${serverUrl}/api/admin/reset-key`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ otp, newKey }),
-      });
-      const data = await resp.json();
+      const { resp, data } = await api('/api/public/reset-admin-password', postJson({ code, newPassword }));
       if (resp.ok) {
-        showOk('Key reset successfully. You can now log in.');
-        setTimeout(() => {
-          document.getElementById('resetSection').style.display = 'none';
-          document.getElementById('loginSection').style.display = 'block';
-          clearMessages();
-        }, 2000);
+        document.getElementById('resetCode').value = '';
+        document.getElementById('newPassword').value = '';
+        showSection('login');
+        showOk(data.message || 'Password reset. Sign in with the new password.');
       } else {
         showErr(data.error || 'Reset failed');
       }
@@ -266,7 +351,6 @@ hr { border: none; border-top: 1px solid #e5e7eb; margin: 14px 0; }
       showErr('Failed: ' + e.message);
     } finally {
       btn.disabled = false;
-      document.getElementById('spinner').style.display = 'none';
     }
   });
 </script>

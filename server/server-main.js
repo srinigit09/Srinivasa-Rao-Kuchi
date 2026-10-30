@@ -17,6 +17,38 @@ const fs     = require('fs');
 const http   = require('http');
 const os     = require('os');
 
+// ── Load Environment Variables (Properties) ──────────────────────────────────
+try {
+  const dotenv = require('dotenv');
+  const execDir = path.dirname(process.execPath);
+  const cwdDir = process.cwd();
+
+  const loadEnvFile = (filename) => {
+    const p1 = path.join(execDir, filename);
+    const p2 = path.join(cwdDir, filename);
+    if (fs.existsSync(p1)) {
+      dotenv.config({ path: p1 });
+      console.log(`[Server] Loaded properties from: ${p1}`);
+      return true;
+    } else if (fs.existsSync(p2)) {
+      dotenv.config({ path: p2 });
+      console.log(`[Server] Loaded properties from: ${p2}`);
+      return true;
+    }
+    return false;
+  };
+
+  // Load both property files (with .env as fallback for backwards compatibility)
+  const loadedServer = loadEnvFile('server.env');
+  const loadedBootstrap = loadEnvFile('bootstrap.env');
+
+  if (!loadedServer && !loadedBootstrap) {
+    loadEnvFile('.env');
+  }
+} catch (err) {
+  console.warn('[Server] Could not load dotenv configuration:', err.message);
+}
+
 // ── Paths ─────────────────────────────────────────────────────────────────────
 const USER_DATA   = app.getPath('userData');
 const CONFIG_FILE = path.join(USER_DATA, 'server-config.json');
@@ -48,12 +80,24 @@ function startEmbeddedServer() {
   if (serverStarted) return;
   serverStarted = true;
   try {
-    // Set environment so server.js picks up our userData as DB path
-    const dbDir = path.join(USER_DATA, 'data');
-    if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
-    process.env.DB_PATH = path.join(dbDir, 'panic_alarm.db');
-    process.env.PORT    = String(serverPort);
-    process.env.HOST    = '0.0.0.0';
+    // Port: read from environment if configured, otherwise use default
+    if (process.env.PORT) {
+      serverPort = parseInt(process.env.PORT, 10) || 4000;
+    } else {
+      process.env.PORT = String(serverPort);
+    }
+
+    // Host
+    if (!process.env.HOST) {
+      process.env.HOST = '0.0.0.0';
+    }
+
+    // Database path: check if user provided DB_PATH, otherwise fall back to AppData folder
+    if (!process.env.DB_PATH) {
+      const dbDir = path.join(USER_DATA, 'data');
+      if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+      process.env.DB_PATH = path.join(dbDir, 'panic_alarm.db');
+    }
 
     const serverRoot = getServerRoot();
     const serverJs   = path.join(serverRoot, 'server.js');
@@ -82,7 +126,7 @@ function createLoginWindow() {
   if (loginWindow && !loginWindow.isDestroyed()) { loginWindow.focus(); return; }
 
   loginWindow = new BrowserWindow({
-    width: 400, height: 560,
+    width: 440, height: 680,
     resizable: false, center: true,
     title: 'Panic Alarm Server — Login',
     icon: path.join(__dirname, 'assets', 'server-icon.png'),

@@ -724,6 +724,13 @@ function bootApp() {
   document.getElementById('adminName').textContent = uname;
   document.getElementById('userAvatar').textContent = uname.charAt(0).toUpperCase();
   document.getElementById('app').style.display = 'block';
+  if (payload.mustChangePassword) {
+    // Default password still in use: only the Change Password page is available
+    document.querySelectorAll('.nav-link').forEach(l => { if (l.id !== 'nav-changePassword') l.style.display = 'none'; });
+    showPage('changePassword');
+    cpFlash('You are using the default password. Choose a new password to continue.', false);
+    return;
+  }
   showPage('dashboard');
   connectAdminSocket();
 }
@@ -1382,6 +1389,7 @@ function initChangePassword() {
     document.getElementById('cpFlash').style.display = 'none';
     if (!cur || !np || !cf) { cpFlash('All fields are required', false); return; }
     if (np.length < 8)      { cpFlash('New password must be at least 8 characters', false); return; }
+    if (np === cur)         { cpFlash('New password must be different from the current password', false); return; }
     if (np !== cf)           { cpFlash('New passwords do not match', false); return; }
     const r = await api('POST', '/api/admin/change-password', { currentPassword: cur, newPassword: np });
     if (r.error) { cpFlash(r.error, false); return; }
