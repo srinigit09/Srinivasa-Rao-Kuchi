@@ -1,21 +1,21 @@
 # Vendor Licensing and Security Guide
-### — Hospital Emergency Panic Alarm System (Server & Licensing Tool) —
+### — Hospital Emergency Panic Alarm System (Server, Clients & Licensing Tool) —
 
-This document is designed for **non-technical vendors, business owners, and managers**. It contains zero complex coding jargon and uses simple, real-world analogies to explain how your licensing and password reset security works, how keys are managed on both sides, and how you can run your business smoothly with just a few clicks.
+This document is designed for **non-technical vendors, business owners, and managers**. It contains zero complex coding jargon and uses simple, real-world analogies to explain how your three installers operate, how to set them up, how to manage keys on both sides, and the step-by-step procedures for daily operations.
 
 ---
 
-## 1. How the Licensing System Works (The Simple Analogy)
+## Part 1: How the Licensing System Works (The Simple Analogy)
 
 Your licensing system uses **Asymmetric Cryptography** (specifically a standard called *Ed25519*). Think of it like a secure **Lock & Key** system:
 
-* **The Private Key (Your Master Stamp):** This is kept only in your private **Key Issuer** desktop app. This is like a high-security signature stamp that only you possess. You use it to stamp (sign) "Activation Codes."
+* **The Private Key (Your Master Stamp):** This is kept only in your private **Key Issuer** desktop app. This is like a high-security signature stamp that only you possess. You use it to stamp (sign) "Activation Codes" and "Reset Codes."
 * **The Public Key (The Padlock):** This is built directly into the software you ship to the hospital (**Central Server**). It acts like a padlock. Anyone can look at this padlock, but only codes signed with your private **Master Stamp** can unlock it.
 * **The Request Code (The Identification Tag):** When a hospital installs your server, it generates a unique "identification tag" based on their specific machine's physical parts. This ensures that an Activation Code created for Hospital A cannot be copied and used by Hospital B.
 
 ---
 
-## 2. Key Management (How Keys are Stored on Both Sides)
+## Part 2: Key Management (How Keys are Stored on Both Sides)
 
 To maintain absolute security while keeping the business flexible, the keys are divided into two isolated parts:
 
@@ -37,7 +37,7 @@ To maintain absolute security while keeping the business flexible, the keys are 
 
 ### A. The Vendor Side (Your Office)
 * **What you hold:** 3 pairs of keys (Private and Public).
-* **Where they live:** They are saved on your computer in an encrypted vault.
+* **Where they live:** They are saved on your computer in an encrypted vault (`vault.json`).
 * **How they are protected:** They are locked behind a **Master Passphrase** (chosen by you on first startup). Even if someone steals your computer, they cannot access your keys without knowing this passphrase.
 * **Why there are 3 keys:** We pre-generate 3 keys so that if Key 1 is ever leaked or compromised, you can switch to Key 2 inside the app, and it will immediately work for all customers **without needing a new software release**.
 
@@ -48,130 +48,99 @@ To maintain absolute security while keeping the business flexible, the keys are 
 
 ---
 
-## 3. Step-by-Step: First-Time Setup (Done ONCE by Vendor)
+## Part 3: Installer 1 — The Vendor Key Issuer App (`Vendor.exe`)
+*This is your private internal administrative app. Never send this installer to customers.*
 
-Follow these steps when you are setting up your business system for the first time:
+### Step 3.1: Installation & First Launch
+1. On your computer, run **`PanicAlarmKeyIssuer Setup.exe`** (or build and start it using the terminal `cd key-issuer && npm start`).
+2. When the application window opens, it detects if a vault database has been initialized yet.
+3. If this is the **very first launch**, you will be presented with the **Create Master Passphrase** screen.
 
-### Step 3.1: Start the Key Issuer & Create Your Vault
-1. Open your terminal in the `key-issuer` folder and start the application:
-   ```bash
-   cd key-issuer
-   npm install
-   npm start
-   ```
-2. On the screen, the **Key Issuer** app will ask you to **"Create Keys"**.
-3. Choose a strong **Master Passphrase** (at least 12 characters). 
-   *⚠️ Write this passphrase down and store it in a physical safe! If you lose this, you can never issue codes for your software again.*
-4. Click **Create**. This automatically creates your 3 Master Keys and saves them.
+### Step 3.2: Creating Your Master Passphrase & Keypairs (Done Once)
+1. Choose a strong, secure passphrase of **at least 12 characters** (e.g., `AlphaOrangeHospital2026!`).
+2. Type it into the input box and click **Create Vault**.
+3. **What happens behind the scenes:** The app immediately runs a math generator that creates **3 unique keypairs** (3 private keys + 3 public keys). It encrypts the private keys with your passphrase and writes them to a secure local database file (`vault.json`).
+4. *⚠️ CRITICAL: Write this passphrase down on a piece of paper and lock it in your office safe. If you lose this passphrase, your encrypted keys are lost forever, and you will not be able to issue any more licenses.*
 
-### Step 3.2: Link Your Keys to the Server Build
-1. In the Key Issuer app, click the button labeled **"Export license-keys.js"**.
-2. A window will pop up. Navigate to the **`server/`** folder in your project and click **Save** (this replaces the empty placeholder file).
-3. Close the Key Issuer app.
+### Step 3.3: Exporting Public Keys to your Server Code (Done Once)
+1. Once unlocked, click on the **Export** tab or click **"Export license-keys.js"**.
+2. A file browser will open. Navigate to your development folder's **`server/`** directory and click **Save**.
+3. This writes the public keys into **`server/license-keys.js`** so your server builds will recognize your signature.
 
-### Step 3.3: Build the Installer to send to Customers
-1. Go to your main project folder.
-2. **Double-click** the file named:
-   * **`rebuild.bat`** (if you are on Windows)
-   * **`rebuild.sh`** (if you are on macOS)
-3. Wait for the window to finish compiling.
-4. Your customer setup file is ready in **`server/dist/`** (e.g. `PanicAlarmServer Setup.exe`). This is the single file you will distribute to your hospital customers!
+### Step 3.4: Daily Procedure — Signing Keys & Generating Activation Codes
+When a hospital purchases your system and sends you their **Request Code**:
+1. Open your **Key Issuer** app.
+2. Enter your **Master Passphrase** to unlock it.
+3. Go to the **"Issue License"** tab.
+4. Fill in the following:
+   * **Customer Name:** Enter the hospital name (e.g., `Mercy General Hospital`).
+   * **Request Code:** Paste the exact Request Code they copied from their server screen.
+   * **Expiration Date (Optional):** Pick a date if they purchased a 1-year or 3-year term. Leave it blank if they bought a **permanent** license.
+5. Click **Generate Activation Code**.
+6. Click **Copy Code** and paste it into an email or message to send back to the hospital.
 
----
-
-## 4. Step-by-Step: Activating a Customer (When they buy)
-
-When a hospital purchases your software and installs it, they will see a lock screen asking for activation.
-
-### Step 4.1: Customer sends you their Request Code
-1. The hospital admin opens the newly installed server app.
-2. On the screen, they copy their unique **Request Code** (a string of letters and numbers like `PANIC-REQ-XXXX-XXXX...`).
-3. They email, text, or WhatsApp this code to you.
-
-### Step 4.2: You generate their Activation Code
-1. Open your local **Key Issuer** app.
-2. Type in your **Master Passphrase** to unlock your vault.
-3. In the **"Issue License"** tab:
-   * **Customer Name:** Enter the hospital name (e.g., `City General Hospital`).
-   * **Request Code:** Paste the Request Code sent by the hospital.
-   * **Expiration Date:** Pick a date if they bought a 1-year license, or leave it blank if they bought a **permanent** license.
-4. Click **Generate Activation Code**.
-5. Copy the generated code (a long string of characters) and send it back to the customer.
-
-### Step 4.3: Customer enters the code to Activate
-1. The hospital admin pastes your Activation Code into their server screen and clicks **Activate**.
-2. The server instantly unlocks. The system is activated!
+### Step 3.5: Daily Procedure — Generating password Reset Codes
+If a customer forgets their admin password and clicks "Forgot Password" on their server:
+1. They will send you a **Reset Request Code**.
+2. Unlock your **Key Issuer** app.
+3. Go to the **"Reset Password"** tab.
+4. Paste their Reset Request Code.
+5. Click **Generate Reset Code**.
+6. Copy this code and send it back to the customer. This single-use code lets them set a new password safely.
 
 ---
 
-## 5. Step-by-Step: Re-generating & Resetting Licenses
+## Part 4: Installer 2 — The Central Server App (`Server.exe`)
+*This is the central engine installed once on a hospital computer or server room machine.*
 
-### Scenario A: The hospital's license expires
-If you set an expiration date (e.g. 1 year) and their license runs out, their server will lock again.
-* **How to fix:** 
-  1. The hospital admin copies their current Request Code from the screen.
-  2. You paste it into your Key Issuer, select a new future expiration date (or make it permanent), and click **Generate**.
-  3. They paste the new Activation Code, and they are renewed instantly!
+### Step 4.1: Installation
+1. Provide the hospital's IT administrator with the single installer file: **`PanicAlarmServer Setup.exe`**.
+2. The IT administrator runs the installer. It installs the background Node.js processes, SQLite database engines, and an administrative Electron window.
+3. Once the setup finishes, the app launches automatically.
 
-### Scenario B: The hospital upgrades their hardware (Lost License)
-Because the Request Code is bound to their physical machine parts, if the hospital replaces their server motherboard or hard drive, their Request Code will change, and their license will show as invalid.
-* **How to fix:**
-  1. Simply ask them to send their new Request Code.
-  2. Generate a fresh Activation Code for their new hardware free of charge.
+### Step 4.2: Configuring Properties (Optional)
+Before starting, the hospital IT department can customize the server by placing a plain-text properties file named **`server.env`** in the same folder as the installed program. They can customize:
+* **`PORT` (Default: `4000`):** If they already have another program using Port 4000, they can change this to `5000` or `8080`.
+* **`DB_PATH`:** If they want to save the database on a secure, automated network backup drive (e.g., `D:\HospitalData\panic_alarm.db`) instead of the local hard drive.
 
----
+### Step 4.3: Getting the Request Code & Activating
+1. On launch, the server is locked. It displays a window saying: **"Activation Required."**
+2. The screen shows a unique **Request Code** (e.g., `PANIC-REQ-A1B2-C3D4...`).
+3. The IT admin copies this code and sends it to you (the vendor).
+4. You generate the **Activation Code** (using Part 3.4) and send it back to them.
+5. The IT admin pastes the Activation Code into their lock screen and clicks **Activate**.
+6. The server validates the cryptographic signature with its internal padlock, saves the active license, and unlocks the login screen.
 
-## 6. Admin Password Reset (Forgot Password Flow)
-
-If the hospital administrator forgets their login password, they cannot access the system. To prevent unauthorized hackers from resetting passwords, this is also handled through your secure offline Key Issuer.
-
-```
-[ Hospital Server Screen ]                             [ Vendor Office ]
-     "Forgot Password?"                                  Key Issuer App
-             │                                                 │
-      Generates Reset                                          │
-       Request Code  ───────── Sent by Email/Phone ───────────►│
-             │                                                 │
-             │                                         Generates One-Time
-             │                                             Reset Code
-             │                                                 │
-      Pastes Reset   ◄──────── Sent back to Admin ─────────────┘
-       Code to unlock
-             ▼
-     Set New Password
-```
-
-### Step-by-Step Password Reset:
-1. **On the Server Screen:** The hospital admin clicks **"Forgot Password?"** on the login window.
-2. The server displays a unique **Reset Request Code** (different from their activation code).
-3. The customer sends this Reset Request Code to you.
-4. **On Your Key Issuer:**
-   * Go to the **Reset Password** section in your Key Issuer app.
-   * Paste the Reset Request Code and click **Generate Reset Code**.
-5. You send this temporary, single-use Reset Code back to the customer.
-6. **On the Server Screen:** The admin pastes the Reset Code. The server verifies your signature and immediately unlocks a secure screen where they can type in a **new password**. 
-7. Once they click save, the Reset Code becomes void and can never be reused.
+### Step 4.4: First-Time Login & Security Seeding
+1. Once activated, the login screen appears.
+2. The server reads the temporary file **`bootstrap.env`** (if provided next to the executable) to find the default admin credentials. If no file is provided, it seeds the default account:
+   * **Username:** `admin`
+   * **Password:** `admin@PanicAlarm2026`
+3. The admin logs in using these credentials.
+4. **Forced Password Change:** On successful first login, the application immediately forces the admin to type a strong, custom administrator password. 
+5. Once saved, the default password is encrypted and overwritten in the database.
+6. *🔒 IT Security Rule: After completing this first-run setup, the IT administrator should completely delete the `bootstrap.env` file from their computer for safety.*
 
 ---
 
-## 7. Configuration Properties (Customizations)
+## Part 5: Installer 3 — The Client Desktop App (`Client.exe`)
+*This is the lightweight panic button application installed on nurse desks, doctor terminals, and reception PCs.*
 
-Your software comes with two properties files in the **`server/`** folder. These are plain text files that hospital IT departments can easily edit using Notepad to configure settings without needing to build any code:
+### Step 5.1: Rollout & Installation
+1. Provide the hospital with the desktop client installer: **`PanicAlarmClient Setup.exe`**.
+2. IT administrators can run this installer on as many individual computers (desks, reception areas, rooms) as they want.
+3. **No licensing or Activation Codes are required on these computers.** They are unlimited and free to install.
 
-### File 1: `server.env` (Network & Database Customization)
-IT administrators can open this file to configure how the server connects to their network:
-* **`PORT` (Default: `4000`):** If the hospital already has another software using Port 4000, they can change this to `5000` or any other number.
-* **`HOST` (Default: `0.0.0.0`):** Allows any computer inside the hospital network to connect.
-* **`DB_PATH`:** If the hospital wants to save their database on a secure, automated backup drive (e.g. `D:\Backups\panic_alarm.db`), they can specify that path here.
-
-### File 2: `bootstrap.env` (First-Launch Default Credentials)
-This file is used **only once** on the very first startup of the application:
-* **`ADMIN_USERNAME` / `ADMIN_PASSWORD`:** Sets the default username and password (`admin` / `admin@PanicAlarm2026`) to initialize the database.
-* **Security Recommendation:** Once the app runs for the first time and the database is created, the administrator must change their password through the app's visual interface. Once changed, they can **completely delete or wipe `bootstrap.env`** from their disk for security.
+### Step 5.2: LAN Network Configuration
+1. When a staff member launches the **Client App** for the first time, it will ask for the **Server's IP Address**.
+2. The IT administrator simply types in the Central Server's local network IP address and port (e.g., `192.168.1.50:4000`).
+3. The Client App instantly establishes a persistent, secure websocket connection to the Central Server.
+4. The client is now fully active, showing the green status indicator. Staff can now trigger alarms, view location floor plans, and receive emergency notification alerts.
 
 ---
 
-## 8. Essential Security Rules for Your Team
+## Part 6: Essential Security Rules for Your Team
+
 To keep your licensing system 100% secure, please make sure your sales and management team follows these three rules:
 
 1. **NEVER share the Key Issuer installer or files with anyone outside your company.** This is your company's master signing key.
