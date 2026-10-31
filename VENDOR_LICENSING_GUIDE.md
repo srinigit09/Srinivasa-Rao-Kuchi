@@ -178,7 +178,48 @@ Used to backup or mass-deploy the network configuration required to launch and c
 
 ---
 
-## Part 7: Essential Security Rules for Your Team
+## Part 7: How to Reset or Change Your Master Passphrase
+
+Because your Master Passphrase is used as a mathematical formula to encrypt your **Private Keys** inside `vault.json`, **your passphrase is the actual security lock**.
+
+This means there is **no "forgot password" reset button, recovery email, or back-door** in the Key Issuer app. If you completely lose your passphrase, the private keys are locked forever.
+
+However, depending on your situation, here is exactly how you can safely **change** or **reset** your setup:
+
+### Scenario A: You know your old passphrase and just want to CHANGE it
+If you are rotating employees or updating security and want to set a new passphrase:
+1. Open the Key Issuer app, unlock it, and make sure you have **exported** and saved offline backups of your active keys (using the **"Backup Key"** buttons).
+2. Close the Key Issuer app.
+3. Delete the old local database file (`vault.json`) from your computer (see **Part 6, Section A** for its exact path).
+4. Reopen the Key Issuer app. Since `vault.json` was deleted, it will treat this as a fresh start and ask you to **"Create Keys."**
+5. Enter your **new Master Passphrase** and click Create. (This generates a brand-new set of 3 master keys).
+6. Click **"Export license-keys.js"** to save the new public keys into your `server/` folder, and double-click **`rebuild.bat`** to package your new customer installer.
+*Note: Any hospital servers already activated in the field will continue to run perfectly. However, future activations will require them to run your new installer.*
+
+---
+
+### Scenario B: You FORGOT your passphrase and are locked out
+If you are completely locked out of the Key Issuer app, you must reset your database and follow one of these two recovery paths:
+
+#### Recovery Path 1: If you have an offline Backup File (`panic-alarm-key-backup.json`)
+If you made a backup file before getting locked out, and you still remember the passphrase that was active when you created that backup:
+1. Delete the local `vault.json` database file from your computer (see **Part 6, Section A** for its exact path).
+2. Launch the Key Issuer app and set up a fresh vault with your **new passphrase**.
+3. Go to the **Restore** tab, select your backup JSON file, and type in the passphrase that belongs to that backup.
+4. Your active private keys are restored!
+
+#### Recovery Path 2: If you do NOT have any backups
+If you have no backup file and forgot your passphrase, you must start from scratch:
+1. Delete the local `vault.json` database file from your computer (see **Part 6, Section A** for its exact path).
+2. Launch the Key Issuer app.
+3. Select a **new Master Passphrase** and click Create (this generates 3 fresh keys).
+4. Click **"Export license-keys.js"** to save the new public keys into your `server/` folder.
+5. Double-click **`rebuild.bat`** to compile the new server installer.
+*⚠️ Crucial Warning: Because you have brand-new keys, any existing customer servers already in the field cannot be upgraded or re-licensed with your new codes until they are upgraded to this new server installer.*
+
+---
+
+## Part 8: Essential Security Rules for Your Team
 
 To keep your licensing system 100% secure, please make sure your sales and management team follows these three rules:
 
