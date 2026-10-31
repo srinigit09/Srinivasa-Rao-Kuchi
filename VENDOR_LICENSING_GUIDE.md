@@ -193,7 +193,7 @@ If you are rotating employees or updating security and want to set a new passphr
 3. Delete the old local database file (`vault.json`) from your computer (see **Part 6, Section A** for its exact path).
 4. Reopen the Key Issuer app. Since `vault.json` was deleted, it will treat this as a fresh start and ask you to **"Create Keys."**
 5. Enter your **new Master Passphrase** and click Create. (This generates a brand-new set of 3 master keys).
-6. Click **"Export license-keys.js"** to save the new public keys into your `server/` folder, and double-click **`rebuild.bat`** to package your new customer installer.
+6. Click **"Export license-keys.js"** to save the new public keys into your `server/` folder, and double-click **`rebuild.bat`** (or run **`rebuild.sh`** if on macOS) to package your new customer installer.
 *Note: Any hospital servers already activated in the field will continue to run perfectly. However, future activations will require them to run your new installer.*
 
 ---
@@ -214,7 +214,7 @@ If you have no backup file and forgot your passphrase, you must start from scrat
 2. Launch the Key Issuer app.
 3. Select a **new Master Passphrase** and click Create (this generates 3 fresh keys).
 4. Click **"Export license-keys.js"** to save the new public keys into your `server/` folder.
-5. Double-click **`rebuild.bat`** to compile the new server installer.
+5. Double-click **`rebuild.bat`** (or run **`rebuild.sh`** if on macOS) to compile the new server installer.
 *⚠️ Crucial Warning: Because you have brand-new keys, any existing customer servers already in the field cannot be upgraded or re-licensed with your new codes until they are upgraded to this new server installer.*
 
 ---
@@ -233,7 +233,7 @@ As a business owner, you must have a plan for worst-case scenarios, such as offi
 If your computer is wiped and you have no backups, you can start fresh without disrupting active clients:
 
 1. **Start Fresh on a New Computer:** Open the Key Issuer app on a new computer, choose a new Master Passphrase, and let it generate a **brand-new set of 3 keypairs**.
-2. **Update Your Installer:** Export these new public keys into your server code and run **`rebuild.bat`** to compile a fresh installer. All *new* hospital customers will be deployed under these new keys.
+2. **Update Your Installer:** Export these new public keys into your server code and run **`rebuild.bat`** (or run **`rebuild.sh`** if on macOS) to compile a fresh installer. All *new* hospital customers will be deployed under these new keys.
 3. **Upgrading Old Customers (Only if they need support):** If an old customer under your *lost keys* ever needs to renew their license or reset their password:
    * Send them your newly built installer setup file.
    * They run it as an **in-place upgrade** (it takes 10 seconds, overwriting the system files but keeping their SQLite database, configuration, logs, and history **100% intact**).
