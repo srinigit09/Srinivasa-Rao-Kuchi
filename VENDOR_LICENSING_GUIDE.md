@@ -139,75 +139,45 @@ Before starting, the hospital IT department can customize the server by placing 
 
 ---
 
-## Part 6: Detailed Properties Files & Configuration Guide
-Your system allows full customizability of network connections, database storage, email alerts, and administrative user credentials. These configurations are split into **Raw Properties Files** (for IT setup) and the **Visual Admin Dashboard** (for daily use).
+## Part 6: File Location & Property Configuration Reference
 
-### A. Raw Properties Files (On the Central Server)
-Hospital IT administrators can place these plain-text configuration files in the central server's installation directory (next to `PanicAlarmServer.exe`) to modify settings.
+Here is the exact technical reference guide showing where every configuration, properties, database, and vault file is stored on the system, along with the specific parameters you can edit inside them.
 
-#### 1. `server.env` — Network & Storage Settings
-Open this file in Notepad to configure IP bindings, database paths, and ports:
-* **`HOST` (Updating Server IP Binding):**
-  * *Default:* `0.0.0.0` (Binds the server to **all** network cards on that computer, letting any hospital client PC connect to it).
-  * *Custom:* Change to `127.0.0.1` if you want to block all network access and only allow runs on the local machine for testing.
-* **`PORT` (Updating Server Port):**
-  * *Default:* `4000`.
-  * *Custom:* If port 4000 is occupied by another system, change this line to e.g., `PORT=8080`. (Note: If you change this, your Client Apps must also connect to port `8080`).
-* **`DB_PATH` (Database Location):**
-  * *Default:* Saves to the local computer's secure AppData folder.
-  * *Custom:* Set `DB_PATH=D:\Backups\Database\panic_alarm.db` to save the SQLite database on an external backup drive or network-attached storage (NAS).
+### A. Summary of File Locations (Windows & macOS Paths)
 
-#### 2. `bootstrap.env` — Initial Security & Admin Credentials
-This file is used **only once** when launching the server on a blank database to set up the default accounts:
-* **`ADMIN_USERNAME` (Updating Default Username):** Change this line to set the initial admin account name (e.g., `ADMIN_USERNAME=hospital_root`).
-* **`ADMIN_PASSWORD` (Updating Default Password):** Change this line to set a temporary default password (e.g., `ADMIN_PASSWORD=SeedPass2026!`).
-* **`JWT_SECRET` (Security Token Key):** Uncomment and set this to a long random secret key if you need static token verification across multiple independent server clusters. If left blank, a random key is securely generated for them.
-* *🔒 IT Security Rule: After completing the first-run installation and changing the password in the UI, delete `bootstrap.env` for safety.*
-
----
-
-### B. Visual Admin Dashboard Configuration (No Files Needed!)
-For daily administration, your non-technical users do **not** edit any text files. They can manage credentials and alerts visually:
-
-#### 1. How to Update Admin Username & Password
-1. Log in to the Central Server's **Admin Panel** web interface.
-2. Go to **Settings** / **Change Password**.
-3. Type in the current password, enter the new strong password, and click **Save**.
-4. The database instantly updates, and the old credentials are void.
-
-#### 2. How to Update Client Names, Room IPs, and Contact Emails
-You can customize alert details and routing directly inside the Admin Panel:
-1. Open the Admin Panel and navigate to the **Clients Management** tab.
-2. Click **"Add Client Station"** or click **"Edit"** on an existing station.
-3. You can visually customize the following fields:
-   * **Station Name / User Name:** (e.g., `ER Desk 1`)
-   * **Location / Room Number:** (e.g., `Room 102`)
-   * **Hospital Code:** (e.g., `MERCY-01`)
-   * **System Limit:** Max client allowance limit (e.g., `50`).
-   * **Contact Email (Email Updates):** Type in the staff or IT administrator's email address (e.g., `er-nurse-lead@hospital.com`).
-   * **Email Logs / Email Reports Checkboxes:** Turn on/off whether this specific station should receive automated email alert history and monthly status reports.
-
----
-
-### C. Client-Side Config File (`panic-alarm-config.json`)
-The Client App (`Client.exe`) does not use raw `.env` files. It saves all parameters inside a local JSON file in its AppData profile.
-* **How to configure:** When a client app is launched for the first time, a visual settings window prompts the installer to type the **Server URL**, **Hospital Code**, **Station User Name**, **Room Number**, and **Staff Role** (Doctor, Nurse, etc.).
-* **Automated Deployments:** For mass-rollouts across 100+ computers, hospital IT can simply configure one client PC, copy its generated **`panic-alarm-config.json`** file, and deploy it to the AppData directories of the other 99 computers to configure them instantly!
-
----
-
-### D. Summary of File Locations (Where to Find Them on Windows & macOS)
-When deploying, backing up, or troubleshooting, here is the exact location of every properties, database, configuration, and vault file:
-
-| Component | File name | Purpose | Location on Windows (Default) | Location on macOS (Default) |
+| Component | File Name | Purpose / Description | Location on Windows (Default) | Location on macOS (Default) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Vendor App** | `vault.json` | Stores your encrypted private key pairs. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmKeyIssuer\vault.json` | `/Users/<Username>/Library/Application Support/PanicAlarmKeyIssuer/vault.json` |
-| **Server App** | `server.env` | Customizes port, IP bind, database directory. | Place it directly in the installation folder (next to `PanicAlarmServer.exe`) | Place it directly in the installation folder (next to the main App package) |
-| **Server App** | `bootstrap.env` | Temporary initial admin user/password seed. | Place it directly in the installation folder (next to `PanicAlarmServer.exe`) | Place it directly in the installation folder (next to the main App package) |
-| **Server App** | `panic_alarm.db` | The core SQLite database storing logs, accounts, etc. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmServer\data\panic_alarm.db` | `/Users/<Username>/Library/Application Support/PanicAlarmServer/data/panic_alarm.db` |
-| **Client App** | `panic-alarm-config.json` | Stores the station name, server IP, room, and department. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmClient\panic-alarm-config.json` | `/Users/<Username>/Library/Application Support/PanicAlarmClient/panic-alarm-config.json` |
+| **Vendor App** | `vault.json` | Stores encrypted private signing keys. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmKeyIssuer\vault.json` | `/Users/<Username>/Library/Application Support/PanicAlarmKeyIssuer/vault.json` |
+| **Server App** | `server.env` | Configures port, IP bind, and database directory. | Place directly in the installation folder (next to `PanicAlarmServer.exe`) | Place directly in the installation folder (next to the main App package) |
+| **Server App** | `bootstrap.env` | One-time initial admin username and password seed. | Place directly in the installation folder (next to `PanicAlarmServer.exe`) | Place directly in the installation folder (next to the main App package) |
+| **Server App** | `panic_alarm.db` | Core SQLite database storing accounts, logs, etc. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmServer\data\panic_alarm.db` | `/Users/<Username>/Library/Application Support/PanicAlarmServer/data/panic_alarm.db` |
+| **Client App** | `panic-alarm-config.json` | Stores client station name, server URL, room, and role. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmClient\panic-alarm-config.json` | `/Users/<Username>/Library/Application Support/PanicAlarmClient/panic-alarm-config.json` |
 
-*💡 Tip for IT Admins: To quickly access the AppData folder on Windows, press `Win + R`, type `%appdata%`, and hit Enter!*
+*💡 Windows Tip: To quickly open the AppData folder on Windows, press `Win + R`, type `%appdata%`, and hit Enter.*
+
+---
+
+### B. Property Configuration Reference (What you can edit in the files)
+
+#### 1. `server.env` (Server Network & Database Settings)
+Open this file in Notepad next to the executable to customize server connection properties:
+* **`PORT` (Default: `4000`):** Sets the server's listening port (e.g., `PORT=8080`).
+* **`HOST` (Default: `0.0.0.0`):** Sets network interface binding. `0.0.0.0` binds to all network cards to allow other LAN client machines to connect.
+* **`DB_PATH`:** Overrides database directory location (e.g., `DB_PATH=D:\Backups\Database\panic_alarm.db`).
+
+#### 2. `bootstrap.env` (First-Run Admin Seeding Settings)
+Open this file in Notepad next to the executable to seed initial default credentials on the very first start:
+* **`ADMIN_USERNAME` (Default: `admin`):** Configures the default master user name.
+* **`ADMIN_PASSWORD` (Default: `admin@PanicAlarm2026`):** Configures the default master password.
+* **`JWT_SECRET`:** Configures custom token encryption key signature (leaves blank to auto-generate).
+
+#### 3. `panic-alarm-config.json` (Client Station Properties)
+Used to backup or mass-deploy client configurations. You can configure:
+* **`serverUrl`:** Point to the central server (e.g., `http://192.168.1.50:4000`).
+* **`hospitalCode` / `clientName`:** Hospital identity fields.
+* **`user_name`:** Station identity (e.g., `Nurse Desk 3`).
+* **`room_number` / `system_number`:** Specific location identifiers.
+* **`role`:** Operational staff role (`nurse`, `doctor`, or `other`).
 
 ---
 
