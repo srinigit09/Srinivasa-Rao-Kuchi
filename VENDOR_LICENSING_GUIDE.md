@@ -52,7 +52,7 @@ To maintain absolute security while keeping the business flexible, the keys are 
 *This is your private internal administrative app. Never send this installer to customers.*
 
 ### Step 3.1: Installation & First Launch
-1. On your computer, run **`PanicAlarmKeyIssuer Setup.exe`** (or build and start it using the terminal `cd key-issuer && npm start`).
+1. On your computer, run and install **`PanicAlarmKeyIssuer Setup.exe`** (or open the already installed application).
 2. When the application window opens, it detects if a vault database has been initialized yet.
 3. If this is the **very first launch**, you will be presented with the **Create Master Passphrase** screen.
 
