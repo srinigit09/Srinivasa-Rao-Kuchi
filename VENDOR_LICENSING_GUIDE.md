@@ -151,7 +151,7 @@ Here is the exact technical reference guide showing where every configuration, p
 | **Server App** | `server.env` | Configures port, IP bind, and database directory. | Place directly in the installation folder (next to `PanicAlarmServer.exe`) | Place directly in the installation folder (next to the main App package) |
 | **Server App** | `bootstrap.env` | One-time initial admin username and password seed. | Place directly in the installation folder (next to `PanicAlarmServer.exe`) | Place directly in the installation folder (next to the main App package) |
 | **Server App** | `panic_alarm.db` | Core SQLite database storing accounts, logs, etc. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmServer\data\panic_alarm.db` | `/Users/<Username>/Library/Application Support/PanicAlarmServer/data/panic_alarm.db` |
-| **Client App** | `panic-alarm-config.json` | Stores client station name, server URL, room, and role. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmClient\panic-alarm-config.json` | `/Users/<Username>/Library/Application Support/PanicAlarmClient/panic-alarm-config.json` |
+| **Client App** | `panic-alarm-config.json` | Stores essential server IP / URL connection properties. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmClient\panic-alarm-config.json` | `/Users/<Username>/Library/Application Support/PanicAlarmClient/panic-alarm-config.json` |
 
 *💡 Windows Tip: To quickly open the AppData folder on Windows, press `Win + R`, type `%appdata%`, and hit Enter.*
 
@@ -160,24 +160,21 @@ Here is the exact technical reference guide showing where every configuration, p
 ### B. Property Configuration Reference (What you can edit in the files)
 
 #### 1. `server.env` (Server Network & Database Settings)
-Open this file in Notepad next to the executable to customize server connection properties:
-* **`PORT` (Default: `4000`):** Sets the server's listening port (e.g., `PORT=8080`).
-* **`HOST` (Default: `0.0.0.0`):** Sets network interface binding. `0.0.0.0` binds to all network cards to allow other LAN client machines to connect.
-* **`DB_PATH`:** Overrides database directory location (e.g., `DB_PATH=D:\Backups\Database\panic_alarm.db`).
+Open this file in Notepad next to the executable to customize server launch properties. *Note: These settings cannot be changed via any UI because the server needs them to start in the first place.*
+* **`PORT` (Default: `4000`):** Sets the port the server listens on (e.g., `PORT=8080`).
+* **`HOST` (Default: `0.0.0.0`):** Sets network IP binding. `0.0.0.0` binds to all local network cards, allowing other LAN client machines to connect.
+* **`DB_PATH`:** Overrides database storage folder directory (e.g., `DB_PATH=D:\Backups\Database\panic_alarm.db`).
 
 #### 2. `bootstrap.env` (First-Run Admin Seeding Settings)
-Open this file in Notepad next to the executable to seed initial default credentials on the very first start:
+Open this file in Notepad next to the executable to seed the default system administrator credentials. *Note: These can only be configured via code/properties file to authorize your very first database launch and setup.*
 * **`ADMIN_USERNAME` (Default: `admin`):** Configures the default master user name.
 * **`ADMIN_PASSWORD` (Default: `admin@PanicAlarm2026`):** Configures the default master password.
 * **`JWT_SECRET`:** Configures custom token encryption key signature (leaves blank to auto-generate).
 
-#### 3. `panic-alarm-config.json` (Client Station Properties)
-Used to backup or mass-deploy client configurations. You can configure:
-* **`serverUrl`:** Point to the central server (e.g., `http://192.168.1.50:4000`).
-* **`hospitalCode` / `clientName`:** Hospital identity fields.
-* **`user_name`:** Station identity (e.g., `Nurse Desk 3`).
-* **`room_number` / `system_number`:** Specific location identifiers.
-* **`role`:** Operational staff role (`nurse`, `doctor`, or `other`).
+#### 3. `panic-alarm-config.json` (Client Connection Settings)
+Used to backup or mass-deploy the network configuration required to launch and connect the Client app to the server:
+* **`serverUrl`:** Sets the network IP address and port of the central server (e.g., `http://192.168.1.50:4000`).
+* *Note: Staff details, room numbers, station names, and roles are configured visually inside the application GUI and are NOT managed in raw properties files.*
 
 ---
 
