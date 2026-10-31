@@ -48,26 +48,36 @@ To maintain absolute security while keeping the business flexible, the keys are 
 
 ---
 
-## Part 3: Installer 1 — The Vendor Key Issuer App (`Vendor.exe`)
+## Part 3: Essential Security Rules for Your Team
+
+To keep your licensing system 100% secure, please make sure your sales and management team follows these three rules:
+
+1. **NEVER share the Key Issuer installer or files with anyone outside your company.** This is your company's master signing key.
+2. **NEVER write your Key Issuer master passphrase in an email or plain text file.** If a hacker obtains both your vault file and your passphrase, they can print their own software keys.
+3. **Backup your vault.** If your local computer breaks, you can lose your vault. In the Key Issuer app, backup your 3 keys and store the backup file (`panic-alarm-key-backup.json`) on an offline USB drive in your office safe. You can restore your keys on any new computer by importing this backup.
+
+---
+
+## Part 4: Installer 1 — The Vendor Key Issuer App (`Vendor.exe`)
 *This is your private internal administrative app. Never send this installer to customers.*
 
-### Step 3.1: Installation & First Launch
+### Step 4.1: Installation & First Launch
 1. On your computer, run and install **`PanicAlarmKeyIssuer Setup.exe`** (or open the already installed application).
 2. When the application window opens, it detects if a vault database has been initialized yet.
 3. If this is the **very first launch**, you will be presented with the **Create Master Passphrase** screen.
 
-### Step 3.2: Creating Your Master Passphrase & Keypairs (Done Once)
+### Step 4.2: Creating Your Master Passphrase & Keypairs (Done Once)
 1. Choose a strong, secure passphrase of **at least 12 characters** (e.g., `AlphaOrangeHospital2026!`).
 2. Type it into the input box and click **Create Vault**.
 3. **What happens behind the scenes:** The app immediately runs a math generator that creates **3 unique keypairs** (3 private keys + 3 public keys). It encrypts the private keys with your passphrase and writes them to a secure local database file (`vault.json`).
 4. *⚠️ CRITICAL: Write this passphrase down on a piece of paper and lock it in your office safe. If you lose this passphrase, your encrypted keys are lost forever, and you will not be able to issue any more licenses.*
 
-### Step 3.3: Exporting Public Keys to your Server Code (Done Once)
+### Step 4.3: Exporting Public Keys to your Server Code (Done Once)
 1. Once unlocked, click on the **Export** tab or click **"Export license-keys.js"**.
 2. A file browser will open. Navigate to your development folder's **`server/`** directory and click **Save**.
 3. This writes the public keys into **`server/license-keys.js`** so your server builds will recognize your signature.
 
-### Step 3.4: Daily Procedure — Signing Keys & Generating Activation Codes
+### Step 4.4: Daily Procedure — Signing Keys & Generating Activation Codes
 When a hospital purchases your system and sends you their **Request Code**:
 1. Open your **Key Issuer** app.
 2. Enter your **Master Passphrase** to unlock it.
@@ -79,7 +89,7 @@ When a hospital purchases your system and sends you their **Request Code**:
 5. Click **Generate Activation Code**.
 6. Click **Copy Code** and paste it into an email or message to send back to the hospital.
 
-### Step 3.5: Daily Procedure — Generating password Reset Codes
+### Step 4.5: Daily Procedure — Generating Password Reset Codes
 If a customer forgets their admin password and clicks "Forgot Password" on their server:
 1. They will send you a **Reset Request Code**.
 2. Unlock your **Key Issuer** app.
@@ -90,28 +100,28 @@ If a customer forgets their admin password and clicks "Forgot Password" on their
 
 ---
 
-## Part 4: Installer 2 — The Central Server App (`Server.exe`)
+## Part 5: Installer 2 — The Central Server App (`Server.exe`)
 *This is the central engine installed once on a hospital computer or server room machine.*
 
-### Step 4.1: Installation
+### Step 5.1: Installation
 1. Provide the hospital's IT administrator with the single installer file: **`PanicAlarmServer Setup.exe`**.
 2. The IT administrator runs the installer. It installs the background Node.js processes, SQLite database engines, and an administrative Electron window.
 3. Once the setup finishes, the app launches automatically.
 
-### Step 4.2: Configuring Properties (Optional)
+### Step 5.2: Configuring Properties (Optional)
 Before starting, the hospital IT department can customize the server by placing a plain-text properties file named **`server.env`** in the same folder as the installed program. They can customize:
 * **`PORT` (Default: `4000`):** If they already have another program using Port 4000, they can change this to `5000` or `8080`.
 * **`DB_PATH`:** If they want to save the database on a secure, automated network backup drive (e.g., `D:\HospitalData\panic_alarm.db`) instead of the local hard drive.
 
-### Step 4.3: Getting the Request Code & Activating
+### Step 5.3: Getting the Request Code & Activating
 1. On launch, the server is locked. It displays a window saying: **"Activation Required."**
 2. The screen shows a unique **Request Code** (e.g., `PANIC-REQ-A1B2-C3D4...`).
 3. The IT admin copies this code and sends it to you (the vendor).
-4. You generate the **Activation Code** (using Part 3.4) and send it back to them.
+4. You generate the **Activation Code** (using Part 4.4) and send it back to them.
 5. The IT admin pastes the Activation Code into their lock screen and clicks **Activate**.
 6. The server validates the cryptographic signature with its internal padlock, saves the active license, and unlocks the login screen.
 
-### Step 4.4: First-Time Login & Security Seeding
+### Step 5.4: First-Time Login & Security Seeding
 1. Once activated, the login screen appears.
 2. The server reads the temporary file **`bootstrap.env`** (if provided next to the executable) to find the default admin credentials. If no file is provided, it seeds the default account:
    * **Username:** `admin`
@@ -123,15 +133,15 @@ Before starting, the hospital IT department can customize the server by placing 
 
 ---
 
-## Part 5: Installer 3 — The Client Desktop App (`Client.exe`)
+## Part 6: Installer 3 — The Client Desktop App (`Client.exe`)
 *This is the lightweight panic button application installed on nurse desks, doctor terminals, and reception PCs.*
 
-### Step 5.1: Rollout & Installation
+### Step 6.1: Rollout & Installation
 1. Provide the hospital with the desktop client installer: **`PanicAlarmClient Setup.exe`**.
 2. IT administrators can run this installer on as many individual computers (desks, reception areas, rooms) as they want.
 3. **No licensing or Activation Codes are required on these computers.** They are unlimited and free to install.
 
-### Step 5.2: LAN Network Configuration
+### Step 6.2: LAN Network Configuration
 1. When a staff member launches the **Client App** for the first time, it will ask for the **Server's IP Address**.
 2. The IT administrator simply types in the Central Server's local network IP address and port (e.g., `192.168.1.50:4000`).
 3. The Client App instantly establishes a persistent, secure websocket connection to the Central Server.
@@ -139,7 +149,137 @@ Before starting, the hospital IT department can customize the server by placing 
 
 ---
 
-## Part 6: File Location & Property Configuration Reference
+## Part 7: How to Reset or Change Your Master Passphrase
+
+Because your Master Passphrase is used as a mathematical formula to encrypt your **Private Keys** inside `vault.json`, **your passphrase is the actual security lock**.
+
+This means there is **no "forgot password" reset button, recovery email, or back-door** in the Key Issuer app. If you completely lose your passphrase, the private keys are locked forever.
+
+However, depending on your situation, here is exactly how you can safely **change** or **reset** your setup:
+
+### Scenario A: You know your old passphrase and just want to CHANGE it
+If you are rotating employees or updating security and want to set a new passphrase:
+1. Open the Key Issuer app, unlock it, and make sure you have **exported** and saved offline backups of your active keys (using the **"Backup Key"** buttons).
+2. Close the Key Issuer app.
+3. Delete the old local database file (`vault.json`) from your computer (see **Part 9, Section A** for its exact path).
+4. Reopen the Key Issuer app. Since `vault.json` was deleted, it will treat this as a fresh start and ask you to **"Create Keys."**
+5. Enter your **new Master Passphrase** and click Create. (This generates a brand-new set of 3 master keys).
+6. Click **"Export license-keys.js"** to save the new public keys into your `server/` folder, and double-click **`rebuild.bat`** (or run **`rebuild.sh`** if on macOS) to package your new customer installer.
+*Note: Any hospital servers already activated in the field will continue to run perfectly. However, future activations will require them to run your new installer.*
+
+---
+
+### Scenario B: You FORGOT your passphrase and are locked out
+If you are completely locked out of the Key Issuer app, you must reset your database and follow one of these two recovery paths:
+
+#### Recovery Path 1: If you have an offline Backup File (`panic-alarm-key-backup.json`)
+If you made a backup file before getting locked out, and you still remember the passphrase that was active when you created that backup:
+1. Delete the local `vault.json` database file from your computer (see **Part 9, Section A** for its exact path).
+2. Launch the Key Issuer app and set up a fresh vault with your **new passphrase**.
+3. Go to the **Restore** tab, select your backup JSON file, and type in the passphrase that belongs to that backup.
+4. Your active private keys are restored!
+
+#### Recovery Path 2: If you do NOT have any backups
+If you have no backup file and forgot your passphrase, you must start from scratch:
+1. Delete the local `vault.json` database file from your computer (see **Part 9, Section A** for its exact path).
+2. Launch the Key Issuer app.
+3. Select a **new Master Passphrase** and click Create (this generates 3 fresh keys).
+4. Click **"Export license-keys.js"** to save the new public keys into your `server/` folder.
+5. Double-click **`rebuild.bat`** (or run **`rebuild.sh`** if on macOS) to compile the new server installer.
+*⚠️ Crucial Warning: Because you have brand-new keys, any existing customer servers already in the field cannot be upgraded or re-licensed with your new codes until they are upgraded to this new server installer.*
+
+---
+
+## Part 8: Disaster Recovery & Business Continuity Plan
+
+As a business owner, you must have a plan for worst-case scenarios, such as office fires, local computer hard drive failures, or the complete loss of your Master Passphrase. Here is how your system is pre-engineered to withstand these disasters:
+
+### A. What happens to your existing hospital clients if your computer crashes?
+* **They are 100% unaffected.**
+* Because your licensing system is **fully offline** (the Central Server does *not* ping your office over the internet to check its license), active hospital servers will continue to run with **zero downtime or interruptions**. They can still trigger alarms, log events, and log in to their panels normally.
+
+---
+
+### B. The 3-Step Recovery Plan (If you completely lose your keys and backups)
+If your computer is wiped and you have no backups, you can start fresh without disrupting active clients:
+
+1. **Start Fresh on a New Computer:** Open the Key Issuer app on a new computer, choose a new Master Passphrase, and let it generate a **brand-new set of 3 keypairs**.
+2. **Update Your Installer:** Export these new public keys into your server code and run **`rebuild.bat`** (or run **`rebuild.sh`** if on macOS) to compile a fresh installer. All *new* hospital customers will be deployed under these new keys.
+3. **Upgrading Old Customers (Only if they need support):** If an old customer under your *lost keys* ever needs to renew their license or reset their password:
+   * Send them your newly built installer setup file.
+   * They run it as an **in-place upgrade** (it takes 10 seconds, overwriting the system files but keeping their SQLite database, configuration, logs, and history **100% intact**).
+   * Their server now instantly trusts your new keys. You can now copy their Request Code, sign it in your new Key Issuer, and activate them remotely!
+
+---
+
+### C. The "Rule of Threes" Backup Strategy (Preventing Disasters)
+Your Key Issuer's backup file (`panic-alarm-key-backup.json`) is **heavily encrypted** using state-of-the-art cryptography (scrypt + AES-256-GCM) with your Master Passphrase. This means the file is mathematically impossible to read without knowing your passphrase.
+
+Because the file is 100% secure, you should store copies of your backup file in **three different locations**:
+1. **On your primary workstation** (inside your local app database).
+2. **On a physical USB drive** locked in your office safe.
+3. **On your company's secure cloud storage** (such as OneDrive, Google Drive, iCloud, or a secure password manager like 1Password or Bitwarden). Even if the cloud account is compromised, hackers only get a heavily encrypted file that they cannot open.
+
+*By adhering to this backup strategy, you are 100% immune to hardware failures, office fires, or lost files!*
+
+---
+
+## Part 9: FAQ — The Keys Screen
+
+This section answers common questions about the buttons on the **Keys** tab of the Key Issuer app.
+
+### Q1: What does "Backup…" do?
+Think of it as **photocopying your key and locking the copy in a safe.**
+
+Clicking **Backup…** saves an encrypted file (e.g., `panic-alarm-key-2-backup.json`) to wherever you choose. The private key inside that file is locked with your Master Passphrase — nobody can read it without knowing your passphrase. Save this file on an offline USB drive and lock it away.
+
+> **Do this for every key, every time you generate a new vault.**
+
+### Q2: If we click "Backup…" on the Active key (Key 1), what happens?
+**Nothing changes.** Key 1 stays on your computer, fully active. You can keep issuing codes as normal.
+
+You are simply making an **offline copy** in case your computer breaks or is stolen. If that ever happens, you bring the backup file to a new computer and restore Key 1 from it so you can sign codes again straight away.
+
+> Note: Key 1 has no "Remove private part" button — the app deliberately prevents you from accidentally deleting your active signing key.
+
+### Q3: What does "Remove private part" do?
+It **deletes the private half of a spare key from this computer**, leaving only the public key behind.
+
+You would do this for Key 2 and Key 3 after you have backed them up. Here is why that is smart:
+
+* Spare keys sit idle — you only need them if Key 1 is ever compromised.
+* If a hacker steals your laptop, they find **zero trace** of Key 2 or Key 3.
+* The private keys are safe offline on your USB backup.
+
+To use a spare key later, simply restore it from its backup file first (see Q4).
+
+### Q4: What does "Restore a key from backup" do?
+It **brings a key's private part back** from a backup file onto your computer.
+
+**When would you use this?**
+- Key 2 or 3 was removed via "Remove private part" for offline safety, but now you need to switch to it (e.g., Key 1 was leaked).
+- You are on a new computer and want to restore Key 1 so you can issue codes again.
+
+**How it works:**
+1. Click **"Restore a key from backup"**.
+2. Select the backup `.json` file.
+3. Enter your Master Passphrase.
+4. Done — the key's private part is back on this computer.
+
+For spare keys, you can then click **"Use this key"** to make it your new active signing key.
+
+### Q5: Can we have 9 keys instead of 3 key pairs?
+**Technically yes, but 3 is the right number.**
+
+- You only need to rotate keys if one is ever leaked or compromised — a rare event in a professionally run app.
+- 3 keys already gives you **two full emergency rotations** without ever shipping a new server installer to customers.
+- Adding more keys (e.g., 9) just means more backups to manage and a larger public-key file in your server build — with no real security benefit.
+
+**Stick with 3.**
+
+---
+
+## Part 10: File Location & Property Configuration Reference
 
 Here is the exact technical reference guide showing where every configuration, properties, database, and vault file is stored on the system, along with the specific parameters you can edit inside them.
 
@@ -175,88 +315,3 @@ Open this file in Notepad next to the executable to seed the default system admi
 Used to backup or mass-deploy the network configuration required to launch and connect the Client app to the server:
 * **`serverUrl`:** Sets the network IP address and port of the central server (e.g., `http://192.168.1.50:4000`).
 * *Note: Staff details, room numbers, station names, and roles are configured visually inside the application GUI and are NOT managed in raw properties files.*
-
----
-
-## Part 7: How to Reset or Change Your Master Passphrase
-
-Because your Master Passphrase is used as a mathematical formula to encrypt your **Private Keys** inside `vault.json`, **your passphrase is the actual security lock**.
-
-This means there is **no "forgot password" reset button, recovery email, or back-door** in the Key Issuer app. If you completely lose your passphrase, the private keys are locked forever.
-
-However, depending on your situation, here is exactly how you can safely **change** or **reset** your setup:
-
-### Scenario A: You know your old passphrase and just want to CHANGE it
-If you are rotating employees or updating security and want to set a new passphrase:
-1. Open the Key Issuer app, unlock it, and make sure you have **exported** and saved offline backups of your active keys (using the **"Backup Key"** buttons).
-2. Close the Key Issuer app.
-3. Delete the old local database file (`vault.json`) from your computer (see **Part 6, Section A** for its exact path).
-4. Reopen the Key Issuer app. Since `vault.json` was deleted, it will treat this as a fresh start and ask you to **"Create Keys."**
-5. Enter your **new Master Passphrase** and click Create. (This generates a brand-new set of 3 master keys).
-6. Click **"Export license-keys.js"** to save the new public keys into your `server/` folder, and double-click **`rebuild.bat`** (or run **`rebuild.sh`** if on macOS) to package your new customer installer.
-*Note: Any hospital servers already activated in the field will continue to run perfectly. However, future activations will require them to run your new installer.*
-
----
-
-### Scenario B: You FORGOT your passphrase and are locked out
-If you are completely locked out of the Key Issuer app, you must reset your database and follow one of these two recovery paths:
-
-#### Recovery Path 1: If you have an offline Backup File (`panic-alarm-key-backup.json`)
-If you made a backup file before getting locked out, and you still remember the passphrase that was active when you created that backup:
-1. Delete the local `vault.json` database file from your computer (see **Part 6, Section A** for its exact path).
-2. Launch the Key Issuer app and set up a fresh vault with your **new passphrase**.
-3. Go to the **Restore** tab, select your backup JSON file, and type in the passphrase that belongs to that backup.
-4. Your active private keys are restored!
-
-#### Recovery Path 2: If you do NOT have any backups
-If you have no backup file and forgot your passphrase, you must start from scratch:
-1. Delete the local `vault.json` database file from your computer (see **Part 6, Section A** for its exact path).
-2. Launch the Key Issuer app.
-3. Select a **new Master Passphrase** and click Create (this generates 3 fresh keys).
-4. Click **"Export license-keys.js"** to save the new public keys into your `server/` folder.
-5. Double-click **`rebuild.bat`** (or run **`rebuild.sh`** if on macOS) to compile the new server installer.
-*⚠️ Crucial Warning: Because you have brand-new keys, any existing customer servers already in the field cannot be upgraded or re-licensed with your new codes until they are upgraded to this new server installer.*
-
----
-
-## Part 8: Disaster Recovery & Business Continuity Plan
-
-As a business owner, you must have a plan for worst-case scenarios, such as office fires, local computer hard drive failures, or the complete loss of your Master Passphrase. Here is how your system is pre-engineered to withstand these disasters:
-
-### A. What happens to your existing hospital clients if your computer crashes?
-* **They are 100% unaffected.**
-* Because your licensing system is **fully offline** (the Central Server does *not* ping your office over the internet to check its license), active hospital servers will continue to run with **zero downtime or interruptions**. They can still trigger alarms, log events, and log in to their panels normally.
-
----
-
-### B. The 3-Step Recovery Plan (If you completely lose your keys and backups)
-If your computer is wiped and you have no backups, you can start fresh without disrupting active clients:
-
-1. **Start Fresh on a New Computer:** Open the Key Issuer app on a new computer, choose a new Master Passphrase, and let it generate a **brand-new set of 3 keypairs**.
-2. **Update Your Installer:** Export these new public keys into your server code and run **`rebuild.bat`** (or run **`rebuild.sh`** if on macOS) to compile a fresh installer. All *new* hospital customers will be deployed under these new keys.
-3. **Upgrading Old Customers (Only if they need support):** If an old customer under your *lost keys* ever needs to renew their license or reset their password:
-   * Send them your newly built installer setup file.
-   * They run it as an **in-place upgrade** (it takes 10 seconds, overwriting the system files but keeping their SQLite database, configuration, logs, and history **100% intact**).
-   * Their server now instantly trusts your new keys. You can now copy their Request Code, sign it in your new Key Issuer, and activate them remotely!
-
----
-
-### C. The "Rule of Threes" Backup Strategy (Preventing Disasters)
-Your Key Issuer’s backup file (`panic-alarm-key-backup.json`) is **heavily encrypted** using state-of-the-art cryptography (scrypt + AES-256-GCM) with your Master Passphrase. This means the file is mathematically impossible to read without knowing your passphrase.
-
-Because the file is 100% secure, you should store copies of your backup file in **three different locations**:
-1. **On your primary workstation** (inside your local app database).
-2. **On a physical USB drive** locked in your office safe.
-3. **On your company’s secure cloud storage** (such as OneDrive, Google Drive, iCloud, or a secure password manager like 1Password or Bitwarden). Even if the cloud account is compromised, hackers only get a heavily encrypted file that they cannot open.
-
-*By adhering to this backup strategy, you are 100% immune to hardware failures, office fires, or lost files!*
-
----
-
-## Part 9: Essential Security Rules for Your Team
-
-To keep your licensing system 100% secure, please make sure your sales and management team follows these three rules:
-
-1. **NEVER share the Key Issuer installer or files with anyone outside your company.** This is your company's master signing key.
-2. **NEVER write your Key Issuer master passphrase in an email or plain text file.** If a hacker obtains both your vault file and your passphrase, they can print their own software keys.
-3. **Backup your vault.** If your local computer breaks, you can lose your vault. In the Key Issuer app, backup your 3 keys and store the backup file (`panic-alarm-key-backup.json`) on an offline USB drive in your office safe. You can restore your keys on any new computer by importing this backup.
