@@ -219,7 +219,41 @@ If you have no backup file and forgot your passphrase, you must start from scrat
 
 ---
 
-## Part 8: Essential Security Rules for Your Team
+## Part 8: Disaster Recovery & Business Continuity Plan
+
+As a business owner, you must have a plan for worst-case scenarios, such as office fires, local computer hard drive failures, or the complete loss of your Master Passphrase. Here is how your system is pre-engineered to withstand these disasters:
+
+### A. What happens to your existing hospital clients if your computer crashes?
+* **They are 100% unaffected.**
+* Because your licensing system is **fully offline** (the Central Server does *not* ping your office over the internet to check its license), active hospital servers will continue to run with **zero downtime or interruptions**. They can still trigger alarms, log events, and log in to their panels normally.
+
+---
+
+### B. The 3-Step Recovery Plan (If you completely lose your keys and backups)
+If your computer is wiped and you have no backups, you can start fresh without disrupting active clients:
+
+1. **Start Fresh on a New Computer:** Open the Key Issuer app on a new computer, choose a new Master Passphrase, and let it generate a **brand-new set of 3 keypairs**.
+2. **Update Your Installer:** Export these new public keys into your server code and run **`rebuild.bat`** to compile a fresh installer. All *new* hospital customers will be deployed under these new keys.
+3. **Upgrading Old Customers (Only if they need support):** If an old customer under your *lost keys* ever needs to renew their license or reset their password:
+   * Send them your newly built installer setup file.
+   * They run it as an **in-place upgrade** (it takes 10 seconds, overwriting the system files but keeping their SQLite database, configuration, logs, and history **100% intact**).
+   * Their server now instantly trusts your new keys. You can now copy their Request Code, sign it in your new Key Issuer, and activate them remotely!
+
+---
+
+### C. The "Rule of Threes" Backup Strategy (Preventing Disasters)
+Your Key Issuer’s backup file (`panic-alarm-key-backup.json`) is **heavily encrypted** using state-of-the-art cryptography (scrypt + AES-256-GCM) with your Master Passphrase. This means the file is mathematically impossible to read without knowing your passphrase.
+
+Because the file is 100% secure, you should store copies of your backup file in **three different locations**:
+1. **On your primary workstation** (inside your local app database).
+2. **On a physical USB drive** locked in your office safe.
+3. **On your company’s secure cloud storage** (such as OneDrive, Google Drive, iCloud, or a secure password manager like 1Password or Bitwarden). Even if the cloud account is compromised, hackers only get a heavily encrypted file that they cannot open.
+
+*By adhering to this backup strategy, you are 100% immune to hardware failures, office fires, or lost files!*
+
+---
+
+## Part 9: Essential Security Rules for Your Team
 
 To keep your licensing system 100% secure, please make sure your sales and management team follows these three rules:
 
