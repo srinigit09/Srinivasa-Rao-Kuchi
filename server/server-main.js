@@ -6,12 +6,12 @@
  * This wraps the Node.js panic alarm server in a desktop app.
  * On launch:
  *  1. Shows a login screen (username + password)
- *  2. Starts the built-in HTTP/Socket.IO server on port 4000
+ *  2. Starts the built-in HTTP/Socket.IO server (port read from server.env)
  *  3. Opens the admin panel in a BrowserWindow after login
  *  4. System tray icon keeps the server running even when window is closed
  */
 
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require('electron');
 const path   = require('path');
 const fs     = require('fs');
 const http   = require('http');
@@ -50,8 +50,7 @@ try {
 }
 
 // ── Paths ─────────────────────────────────────────────────────────────────────
-const USER_DATA   = app.getPath('userData');
-const CONFIG_FILE = path.join(USER_DATA, 'server-config.json');
+const USER_DATA = app.getPath('userData');
 
 // When packaged, all server files sit alongside server-main.js in app.asar (__dirname)
 // In dev, __dirname is the server/ folder itself — same path either way
@@ -65,15 +64,6 @@ let mainWindow    = null;
 let tray          = null;
 let serverPort    = 0;
 let serverStarted = false;
-
-// ── Config persistence ────────────────────────────────────────────────────────
-function loadConfig() {
-  try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { return {}; }
-}
-function saveConfig(cfg) {
-  if (!fs.existsSync(USER_DATA)) fs.mkdirSync(USER_DATA, { recursive: true });
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2));
-}
 
 // ── Start embedded server ─────────────────────────────────────────────────────
 function startEmbeddedServer() {
@@ -279,7 +269,6 @@ function attemptLogin(username, password) {
 
 // ── IPC: login from login window — retries until server is ready ──────────────
 ipcMain.handle('server-login', async (_, { username, password }) => {
-  const MAX_WAIT_MS  = 12000;   // give up after 12 s
   const RETRY_DELAYS = [300, 600, 1000, 1500, 2000, 2000, 2000, 1600]; // total ≈ 12 s
   let attempt = 0;
 
