@@ -56,7 +56,7 @@ const app    = express();
 const server = http.createServer(app);
 const io     = new Server(server, { cors: { origin: '*', methods: ['GET','POST','PUT','DELETE'] } });
 
-const PORT = parseInt(process.env.PORT || '4000', 10);
+const PORT = parseInt(process.env.PORT || '', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 
 // ── Middleware ─────────────────────────────────────────────────

@@ -156,11 +156,16 @@ if (ghostClients.changes > 0)
 const seedAdmin = db.transaction(() => {
   const existing = db.prepare('SELECT id FROM admin_users LIMIT 1').get();
   if (!existing) {
-    const password = process.env.ADMIN_PASSWORD || 'admin@PanicAlarm2026';
+    const username = process.env.ADMIN_USERNAME;
+    const password = process.env.ADMIN_PASSWORD;
+    if (!username || !password) {
+      console.warn('[DB] ADMIN_USERNAME and ADMIN_PASSWORD must be set before first launch. No admin account seeded.');
+      return;
+    }
     const hash = bcrypt.hashSync(password, 12);
     db.prepare('INSERT INTO admin_users (username, password) VALUES (?, ?)')
-      .run(process.env.ADMIN_USERNAME || 'admin', hash);
-    console.log('[DB] Admin user seeded — username: admin  password: admin@PanicAlarm2026');
+      .run(username, hash);
+    console.log(`[DB] Admin user seeded — username: ${username}`);
     console.log('[DB] IMPORTANT: Change this password after first login!');
   }
 });

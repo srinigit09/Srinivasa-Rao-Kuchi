@@ -67,7 +67,7 @@ To keep your licensing system 100% secure, please make sure your sales and manag
 3. If this is the **very first launch**, you will be presented with the **Create Master Passphrase** screen.
 
 ### Step 4.2: Creating Your Master Passphrase & Keypairs (Done Once)
-1. Choose a strong, secure passphrase of **at least 12 characters** (e.g., `AlphaOrangeHospital2026!`).
+1. Choose a strong, secure passphrase of **at least 12 characters** (e.g., `<YourWord><YourNumber><Symbol>`).
 2. Type it into the input box and click **Create Vault**.
 3. **What happens behind the scenes:** The app immediately runs a math generator that creates **3 unique keypairs** (3 private keys + 3 public keys). It encrypts the private keys with your passphrase and writes them to a secure local database file (`vault.json`).
 4. *⚠️ CRITICAL: Write this passphrase down on a piece of paper and lock it in your office safe. If you lose this passphrase, your encrypted keys are lost forever, and you will not be able to issue any more licenses.*
@@ -83,7 +83,7 @@ When a hospital purchases your system and sends you their **Request Code**:
 2. Enter your **Master Passphrase** to unlock it.
 3. Go to the **"Issue License"** tab.
 4. Fill in the following:
-   * **Customer Name:** Enter the hospital name (e.g., `Mercy General Hospital`).
+   * **Customer Name:** Enter the hospital or clinic name.
    * **Request Code:** Paste the exact Request Code they copied from their server screen.
    * **Expiration Date (Optional):** Pick a date if they purchased a 1-year or 3-year term. Leave it blank if they bought a **permanent** license.
 5. Click **Generate Activation Code**.
@@ -110,7 +110,7 @@ If a customer forgets their admin password and clicks "Forgot Password" on their
 
 ### Step 5.2: Configuring Properties (Optional)
 Before starting, the hospital IT department can customize the server by placing a plain-text properties file named **`server.env`** in the same folder as the installed program. They can customize:
-* **`PORT` (Default: `4000`):** If they already have another program using Port 4000, they can change this to `5000` or `8080`.
+* **`PORT`:** Set the port the server listens on. Check which ports are free on the server machine and pick one (e.g. `5000`, `8080`).
 * **`DB_PATH`:** If they want to save the database on a secure, automated network backup drive (e.g., `D:\HospitalData\panic_alarm.db`) instead of the local hard drive.
 
 ### Step 5.3: Getting the Request Code & Activating
@@ -123,12 +123,12 @@ Before starting, the hospital IT department can customize the server by placing 
 
 ### Step 5.4: First-Time Login & Security Seeding
 1. Once activated, the login screen appears.
-2. The server reads the temporary file **`bootstrap.env`** (if provided next to the executable) to find the default admin credentials. If no file is provided, it seeds the default account:
-   * **Username:** `admin`
-   * **Password:** `admin@PanicAlarm2026`
-3. The admin logs in using these credentials.
-4. **Forced Password Change:** On successful first login, the application immediately forces the admin to type a strong, custom administrator password. 
-5. Once saved, the default password is encrypted and overwritten in the database.
+2. The server reads the **`bootstrap.env`** file (placed next to the executable before first launch) to find the admin credentials you set. The file must contain:
+   * **`ADMIN_USERNAME`** — the username you choose for the admin account.
+   * **`ADMIN_PASSWORD`** — the password you choose for the admin account.
+3. The admin logs in using those credentials.
+4. **Forced Password Change:** On successful first login, the application immediately forces the admin to type a new, strong administrator password.
+5. Once saved, the seeded password is overwritten and the `bootstrap.env` file has no further effect.
 6. *🔒 IT Security Rule: After completing this first-run setup, the IT administrator should completely delete the `bootstrap.env` file from their computer for safety.*
 
 ---
@@ -143,7 +143,7 @@ Before starting, the hospital IT department can customize the server by placing 
 
 ### Step 6.2: LAN Network Configuration
 1. When a staff member launches the **Client App** for the first time, it will ask for the **Server's IP Address**.
-2. The IT administrator simply types in the Central Server's local network IP address and port (e.g., `192.168.1.50:4000`).
+2. The IT administrator types in the Central Server's local network IP address and port. The IP and port are shown on the server app's login screen once the server is running (e.g. `http://<server-ip>:<port>`).
 3. The Client App instantly establishes a persistent, secure websocket connection to the Central Server.
 4. The client is now fully active, showing the green status indicator. Staff can now trigger alarms, view location floor plans, and receive emergency notification alerts.
 
@@ -301,17 +301,17 @@ Here is the exact technical reference guide showing where every configuration, p
 
 #### 1. `server.env` (Server Network & Database Settings)
 Open this file in Notepad next to the executable to customize server launch properties. *Note: These settings cannot be changed via any UI because the server needs them to start in the first place.*
-* **`PORT` (Default: `4000`):** Sets the port the server listens on (e.g., `PORT=8080`).
-* **`HOST` (Default: `0.0.0.0`):** Sets network IP binding. `0.0.0.0` binds to all local network cards, allowing other LAN client machines to connect.
-* **`DB_PATH`:** Overrides database storage folder directory (e.g., `DB_PATH=D:\Backups\Database\panic_alarm.db`).
+* **`PORT`:** Sets the port the server listens on. Choose any free port on the server machine (e.g., `PORT=5000`).
+* **`HOST`:** Sets network IP binding. Use `0.0.0.0` to allow client apps on other network computers to connect, or `127.0.0.1` for localhost only.
+* **`DB_PATH`:** Overrides the database storage path (e.g., `DB_PATH=D:\Backups\Database\panic_alarm.db`).
 
 #### 2. `bootstrap.env` (First-Run Admin Seeding Settings)
-Open this file in Notepad next to the executable to seed the default system administrator credentials. *Note: These can only be configured via code/properties file to authorize your very first database launch and setup.*
-* **`ADMIN_USERNAME` (Default: `admin`):** Configures the default master user name.
-* **`ADMIN_PASSWORD` (Default: `admin@PanicAlarm2026`):** Configures the default master password.
-* **`JWT_SECRET`:** Configures custom token encryption key signature (leaves blank to auto-generate).
+Open this file in Notepad next to the executable to set the first administrator account. *Note: These values are only used on the very first launch to create the admin account.*
+* **`ADMIN_USERNAME`:** The username for the admin account (choose your own).
+* **`ADMIN_PASSWORD`:** The password for the admin account (choose a strong password).
+* **`JWT_SECRET`:** Optional custom token signing secret. Leave commented out to auto-generate.
 
 #### 3. `panic-alarm-config.json` (Client Connection Settings)
-Used to backup or mass-deploy the network configuration required to launch and connect the Client app to the server:
-* **`serverUrl`:** Sets the network IP address and port of the central server (e.g., `http://192.168.1.50:4000`).
+Used to back up or mass-deploy the network configuration required to launch and connect the Client app to the server:
+* **`serverUrl`:** The server URL shown on the server app's login screen after startup (format: `http://<server-ip>:<port>`).
 * *Note: Staff details, room numbers, station names, and roles are configured visually inside the application GUI and are NOT managed in raw properties files.*

@@ -63,7 +63,7 @@ function getServerRoot() {
 let loginWindow   = null;
 let mainWindow    = null;
 let tray          = null;
-let serverPort    = 4000;
+let serverPort    = 0;
 let serverStarted = false;
 
 // ── Config persistence ────────────────────────────────────────────────────────
@@ -80,12 +80,13 @@ function startEmbeddedServer() {
   if (serverStarted) return;
   serverStarted = true;
   try {
-    // Port: read from environment if configured, otherwise use default
-    if (process.env.PORT) {
-      serverPort = parseInt(process.env.PORT, 10) || 4000;
-    } else {
-      process.env.PORT = String(serverPort);
+    // Port: must be set via server.env or bootstrap.env
+    serverPort = parseInt(process.env.PORT || '', 10) || 0;
+    if (!serverPort) {
+      console.error('[Server] PORT is not configured. Create a server.env file with PORT=<number> next to the executable.');
+      return;
     }
+    process.env.PORT = String(serverPort);
 
     // Host
     if (!process.env.HOST) {

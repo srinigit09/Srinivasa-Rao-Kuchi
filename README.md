@@ -17,7 +17,7 @@ Two self-contained installers — double-click and use.
 │  ┌─────────────────────────────────────────────────────────────┐ │
 │  │          SERVER PC  (one dedicated machine)                 │ │
 │  │  PanicAlarmServer.dmg / .exe  — installable desktop app    │ │
-│  │  Embedded HTTP + WebSocket server  ·  Port 4000            │ │
+│  │  Embedded HTTP + WebSocket server  ·  Port set via server.env │ │
 │  │  SQLite database  ·  Admin panel (web UI in window)        │ │
 │  │  ✅ Client app can also run here (role = Staff/Other)       │ │
 │  └──────────────────────────────────┬──────────────────────────┘ │
@@ -104,9 +104,9 @@ node server.js          # bare Node.js (terminal)
 npm run start-desktop   # Electron desktop app (with login window)
 ```
 
-Admin panel: `http://localhost:4000/admin/`
+Admin panel: `http://localhost:<PORT>/admin/`
 Two-step access: (1) activate the server once on first launch with a vendor Activation Code (see `key-issuer/`), then (2) sign in with the admin account.
-Default admin login: `admin` / `admin@PanicAlarm2026` (a new password is required at first sign-in).
+The admin credentials are set via `bootstrap.env` before first launch (see `server/bootstrap.env.example`). A new password is required at first sign-in.
 The activation screen is part of the desktop app (`npm run start-desktop`); a bare `node server.js` has no screen to enter the code.
 
 ### Client
@@ -166,7 +166,7 @@ Role can be changed any time via **tray icon → My Details**.
 
 ## 🔐 Admin Panel (Server App)
 
-Access via the server desktop app login screen, or directly at `http://<server-ip>:4000/admin/`
+Access via the server desktop app login screen, or directly at `http://<server-ip>:<port>/admin/`
 
 | Section | Purpose |
 |---|---|
@@ -184,7 +184,7 @@ Access via the server desktop app login screen, or directly at `http://<server-i
 - User ID must be unique per hospital — enforced at registration
 - Passwords are bcrypt-hashed (cost 12)
 - JWT secret in `server/.env` — never commit to git
-- Designed for **LAN/intranet only** — do not expose port 4000 to the internet
+- Designed for **LAN/intranet only** — do not expose the server port to the internet
 - Server app requires admin login before the admin panel is accessible
 
 ---

@@ -9,7 +9,7 @@ const ADMIN_EXPIRY  = '8h';
 const CLIENT_EXPIRY = '365d';  // Client tokens last 1 year — no re-login needed
 
 // Seed password from db.js — while an admin still has it, they must change it before doing anything else
-const DEFAULT_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin@PanicAlarm2026';
+const DEFAULT_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 
 // JWT signing secret: JWT_SECRET from the environment if it is a real value, otherwise a random
 // secret generated on first run and kept in the database (never a hardcoded default).
