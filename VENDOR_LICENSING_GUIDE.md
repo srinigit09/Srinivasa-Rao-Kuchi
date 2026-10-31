@@ -196,6 +196,21 @@ The Client App (`Client.exe`) does not use raw `.env` files. It saves all parame
 
 ---
 
+### D. Summary of File Locations (Where to Find Them on Windows & macOS)
+When deploying, backing up, or troubleshooting, here is the exact location of every properties, database, configuration, and vault file:
+
+| Component | File name | Purpose | Location on Windows (Default) | Location on macOS (Default) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Vendor App** | `vault.json` | Stores your encrypted private key pairs. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmKeyIssuer\vault.json` | `/Users/<Username>/Library/Application Support/PanicAlarmKeyIssuer/vault.json` |
+| **Server App** | `server.env` | Customizes port, IP bind, database directory. | Place it directly in the installation folder (next to `PanicAlarmServer.exe`) | Place it directly in the installation folder (next to the main App package) |
+| **Server App** | `bootstrap.env` | Temporary initial admin user/password seed. | Place it directly in the installation folder (next to `PanicAlarmServer.exe`) | Place it directly in the installation folder (next to the main App package) |
+| **Server App** | `panic_alarm.db` | The core SQLite database storing logs, accounts, etc. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmServer\data\panic_alarm.db` | `/Users/<Username>/Library/Application Support/PanicAlarmServer/data/panic_alarm.db` |
+| **Client App** | `panic-alarm-config.json` | Stores the station name, server IP, room, and department. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmClient\panic-alarm-config.json` | `/Users/<Username>/Library/Application Support/PanicAlarmClient/panic-alarm-config.json` |
+
+*💡 Tip for IT Admins: To quickly access the AppData folder on Windows, press `Win + R`, type `%appdata%`, and hit Enter!*
+
+---
+
 ## Part 7: Essential Security Rules for Your Team
 
 To keep your licensing system 100% secure, please make sure your sales and management team follows these three rules:
