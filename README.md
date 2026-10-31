@@ -61,7 +61,7 @@ Two self-contained installers — double-click and use.
 ## 📁 Folder Structure
 
 ```
-NewApp/
+panic-alarm/
 ├── server/                      ← Server app source
 │   ├── server-main.js           ← Electron main (desktop app wrapper)
 │   ├── server-preload.js        ← IPC bridge for login window
@@ -79,7 +79,6 @@ NewApp/
 │   ├── preload.js               ← Secure IPC bridge
 │   ├── package.json
 │   ├── renderer/
-│   │   ├── setup.html           ← First-run setup wizard (role + details)
 │   │   ├── alarm_button.html    ← Doctor's floating panic button
 │   │   ├── alert_popup.html     ← Alert popup (Staff/Nurse/Other)
 │   │   └── settings.html        ← Edit my details (tray menu)
@@ -87,7 +86,7 @@ NewApp/
 │       ├── icon.png
 │       └── icon.icns
 │
-└── PANIC_ALARM_SESSION_HISTORY.md  ← Full dev history (keyword: PANICALARM_SESSION)
+└── key-issuer/                  ← Vendor Key Issuer app (never ships to customers)
 ```
 
 ---
