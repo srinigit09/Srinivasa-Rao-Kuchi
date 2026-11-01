@@ -335,3 +335,89 @@ Open this file in Notepad next to the executable to set the first administrator 
 Used to back up or mass-deploy the network configuration required to launch and connect the Client app to the server:
 * **`serverUrl`:** The server URL shown on the server app's login screen after startup (format: `http://<server-ip>:<port>`).
 * *Note: Staff details, room numbers, station names, and roles are configured visually inside the application GUI and are NOT managed in raw properties files.*
+
+---
+
+## Part 11: Rebuilding the Installers (For Code or Configuration Changes)
+
+Most day-to-day operations — key rotation, port changes, admin credentials — do **not** require a rebuild. They are handled by dropping a file or editing a `.env` file next to the executable.
+
+A rebuild is only needed when the **application code itself changes** (e.g. a new feature, a bug fix, or a UI update delivered by your development team).
+
+---
+
+### When you DO need to rebuild
+
+| Situation | Rebuild needed? | What to do instead |
+| :--- | :---: | :--- |
+| Rotate signing keys (Key 1 → Key 2) | ❌ No | Export `license-keys.js` from Key Issuer, drop next to server exe, restart |
+| Change server port or host | ❌ No | Edit `server.env` next to the server exe, restart |
+| Change admin username / password (first run) | ❌ No | Edit `bootstrap.env` next to the server exe before first launch |
+| Move Key Issuer to a new computer | ❌ No | Copy `vault.json` to the new machine (see Part 8B) |
+| Application code update (new features, bug fixes) | ✅ Yes | Run the rebuild script below |
+| UI or behaviour change from your dev team | ✅ Yes | Run the rebuild script below |
+
+---
+
+### How to rebuild — Server App
+
+The `rebuild` script at the root of the project folder handles dependencies and packaging in one step.
+
+**On Windows** — double-click `rebuild.bat`
+
+**On macOS** — open Terminal, navigate to the project folder, and run:
+```
+bash rebuild.sh
+```
+
+The new installer will appear in:
+* **Windows:** `server/dist/PanicAlarmServer Setup <version>.exe`
+* **macOS:** `server/dist/PanicAlarmServer-<version>-arm64.dmg`
+
+After distributing the new installer, customers run it as an **in-place upgrade** — their database, logs, and configuration are fully preserved.
+
+---
+
+### How to rebuild — Client App
+
+If the client app code changes, build it from the project folder:
+
+**On Windows:**
+```
+cd client
+npm install
+npm run build-win
+```
+
+**On macOS:**
+```
+cd client
+npm install
+npm run build-mac
+```
+
+The new installer will appear in `client/dist/`.
+
+---
+
+### How to rebuild — Key Issuer App
+
+If the Key Issuer code changes, build it from the project folder:
+
+**On Windows:**
+```
+cd key-issuer
+npm install
+npm run build-win
+```
+
+**On macOS:**
+```
+cd key-issuer
+npm install
+npm run build-mac
+```
+
+The new installer will appear in `key-issuer/dist/`.
+
+> ⚠️ **Important:** Rebuilding the Key Issuer does **not** affect `vault.json`. Your existing keys and issued-code history are stored separately in AppData and are untouched by a reinstall.
