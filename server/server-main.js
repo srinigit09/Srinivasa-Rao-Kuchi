@@ -70,13 +70,9 @@ function startEmbeddedServer() {
   if (serverStarted) return;
   serverStarted = true;
   try {
-    // Port: must be set via server.env or bootstrap.env
-    serverPort = parseInt(process.env.PORT || '', 10) || 0;
-    if (!serverPort) {
-      console.error('[Server] PORT is not configured. Create a server.env file with PORT=<number> next to the executable.');
-      return;
-    }
-    process.env.PORT = String(serverPort);
+    // Port: use configured value, or 0 to let the OS pick a free port automatically.
+    const configuredPort = parseInt(process.env.PORT || '0', 10) || 0;
+    process.env.PORT = String(configuredPort);
 
     // Host
     if (!process.env.HOST) {
@@ -96,8 +92,15 @@ function startEmbeddedServer() {
       console.error('[Server] Cannot find server.js at:', serverJs);
       return;
     }
-    // Load server module inline (same process — clean for desktop app)
-    require(serverJs);
+    // Load server module inline (same process — clean for desktop app).
+    // server.js writes the actual bound port back to process.env.PORT after listen().
+    const { server: httpServer } = require(serverJs);
+    // Read the actual port once the server has bound (listen callback has already fired).
+    if (httpServer && httpServer.address()) {
+      serverPort = httpServer.address().port;
+    } else {
+      serverPort = parseInt(process.env.PORT || '0', 10) || configuredPort;
+    }
     console.log('[Server] Embedded server started on port', serverPort);
   } catch (e) {
     console.error('[Server] Failed to start embedded server:', e.message);

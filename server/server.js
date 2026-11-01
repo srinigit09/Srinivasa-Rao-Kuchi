@@ -56,7 +56,8 @@ const app    = express();
 const server = http.createServer(app);
 const io     = new Server(server, { cors: { origin: '*', methods: ['GET','POST','PUT','DELETE'] } });
 
-const PORT = parseInt(process.env.PORT || '', 10);
+// PORT: use the configured value, or 0 to let the OS pick any free port automatically.
+const PORT = parseInt(process.env.PORT || '0', 10) || 0;
 const HOST = process.env.HOST || '0.0.0.0';
 
 // ── Middleware ─────────────────────────────────────────────────
@@ -669,7 +670,13 @@ app.use((err, req, res, next) => {
 });
 
 // ── Start ──────────────────────────────────────────────────────
+// Passing PORT=0 tells the OS to assign the next available free port automatically.
 server.listen(PORT, HOST, () => {
+  const bound = server.address();
+  const actualPort = bound ? bound.port : PORT;
+  // Write the actual port back to the environment so other modules can read it.
+  process.env.PORT = String(actualPort);
+
   const ips = Object.values(os.networkInterfaces())
     .flat().filter(i => i && i.family === 'IPv4' && !i.internal).map(i => i.address);
 
@@ -677,9 +684,9 @@ server.listen(PORT, HOST, () => {
   console.log('╔══════════════════════════════════════════════════╗');
   console.log('║   🚨  PANIC ALARM SERVER — RUNNING  🚨           ║');
   console.log('╠══════════════════════════════════════════════════╣');
-  console.log(`║  Port        : ${PORT}`);
+  console.log(`║  Port        : ${actualPort}${PORT === 0 ? '  (auto-assigned)' : ''}`);
   console.log(`║  Intranet IP : ${ips.join(' | ') || 'N/A'}`);
-  console.log(`║  Admin Panel : http://${ips[0] || 'localhost'}:${PORT}/admin/`);
+  console.log(`║  Admin Panel : http://${ips[0] || 'localhost'}:${actualPort}/admin/`);
   console.log('║  DB          : SQLite ./data/panic_alarm.db');
   console.log('╚══════════════════════════════════════════════════╝');
   console.log('');
@@ -687,6 +694,9 @@ server.listen(PORT, HOST, () => {
 
 process.on('SIGINT',  () => { db.close(); process.exit(0); });
 process.on('SIGTERM', () => { db.close(); process.exit(0); });
+
+// Export the http server so server-main.js can read the actual bound port.
+module.exports = { server };
 
 // ── Helpers ────────────────────────────────────────────────────
 function normalizeRole(role) {
