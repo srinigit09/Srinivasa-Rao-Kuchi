@@ -119,6 +119,7 @@ function getLocalIPs() {
 
 // ── Create login window ───────────────────────────────────────────────────────
 function createLoginWindow() {
+  if (!app.isReady()) return;
   if (loginWindow && !loginWindow.isDestroyed()) { loginWindow.focus(); return; }
 
   loginWindow = new BrowserWindow({
@@ -138,6 +139,7 @@ function createLoginWindow() {
 
 // ── Create main admin window ──────────────────────────────────────────────────
 function createMainWindow() {
+  if (!app.isReady()) return;
   if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.focus(); return; }
 
   const { width, height } = require('electron').screen.getPrimaryDisplay().workAreaSize;
@@ -329,6 +331,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
+  if (!app.isReady()) return;
   if (loginWindow && !loginWindow.isDestroyed()) { loginWindow.focus(); return; }
   if (mainWindow && !mainWindow.isDestroyed())   { mainWindow.focus(); return; }
   createLoginWindow();
