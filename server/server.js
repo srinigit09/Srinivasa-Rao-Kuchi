@@ -102,14 +102,38 @@ app.get('/api/public/server-info', (req, res) => {
 });
 
 // ── License / activation ──────────────────────────────────────
-// The server only holds the vendor's PUBLIC keys (license-keys.js): it can verify Activation and
+// The server only holds the vendor's PUBLIC keys: it can verify Activation and
 // Reset Codes but can never create them. See license.js and license-codec.js.
+//
+// Key loading priority:
+//  1. license-keys.js placed next to the executable (runtime override — no rebuild needed)
+//  2. license-keys.js bundled inside the app at build time (fallback)
+function loadPublicKeys() {
+  // In a packaged Electron app, process.execPath points to the .exe / app binary.
+  // In development (node server.js), fall back to __dirname.
+  const execDir = path.dirname(process.execPath);
+  const externalPath = path.join(execDir, 'license-keys.js');
+  if (fs.existsSync(externalPath)) {
+    try {
+      // Delete from require cache first so a restart always picks up the latest file.
+      delete require.cache[require.resolve(externalPath)];
+      const keys = require(externalPath);
+      console.log('[License] Loaded public keys from external file:', externalPath);
+      return keys;
+    } catch (e) {
+      console.warn('[License] Failed to load external license-keys.js, falling back to bundled copy:', e.message);
+    }
+  }
+  console.log('[License] Using bundled public keys (license-keys.js).');
+  return require('./license-keys');
+}
+
 const license = createLicense({
   store: {
     get: (k) => { const r = getSetting.get(k); return r ? r.value : null; },
     set: (k, v) => setSetting.run(k, v),
   },
-  publicKeys: require('./license-keys'),
+  publicKeys: loadPublicKeys(),
 });
 
 // Activation and password-reset routes are only meant for the server's own login window,
