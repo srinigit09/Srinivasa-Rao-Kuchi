@@ -157,9 +157,14 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
   async function loadServerInfo() {
     try {
       const info = await sapi.getServerInfo();
+      const port = info.port;
+      if (!port || port === 0) {
+        document.getElementById('serverBadge').textContent = '⏳ Server starting…';
+        setTimeout(loadServerInfo, 250);
+        return;
+      }
       const ips  = info.ips && info.ips.length ? info.ips : [];
       const primaryIp = ips[0] || null;
-      const port = info.port;
       document.getElementById('serverBadge').textContent =
         primaryIp ? `🟢 Running  ·  ${primaryIp}:${port}` : `🟢 Running  ·  Port ${port}`;
       const allIps = ips.length
@@ -172,6 +177,7 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
         `📋 Copy URL</button>`;
     } catch {
       document.getElementById('serverBadge').textContent = '⏳ Server starting…';
+      setTimeout(loadServerInfo, 300);
     }
   }
 
@@ -180,7 +186,6 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
   }
 
   loadServerInfo();
-  setTimeout(loadServerInfo, 1500);
 
   // ── Activation ─────────────────────────────────────────────────
   function showSection(name) {
@@ -192,6 +197,9 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
   let currentStatus = null;
   async function api(path, options) {
     const info = await sapi.getServerInfo();
+    if (!info.port || info.port === 0) {
+      throw new Error('Server not ready yet');
+    }
     const resp = await fetch(`http://localhost:${info.port}${path}`, options);
     return { resp, data: await resp.json() };
   }
@@ -216,8 +224,9 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
     try {
       const { data } = await api('/api/public/install-status');
       applyStatus(data);
+      loadServerInfo();
     } catch {
-      if (attempt < 20) setTimeout(() => checkActivation(attempt + 1), 500);
+      if (attempt < 40) setTimeout(() => checkActivation(attempt + 1), 300);
       else showErr('Cannot reach server. Please quit and relaunch the app.');
     }
   }

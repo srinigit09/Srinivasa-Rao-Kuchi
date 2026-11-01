@@ -62,8 +62,9 @@ function getServerRoot() {
 let loginWindow   = null;
 let mainWindow    = null;
 let tray          = null;
-let serverPort    = 0;
-let serverStarted = false;
+let serverPort         = 0;
+let serverStarted      = false;
+let httpServerInstance = null;
 
 // ── Start embedded server ─────────────────────────────────────────────────────
 function startEmbeddedServer() {
@@ -95,15 +96,29 @@ function startEmbeddedServer() {
       return;
     }
     // Load server module inline (same process — clean for desktop app).
-    // server.js writes the actual bound port back to process.env.PORT after listen().
     const { server: httpServer } = require(serverJs);
-    // Read the actual port once the server has bound (listen callback has already fired).
-    if (httpServer && httpServer.address()) {
-      serverPort = httpServer.address().port;
+    httpServerInstance = httpServer;
+
+    const readPort = () => {
+      if (httpServerInstance && httpServerInstance.address()) {
+        const addr = httpServerInstance.address();
+        if (addr && typeof addr === 'object' && addr.port) {
+          serverPort = addr.port;
+          return true;
+        }
+      }
+      return false;
+    };
+
+    if (!readPort()) {
+      // If listen callback hasn't fired yet, check again on next tick
+      setTimeout(() => {
+        readPort();
+        console.log('[Server] Embedded server bound on port:', serverPort || process.env.PORT);
+      }, 50);
     } else {
-      serverPort = parseInt(process.env.PORT || '0', 10) || configuredPort;
+      console.log('[Server] Embedded server started on port:', serverPort);
     }
-    console.log('[Server] Embedded server started on port', serverPort);
   } catch (e) {
     console.error('[Server] Failed to start embedded server:', e.message);
   }
@@ -314,7 +329,22 @@ ipcMain.handle('admin-logout', () => {
 
 ipcMain.handle('get-server-info', () => {
   const ips = getLocalIPs();
-  return { port: serverPort, ips };
+  let port = serverPort;
+  if ((!port || port === 0) && httpServerInstance && httpServerInstance.address()) {
+    const addr = httpServerInstance.address();
+    if (addr && typeof addr === 'object' && addr.port) {
+      port = addr.port;
+      serverPort = port;
+    }
+  }
+  if (!port || port === 0) {
+    const p = parseInt(process.env.PORT || '0', 10);
+    if (p > 0) {
+      port = p;
+      serverPort = port;
+    }
+  }
+  return { port: port || 0, ips };
 });
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
