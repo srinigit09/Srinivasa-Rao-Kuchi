@@ -133,8 +133,9 @@ body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; background
   color: #1e293b; border-radius: 7px; font-size: 13px; transition: border .15s; }
 .fg input:focus, .fg select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
 .fg select option { background: #fff; }
-.fg input[type="checkbox"] { width: auto; margin-right: 6px; accent-color: #3b82f6; }
-.fg .checkbox-row { display: flex; align-items: center; gap: 6px; padding: 7px 0; font-size: 13px; color: #374151; }
+.fg input[type="checkbox"], .fg input[type="radio"] { width: auto; margin: 0; flex-shrink: 0; accent-color: #3b82f6; }
+.fg .checkbox-row, .fg .radio-row { display: flex; align-items: center; justify-content: flex-start; gap: 8px; padding: 5px 0; font-size: 13px; color: #1e293b; cursor: pointer; }
+.fg .checkbox-row label, .fg .radio-row label { display: inline; margin: 0; font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: normal; color: #1e293b; cursor: pointer; }
 
 /* Buttons */
 .btn { padding: 9px 20px; border: none; border-radius: 7px; font-size: 13px; cursor: pointer; font-weight: 600; transition: all .15s; }
@@ -629,13 +630,15 @@ tr:hover td { background: #f8fafc; }
           <div style="max-width:520px;">
             <div class="fg" style="margin-bottom:14px;">
               <label>Port Assignment Mode</label>
-              <div class="checkbox-row" style="margin-bottom:8px;">
-                <input type="radio" name="portMode" id="portModeCustom" value="custom" onchange="togglePortInput()" checked>
-                <label for="portModeCustom" style="font-weight:500;text-transform:none;cursor:pointer;margin:0;">Custom Fixed Port (e.g. 5000, 8080)</label>
-              </div>
-              <div class="checkbox-row">
-                <input type="radio" name="portMode" id="portModeAuto" value="auto" onchange="togglePortInput()">
-                <label for="portModeAuto" style="font-weight:500;text-transform:none;cursor:pointer;margin:0;">Auto-Assign Free Port (Recommended for zero-configuration)</label>
+              <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
+                <label class="radio-row" for="portModeCustom" style="display:flex;align-items:center;gap:8px;cursor:pointer;width:fit-content;">
+                  <input type="radio" name="portMode" id="portModeCustom" value="custom" onchange="togglePortInput()" checked style="width:auto;margin:0;cursor:pointer;">
+                  <span style="font-size:13px;font-weight:500;color:#1e293b;">Custom Fixed Port (e.g. 5000, 8080)</span>
+                </label>
+                <label class="radio-row" for="portModeAuto" style="display:flex;align-items:center;gap:8px;cursor:pointer;width:fit-content;">
+                  <input type="radio" name="portMode" id="portModeAuto" value="auto" onchange="togglePortInput()" style="width:auto;margin:0;cursor:pointer;">
+                  <span style="font-size:13px;font-weight:500;color:#1e293b;">Auto-Assign Free Port (Recommended for zero-configuration)</span>
+                </label>
               </div>
             </div>
 
