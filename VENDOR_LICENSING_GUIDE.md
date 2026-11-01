@@ -10,7 +10,7 @@ This document is designed for **non-technical vendors, business owners, and mana
 Your licensing system uses **Asymmetric Cryptography** (specifically a standard called *Ed25519*). Think of it like a secure **Lock & Key** system:
 
 * **The Private Key (Your Master Stamp):** This is kept only in your private **Key Issuer** desktop app. This is like a high-security signature stamp that only you possess. You use it to stamp (sign) "Activation Codes" and "Reset Codes."
-* **The Public Key (The Padlock):** This is shipped alongside the software you give to the hospital (**Central Server**) as a small file called `license-keys.js`. It acts like a padlock. Anyone can look at this padlock, but only codes signed with your private **Master Stamp** can unlock it.
+* **The Public Key (The Padlock):** This is compiled securely inside the software given to the hospital (**Central Server**) in `license-keys.js`. It acts like a padlock. Anyone can look at this padlock, but only codes signed with your private **Master Stamp** can unlock it. Because the public keys are securely bundled inside the application package, no third party can swap out the padlock.
 * **The Request Code (The Identification Tag):** When a hospital installs your server, it generates a unique "identification tag" based on their specific machine's physical parts. This ensures that an Activation Code created for Hospital A cannot be copied and used by Hospital B.
 
 ---
@@ -43,8 +43,8 @@ To maintain absolute security while keeping the business flexible, the keys are 
 
 ### B. The Customer Side (The Hospital)
 * **What they hold:** ONLY the 3 **Public Keys**.
-* **Where they live:** A file called `license-keys.js` placed next to the server application. The server reads this file at startup — no rebuild is ever needed to update or replace keys.
-* **Security guarantee:** Since the customer's server contains *only* Public Keys, no matter how hard they look at the code, they can never reverse-engineer them to generate their own codes.
+* **Where they live:** Pre-bundled and compiled securely inside the server application package (`license-keys.js`).
+* **Security guarantee:** The server strictly uses its bundled vendor public keys and rejects external file overrides, making it tamper-proof. Since the customer's server contains *only* Public Keys, they can never reverse-engineer them to generate their own codes.
 
 ---
 
@@ -72,12 +72,12 @@ To keep your licensing system 100% secure, please make sure your sales and manag
 3. **What happens behind the scenes:** The app immediately runs a math generator that creates **3 unique keypairs** (3 private keys + 3 public keys). It encrypts the private keys with your passphrase and writes them to a secure local database file (`vault.json`).
 4. *⚠️ CRITICAL: Write this passphrase down on a piece of paper and lock it in your office safe. If you lose this passphrase, your encrypted keys are lost forever, and you will not be able to issue any more licenses.*
 
-### Step 4.3: Exporting Public Keys (Done Once per Key Generation)
+### Step 4.3: Exporting Public Keys (Done Once When Setting Up Server Source)
 1. Once unlocked, go to the **Keys** tab and click **"Export license-keys.js"**.
-2. Save the file anywhere on your computer.
-3. Copy this `license-keys.js` file to the **same folder as the `PanicAlarmServer.exe`** on the server machine. The server reads it automatically at startup — no rebuild required.
+2. Place the exported `license-keys.js` file into your `server/` source folder before building the server installer.
+3. When built, the 3 public keys (`Key 1`, `Key 2`, `Key 3`) are bundled directly inside the installer.
 
-> **This replaces the old "build from source" step entirely.** You ship one server installer and update keys by dropping a new `license-keys.js` next to it.
+> **3-Key Pre-Bake:** Because all 3 public keys are pre-bundled inside the server, rotating from Key 1 to Key 2 or Key 3 in the future requires **no file distribution** — simply switch keys in your Key Issuer app.
 
 ### Step 4.4: Daily Procedure — Signing Keys & Generating Activation Codes
 When a hospital purchases your system and sends you their **Request Code**:
@@ -110,18 +110,16 @@ If a customer forgets their admin password and clicks "Forgot Password" on their
 2. The IT administrator runs the installer. It installs the background Node.js processes, SQLite database engines, and an administrative Electron window.
 3. Once the setup finishes, the app launches automatically.
 
-### Step 5.2: Configuring Properties (Optional)
-Before starting, the hospital IT department can customize the server by placing a plain-text properties file named **`server.env`** in the same folder as the installed program. They can customize:
-* **`PORT`:** Set the port the server listens on. Check which ports are free on the server machine and pick one (e.g. `5000`, `8080`).
-* **`DB_PATH`:** If they want to save the database on a secure, automated network backup drive (e.g., `D:\HospitalData\panic_alarm.db`) instead of the local hard drive.
+### Step 5.2: Zero-Config Startup & In-App Network Settings
+1. **Zero-Configuration Launch:** By default, the server starts automatically without editing any files. It auto-assigns an open port and uses secure AppData storage.
+2. **In-App Network & Port Settings:** Once logged into the Web Admin Panel, the administrator can navigate to **Settings → Server & Network** to:
+   * View the active server IP, running port, and full Client Connection URL with a 1-click **Copy Client URL** button.
+   * Switch between **Auto-Assign Port** and **Custom Fixed Port** (e.g., `8080`, `5000`).
+   * The server automatically performs a live OS socket check to verify the port is valid and not already occupied before saving.
+3. **Optional IT Configuration (`server.env`):** Hospital IT departments can also optionally drop a `server.env` file next to the `.exe` to pin `PORT`, `HOST`, or `DB_PATH`.
 
-### Step 5.3: Placing the Public Keys File (Required Before First Launch)
-Before the customer starts the server for the first time, the `license-keys.js` file you exported from the Key Issuer (Step 4.3) must be placed next to the server executable:
-
-* **Windows:** same folder as `PanicAlarmServer.exe`
-* **macOS:** same folder as the `PanicAlarmServer.app` package
-
-The server will detect this file at startup and load your public keys from it. Without this file the server has no keys configured and will not accept any Activation Codes.
+### Step 5.3: Pre-Bundled Public Keys (Zero Customer Setup)
+The 3 vendor public keys are securely pre-bundled inside the installer. Customers do not need to place any key files — the server is ready for activation immediately on first launch.
 
 ### Step 5.4: Getting the Request Code & Activating
 1. On launch, the server is locked. It displays a window saying: **"Activation Required."**
@@ -174,7 +172,7 @@ If you are rotating employees or updating security and want to set a new passphr
 3. Delete the old local database file (`vault.json`) from your computer (see **Part 10, Section A** for its exact path).
 4. Reopen the Key Issuer app. Since `vault.json` was deleted, it will treat this as a fresh start and ask you to **"Create Keys."**
 5. Enter your **new Master Passphrase** and click Create. (This generates a brand-new set of 3 master keys).
-6. Click **"Export license-keys.js"** and place the file next to `PanicAlarmServer.exe` on each customer's server machine. Restart the server app. No installer rebuild is needed.
+6. Build and ship an updated server installer with the new `server/license-keys.js`.
 *Note: Any hospital servers already activated in the field will continue to run with their existing license. Future activations will use the new keys.*
 
 ---
@@ -194,8 +192,8 @@ If you have no backup file and forgot your passphrase, you must start from scrat
 1. Delete the local `vault.json` database file from your computer (see **Part 10, Section A** for its exact path).
 2. Launch the Key Issuer app.
 3. Select a **new Master Passphrase** and click Create (this generates 3 fresh keys).
-4. Click **"Export license-keys.js"** and place the new file next to `PanicAlarmServer.exe` on each customer's server machine. Restart the server.
-*⚠️ Crucial Warning: Because you have brand-new keys, any existing customer servers already activated in the field cannot accept your new Activation Codes until they have the new `license-keys.js` file placed next to their server executable and the server is restarted.*
+4. Export `license-keys.js` into your server source build and distribute the updated server installer for any new activations.
+*⚠️ Crucial Warning: Because you have brand-new keys, existing customer servers will continue running their active license, but any new activations will require the updated server build.*
 
 ---
 
@@ -210,15 +208,64 @@ As a business owner, you must have a plan for worst-case scenarios, such as offi
 ---
 
 ### B. Moving the Key Issuer to a New Computer (No Keys Lost)
-If you are upgrading your office computer or moving to a new machine, you do **not** need to generate new keys or rebuild any installer. Simply transfer the vault:
 
-1. On the **old computer**, locate `vault.json` (see **Part 10, Section A** for the exact path).
-2. Copy that single file to a USB drive or secure transfer method.
-3. On the **new computer**, install the Key Issuer app and let it open once (it will show the "Create Keys" screen — do not create yet).
-4. Close the app, paste the `vault.json` into the same AppData path on the new computer.
-5. Reopen the Key Issuer app — it will show the **Unlock** screen. Enter your passphrase. All 3 keys are restored exactly as they were.
+If you are upgrading your office computer, formatting your PC, or moving to a brand-new computer where you install the Key Issuer app freshly, **your existing keys work 100% seamlessly on the new machine**.
 
-No new `license-keys.js` needed. No server restart needed. Nothing changes for customers.
+You can transfer your keys using either of these two exact methods:
+
+---
+
+#### 🟢 Method 1: Direct File Transfer (`vault.json`) — Fastest (1 Minute)
+
+Because `vault.json` is a self-contained database encrypted with your Master Passphrase, you can copy the file directly between computers:
+
+**Step 1: Copy from the Old Computer**
+1. Open the vault folder by copy-pasting the exact path:
+   * **Windows:** Press `Win + R` on your keyboard, paste this exact text, and press Enter:
+     ```
+     %appdata%\PanicAlarmKeyIssuer
+     ```
+     *(Full path: `C:\Users\<YourUsername>\AppData\Roaming\PanicAlarmKeyIssuer\vault.json`)*
+   * **macOS:** In Finder, press `Cmd + Shift + G`, paste this exact text, and press Enter:
+     ```
+     ~/Library/Application Support/PanicAlarmKeyIssuer
+     ```
+     *(Full path: `/Users/<YourUsername>/Library/Application Support/PanicAlarmKeyIssuer/vault.json`)*
+2. Copy the single **`vault.json`** file onto a USB flash drive or secure drive.
+
+**Step 2: Paste onto the New Computer**
+1. On the **new computer**, install and run the **Panic Alarm Key Issuer** app once (it creates the folder), then close the app.
+2. Open that same folder on the new computer:
+   * **Windows:** Press `Win + R`, paste `%appdata%\PanicAlarmKeyIssuer`, press Enter.
+   * **macOS:** Press `Cmd + Shift + G`, paste `~/Library/Application Support/PanicAlarmKeyIssuer`, press Enter.
+3. Paste your **`vault.json`** file into this folder (replacing any blank file).
+4. Launch the Key Issuer app — it will immediately display the **"Unlock Vault"** screen.
+5. Type your Master Passphrase. All 3 private/public key pairs are 100% restored and ready to sign codes!
+
+---
+
+#### 🟢 Method 2: In-App Backup & Restore (`panic-alarm-key-backup.json`) — Graphical UI
+
+If you prefer using the application buttons instead of opening folders:
+
+**Step 1: Export Backup on the Old Computer**
+1. Open the Key Issuer app and unlock it with your Master Passphrase.
+2. Click the **Keys** tab.
+3. Next to your active key, click **"Backup Key"**.
+4. Save the file: **`panic-alarm-key-backup.json`** (to your USB drive or safe location).
+
+**Step 2: Import Backup on the New Computer**
+1. On the **new computer**, install and open the fresh Key Issuer app.
+2. On the first-launch screen, create a temporary vault with any passphrase.
+3. Click the **Restore** tab at the top.
+4. Click **"Select Backup File"** and choose your `panic-alarm-key-backup.json` file.
+5. Type the passphrase you used when creating the backup.
+6. Click **"Restore Key"**.
+7. The key is restored immediately into your vault and is ready to issue licenses!
+
+---
+
+*✨ **Business Continuity Guarantee:** No hospital servers need to be touched, no installers need to be rebuilt, and all existing customer licenses continue working with zero downtime.*
 
 ---
 
@@ -226,7 +273,7 @@ No new `license-keys.js` needed. No server restart needed. Nothing changes for c
 If your computer is wiped and you have no backups, you can start fresh without disrupting active clients:
 
 1. **Start Fresh on a New Computer:** Open the Key Issuer app on a new computer, choose a new Master Passphrase, and let it generate a **brand-new set of 3 keypairs**.
-2. **Update Public Keys on Customer Servers:** Export `license-keys.js` from the new Key Issuer and send it to each customer's IT admin to place next to their `PanicAlarmServer.exe`. A server restart is all that is needed — no installer rebuild, no reinstall.
+2. **Build Server with New Keys:** Place the new `license-keys.js` in the `server/` folder and generate your release installer.
 3. **Re-activate Old Customers (Only if they need a new code):** If a customer needs a new Activation Code after the key change, they send you their current Request Code and you issue a fresh one with the new keys. Their server data, logs, and history remain 100% intact.
 
 ---
@@ -291,7 +338,7 @@ For spare keys, you can then click **"Use this key"** to make it your new active
 **Technically yes, but 3 is the right number.**
 
 - You only need to rotate keys if one is ever leaked or compromised — a rare event in a professionally run app.
-- 3 keys already gives you **two full emergency rotations** without any server reinstall. Simply export a new `license-keys.js` and drop it next to the server executable.
+- 3 keys already gives you **two full emergency rotations** without any server reinstall or file copying. Simply switch from Key 1 to Key 2 or Key 3 in the Key Issuer app.
 - Adding more keys (e.g., 9) just means more backups to manage with no real security benefit.
 
 **Stick with 3.**
@@ -307,9 +354,9 @@ Here is the exact technical reference guide showing where every configuration, p
 | Component | File Name | Purpose / Description | Location on Windows (Default) | Location on macOS (Default) |
 | :--- | :--- | :--- | :--- | :--- |
 | **Vendor App** | `vault.json` | Stores encrypted private signing keys. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmKeyIssuer\vault.json` | `/Users/<Username>/Library/Application Support/PanicAlarmKeyIssuer/vault.json` |
-| **Server App** | `license-keys.js` | Public keys used to verify Activation Codes. Drop next to the exe to update without rebuilding. | Place directly in the installation folder (next to `PanicAlarmServer.exe`) | Place directly in the installation folder (next to the main App package) |
-| **Server App** | `server.env` | Configures port, IP bind, and database directory. | Place directly in the installation folder (next to `PanicAlarmServer.exe`) | Place directly in the installation folder (next to the main App package) |
-| **Server App** | `bootstrap.env` | One-time initial admin username and password seed. | Place directly in the installation folder (next to `PanicAlarmServer.exe`) | Place directly in the installation folder (next to the main App package) |
+| **Server App** | `license-keys.js` | Pre-bundled public keys used to verify Activation Codes. Securely compiled inside app package. | Bundled inside installer (`app.asar`) | Bundled inside installer (`app.asar`) |
+| **Server App** | `server.env` | (Optional) IT override for port, IP bind, and DB path. Or configure port directly in Admin UI Settings. | Place directly in the installation folder (next to `PanicAlarmServer.exe`) | Place directly in the installation folder (next to the main App package) |
+| **Server App** | `bootstrap.env` | (Optional) One-time initial admin username and password seed. | Place directly in the installation folder (next to `PanicAlarmServer.exe`) | Place directly in the installation folder (next to the main App package) |
 | **Server App** | `panic_alarm.db` | Core SQLite database storing accounts, logs, etc. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmServer\data\panic_alarm.db` | `/Users/<Username>/Library/Application Support/PanicAlarmServer/data/panic_alarm.db` |
 | **Client App** | `panic-alarm-config.json` | Stores essential server IP / URL connection properties. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmClient\panic-alarm-config.json` | `/Users/<Username>/Library/Application Support/PanicAlarmClient/panic-alarm-config.json` |
 
@@ -350,8 +397,8 @@ A rebuild is only needed when the **application code itself changes** (e.g. a ne
 
 | Situation | Rebuild needed? | What to do instead |
 | :--- | :---: | :--- |
-| Rotate signing keys (Key 1 → Key 2) | ❌ No | Export `license-keys.js` from Key Issuer, drop next to server exe, restart |
-| Change server port or host | ❌ No | Edit `server.env` next to the server exe, restart |
+| Rotate signing keys (Key 1 → Key 2) | ❌ No | Select Key 2 in Key Issuer app (all 3 keys are pre-bundled in server) |
+| Change server port or host | ❌ No | Change port in Admin Panel **Settings → Server & Network** (or edit `server.env`) |
 | Change admin username / password (first run) | ❌ No | Edit `bootstrap.env` next to the server exe before first launch |
 | Move Key Issuer to a new computer | ❌ No | Copy `vault.json` to the new machine (see Part 8B) |
 | Application code update (new features, bug fixes) | ✅ Yes | Run the rebuild script below |

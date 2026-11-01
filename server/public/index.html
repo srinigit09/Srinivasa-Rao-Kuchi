@@ -275,6 +275,9 @@ tr:hover td { background: #f8fafc; }
 
       <div class="nav-section">
         <div class="nav-section-label">Settings</div>
+        <a class="nav-link" onclick="showPage('networkSettings')" id="nav-networkSettings">
+          <span class="icon">⚙️</span> Server & Network
+        </a>
         <a class="nav-link" onclick="showPage('changePassword')" id="nav-changePassword">
           <span class="icon">🔑</span> Change Password
         </a>
@@ -583,6 +586,81 @@ tr:hover td { background: #f8fafc; }
       </div>
     </div>
 
+    <!-- SERVER & NETWORK SETTINGS -->
+    <div class="tab-content" id="page-networkSettings">
+      <div class="page-title">Server & Network Settings</div>
+      <div class="page-sub">View active server IP, running port, and customize network configuration</div>
+
+      <!-- Live Status Card -->
+      <div class="section">
+        <div class="section-hdr"><h3>📡 Live Server Status</h3></div>
+        <div class="section-body">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:16px;margin-bottom:16px;">
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;">
+              <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;">Server Status</div>
+              <div style="font-size:15px;color:#16a34a;font-weight:700;margin-top:4px;">🟢 Active & Running</div>
+            </div>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;">
+              <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;">Active Listening Port</div>
+              <div style="font-size:15px;color:#1e293b;font-weight:700;margin-top:4px;" id="netActivePort">Loading…</div>
+            </div>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;">
+              <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;">Primary Local IP</div>
+              <div style="font-size:15px;color:#1e293b;font-weight:700;margin-top:4px;" id="netPrimaryIp">Loading…</div>
+            </div>
+          </div>
+
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+            <div>
+              <div style="font-size:11px;color:#1d4ed8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Client Desktop Connection URL</div>
+              <div style="font-size:14px;color:#1e293b;font-weight:700;margin-top:2px;" id="netClientUrl">Loading…</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="copyClientUrl()" style="padding:8px 16px;font-size:12px;">📋 Copy Client URL</button>
+          </div>
+
+          <div style="margin-top:14px;font-size:12px;color:#64748b;" id="netAllIps"></div>
+        </div>
+      </div>
+
+      <!-- Edit Port & Host Card -->
+      <div class="section">
+        <div class="section-hdr"><h3>🔧 Edit Port Configuration</h3></div>
+        <div class="section-body">
+          <div style="max-width:520px;">
+            <div class="fg" style="margin-bottom:14px;">
+              <label>Port Assignment Mode</label>
+              <div class="checkbox-row" style="margin-bottom:8px;">
+                <input type="radio" name="portMode" id="portModeCustom" value="custom" onchange="togglePortInput()" checked>
+                <label for="portModeCustom" style="font-weight:500;text-transform:none;cursor:pointer;margin:0;">Custom Fixed Port (e.g. 5000, 8080)</label>
+              </div>
+              <div class="checkbox-row">
+                <input type="radio" name="portMode" id="portModeAuto" value="auto" onchange="togglePortInput()">
+                <label for="portModeAuto" style="font-weight:500;text-transform:none;cursor:pointer;margin:0;">Auto-Assign Free Port (Recommended for zero-configuration)</label>
+              </div>
+            </div>
+
+            <div class="fg" id="customPortGroup" style="margin-bottom:14px;">
+              <label>Server Port (1024 – 65535) <span class="required-star">*</span></label>
+              <input type="number" id="netInputPort" placeholder="e.g. 8080" min="1024" max="65535">
+              <p style="font-size:11px;color:#64748b;margin-top:4px;">Common custom ports: 5000, 8000, 8080, 8888, 3000</p>
+            </div>
+
+            <div style="font-size:12px;color:#334155;background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:12px 14px;margin:16px 0;line-height:1.6;">
+              <div style="font-weight:700;color:#1e293b;margin-bottom:4px;">🔄 Client App Connection Note:</div>
+              When you change the server port or IP address, client desktop applications will need to connect to the new URL:
+              <ul style="margin-left:18px;margin-top:4px;">
+                <li>The server automatically verifies the port is valid and not occupied before saving.</li>
+                <li>Staff can update the connection URL in their client app by <strong>right-clicking the tray icon → Edit User Details</strong> and pasting the new URL.</li>
+              </ul>
+            </div>
+
+            <button class="btn btn-primary" id="btnSaveNetworkSettings" onclick="saveNetworkSettings()" style="padding:10px 24px;">Verify & Save Network Settings</button>
+            <div class="flash" id="netFlash" style="margin-top:14px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- CHANGE PASSWORD -->
     <div class="tab-content" id="page-changePassword">
       <div class="page-title">Change Password</div>
@@ -792,6 +870,7 @@ async function showPage(page) {
   if (page === 'departments') loadLocationsPage();
   if (page === 'deptBlocks')  loadDeptBlocksPage();
   if (page === 'logs')        loadLogs();
+  if (page === 'networkSettings') loadNetworkSettings();
   if (page === 'changePassword') {
     ['cpCurrent','cpNew','cpConfirm'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('cpFlash').style.display = 'none';
@@ -1402,6 +1481,98 @@ function initChangePassword() {
 function cpFlash(msg, ok) {
   const el = document.getElementById('cpFlash');
   el.textContent = msg; el.className = 'flash ' + (ok ? 'ok' : 'err'); el.style.display = 'block';
+}
+
+// ── Server & Network Settings ──────────────────────────────────
+let _currentClientUrl = '';
+
+async function loadNetworkSettings() {
+  const elFlash = document.getElementById('netFlash');
+  if (elFlash) elFlash.style.display = 'none';
+
+  const info = await api('GET', '/api/admin/network-info');
+  if (info.error) {
+    document.getElementById('netActivePort').textContent = 'Error';
+    document.getElementById('netPrimaryIp').textContent = 'Error';
+    return;
+  }
+
+  const port = info.activePort;
+  const ip = info.primaryIp || 'localhost';
+  _currentClientUrl = `http://${ip}:${port}`;
+
+  document.getElementById('netActivePort').textContent = String(port);
+  document.getElementById('netPrimaryIp').textContent = ip;
+  document.getElementById('netClientUrl').textContent = _currentClientUrl;
+
+  const allIps = (info.ips && info.ips.length) ? info.ips.join(', ') : 'localhost';
+  document.getElementById('netAllIps').innerHTML = `<strong>Available Network IP(s):</strong> ${esc(allIps)}`;
+
+  if (info.isAutoPort || info.configuredPort === 0) {
+    document.getElementById('portModeAuto').checked = true;
+    document.getElementById('netInputPort').value = '';
+  } else {
+    document.getElementById('portModeCustom').checked = true;
+    document.getElementById('netInputPort').value = info.configuredPort || port;
+  }
+  togglePortInput();
+}
+
+function togglePortInput() {
+  const isAuto = document.getElementById('portModeAuto').checked;
+  const group = document.getElementById('customPortGroup');
+  if (group) group.style.display = isAuto ? 'none' : 'block';
+}
+
+function copyClientUrl() {
+  if (!_currentClientUrl) return;
+  navigator.clipboard.writeText(_currentClientUrl).then(() => {
+    flash('📋 Client URL copied to clipboard!', true);
+  }).catch(() => {
+    flash('Copied: ' + _currentClientUrl, true);
+  });
+}
+
+async function saveNetworkSettings() {
+  const isAuto = document.getElementById('portModeAuto').checked;
+  const portVal = document.getElementById('netInputPort').value.trim();
+  const elFlash = document.getElementById('netFlash');
+
+  const showNetFlash = (msg, ok) => {
+    elFlash.textContent = msg;
+    elFlash.className = 'flash ' + (ok ? 'ok' : 'err');
+    elFlash.style.display = 'block';
+  };
+
+  let body = {};
+  if (isAuto) {
+    body = { autoPort: true };
+  } else {
+    const portNum = parseInt(portVal, 10);
+    if (!portVal || isNaN(portNum) || portNum < 1024 || portNum > 65535) {
+      showNetFlash('Please enter a valid port number between 1024 and 65535', false);
+      return;
+    }
+    body = { port: portNum };
+  }
+
+  const btn = document.getElementById('btnSaveNetworkSettings');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    const res = await api('POST', '/api/admin/network-settings', body);
+    if (res.error) {
+      showNetFlash(res.error, false);
+    } else {
+      showNetFlash('✅ ' + (res.message || 'Settings saved successfully!'), true);
+    }
+  } catch (e) {
+    showNetFlash('Failed to save settings: ' + e.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Network Settings';
+  }
 }
 
 // ── Helpers ────────────────────────────────────────────────────

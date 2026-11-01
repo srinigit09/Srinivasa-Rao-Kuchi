@@ -70,9 +70,11 @@ function startEmbeddedServer() {
   if (serverStarted) return;
   serverStarted = true;
   try {
-    // Port: use configured value, or 0 to let the OS pick a free port automatically.
-    const configuredPort = parseInt(process.env.PORT || '0', 10) || 0;
-    process.env.PORT = String(configuredPort);
+    // Port: use configured value from server.env if present
+    if (process.env.PORT) {
+      const configuredPort = parseInt(process.env.PORT, 10) || 0;
+      process.env.PORT = String(configuredPort);
+    }
 
     // Host
     if (!process.env.HOST) {

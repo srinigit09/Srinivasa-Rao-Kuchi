@@ -28,6 +28,7 @@ try {
 
 const express     = require('express');
 const http        = require('http');
+const net         = require('net');
 const { Server }  = require('socket.io');
 const cors        = require('cors');
 const bcrypt      = require('bcryptjs');
@@ -56,8 +57,23 @@ const app    = express();
 const server = http.createServer(app);
 const io     = new Server(server, { cors: { origin: '*', methods: ['GET','POST','PUT','DELETE'] } });
 
-// PORT: use the configured value, or 0 to let the OS pick any free port automatically.
-const PORT = parseInt(process.env.PORT || '0', 10) || 0;
+// PORT priority:
+// 1. Environment / server.env (if explicitly set > 0)
+// 2. Database setting 'server_port' saved via Admin UI (if set > 0)
+// 3. 0 to let the OS pick any free port automatically.
+let initialPort = parseInt(process.env.PORT || '0', 10);
+if (!initialPort) {
+  try {
+    const r = getSetting.get('server_port');
+    if (r && r.value) {
+      const dbPort = parseInt(r.value, 10);
+      if (dbPort && !isNaN(dbPort) && dbPort > 0) {
+        initialPort = dbPort;
+      }
+    }
+  } catch {}
+}
+const PORT = initialPort || 0;
 const HOST = process.env.HOST || '0.0.0.0';
 
 // ── Middleware ─────────────────────────────────────────────────
@@ -103,29 +119,12 @@ app.get('/api/public/server-info', (req, res) => {
 });
 
 // ── License / activation ──────────────────────────────────────
-// The server only holds the vendor's PUBLIC keys: it can verify Activation and
-// Reset Codes but can never create them. See license.js and license-codec.js.
-//
-// Key loading priority:
-//  1. license-keys.js placed next to the executable (runtime override — no rebuild needed)
-//  2. license-keys.js bundled inside the app at build time (fallback)
+// The server only holds the vendor's pre-baked PUBLIC keys bundled securely
+// inside the application package (license-keys.js). It can verify Activation and
+// Reset Codes but can never create them.
+// By locking keys inside the binary, external file overrides are prevented.
 function loadPublicKeys() {
-  // In a packaged Electron app, process.execPath points to the .exe / app binary.
-  // In development (node server.js), fall back to __dirname.
-  const execDir = path.dirname(process.execPath);
-  const externalPath = path.join(execDir, 'license-keys.js');
-  if (fs.existsSync(externalPath)) {
-    try {
-      // Delete from require cache first so a restart always picks up the latest file.
-      delete require.cache[require.resolve(externalPath)];
-      const keys = require(externalPath);
-      console.log('[License] Loaded public keys from external file:', externalPath);
-      return keys;
-    } catch (e) {
-      console.warn('[License] Failed to load external license-keys.js, falling back to bundled copy:', e.message);
-    }
-  }
-  console.log('[License] Using bundled public keys (license-keys.js).');
+  console.log('[License] Using secure bundled vendor public keys (license-keys.js).');
   return require('./license-keys');
 }
 
@@ -472,6 +471,80 @@ app.post('/api/admin/settings', requireAdmin, (req, res) => {
   if (!key) return res.status(400).json({ error: 'key required' });
   setSetting.run(key, String(value));
   res.json({ message: 'Setting saved' });
+});
+
+// GET /api/admin/network-info — current active IP(s), running port, and configured port
+app.get('/api/admin/network-info', requireAdmin, (req, res) => {
+  const bound = server.address();
+  const activePort = bound ? bound.port : (parseInt(process.env.PORT || '0', 10) || PORT);
+  const ips = Object.values(os.networkInterfaces())
+    .flat()
+    .filter(i => i && i.family === 'IPv4' && !i.internal)
+    .map(i => i.address);
+
+  const dbSetting = getSetting.get('server_port');
+  const dbPort = dbSetting && dbSetting.value ? parseInt(dbSetting.value, 10) : null;
+
+  res.json({
+    activePort,
+    activeHost: HOST,
+    ips: ips.length > 0 ? ips : ['127.0.0.1'],
+    primaryIp: ips[0] || 'localhost',
+    configuredPort: dbPort !== null ? dbPort : (PORT !== 0 ? PORT : 0),
+    isAutoPort: (dbPort === null || dbPort === 0) && PORT === 0,
+    dbPath: process.env.DB_PATH || path.join(__dirname, 'data', 'panic_alarm.db'),
+  });
+});
+
+// Helper to test if a port is currently available before saving
+function testPortAvailability(portNum) {
+  return new Promise((resolve) => {
+    const tester = net.createServer()
+      .once('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+          resolve({ available: false, error: `Port ${portNum} is currently in use by another program on this computer. Please choose another port.` });
+        } else {
+          resolve({ available: false, error: `Cannot bind to port ${portNum}: ${err.message}` });
+        }
+      })
+      .once('listening', () => {
+        tester.once('close', () => resolve({ available: true })).close();
+      })
+      .listen(portNum, '0.0.0.0');
+  });
+}
+
+// POST /api/admin/network-settings — update saved port setting with validation & live conflict test
+app.post('/api/admin/network-settings', requireAdmin, async (req, res) => {
+  const { port, autoPort } = req.body || {};
+  if (autoPort) {
+    setSetting.run('server_port', '0');
+    return res.json({
+      message: 'Network port set to auto-assign (0). Restart the server application for changes to take effect.',
+      port: 0,
+    });
+  }
+
+  const portNum = parseInt(port, 10);
+  if (isNaN(portNum) || portNum < 1024 || portNum > 65535) {
+    return res.status(400).json({ error: 'Port must be a valid number between 1024 and 65535 (or choose Auto-assign).' });
+  }
+
+  // If the chosen port is not the currently running port, test if it is free
+  const bound = server.address();
+  const activePort = bound ? bound.port : null;
+  if (activePort && portNum !== activePort) {
+    const check = await testPortAvailability(portNum);
+    if (!check.available) {
+      return res.status(400).json({ error: check.error });
+    }
+  }
+
+  setSetting.run('server_port', String(portNum));
+  return res.json({
+    message: `Server port verified and saved as ${portNum}. Restart the server application for changes to take effect.`,
+    port: portNum,
+  });
 });
 
 // ══════════════════════════════════════════════════════════════
