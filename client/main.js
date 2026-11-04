@@ -111,6 +111,7 @@ let setupWindow    = null;   // first-run wizard (closes after setup)
 let alarmButton    = null;   // floating round ALERT button (all roles)
 let alertPopup     = null;   // alert notification popup (all roles)
 let settingsWindow = null;   // tray → My Details
+let activeAlarmData = null;  // currently active alarm payload
 let tray           = null;
 let socket         = null;   // Socket.IO connection in main process
 let isQuitting     = false;  // true once the user has quit — suppresses disconnect dialog
@@ -288,11 +289,14 @@ function createAlarmButton(config) {
 
 // ── Alert popup — shown when a panic alarm is received ────────────────────────
 function showAlertPopup(alarmData) {
+  activeAlarmData = alarmData;
   // If a popup is already open, just update it with the new alarm
   if (alertPopup && !alertPopup.isDestroyed()) {
     alertPopup.webContents.send('new-alarm', alarmData);
     alertPopup.show();
     alertPopup.focus();
+    alertPopup.setAlwaysOnTop(true, 'screen-saver');
+    alertPopup.moveTop();
     return;
   }
 
@@ -303,7 +307,7 @@ function showAlertPopup(alarmData) {
     x: Math.round((primary.workAreaSize.width - 580) / 2),
     y: 20,
     frame: false, alwaysOnTop: true, resizable: false,
-    skipTaskbar: true,
+    skipTaskbar: false,
     title: 'PANIC ALARM',
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
@@ -312,11 +316,16 @@ function showAlertPopup(alarmData) {
     },
   });
   alertPopup.setMenu(null);
+  alertPopup.setAlwaysOnTop(true, 'screen-saver');
   alertPopup.loadFile(path.join(__dirname, 'renderer', 'alert_popup.html'));
   alertPopup.webContents.once('did-finish-load', () => {
+    alertPopup.show();
+    alertPopup.focus();
+    alertPopup.setAlwaysOnTop(true, 'screen-saver');
+    alertPopup.moveTop();
     alertPopup.webContents.send('new-alarm', alarmData);
   });
-  alertPopup.on('closed', () => { alertPopup = null; });
+  alertPopup.on('closed', () => { alertPopup = null; activeAlarmData = null; });
 }
 
 // ── Settings window (Edit My Profile) ────────────────────────────────────────
@@ -410,6 +419,7 @@ function rebuildTrayMenu(config, connected) {
 //  IPC HANDLERS
 // ═══════════════════════════════════════════════════════════════════════════════
 ipcMain.handle('get-config',           () => loadConfig());
+ipcMain.handle('get-current-alarm',    () => activeAlarmData);
 ipcMain.handle('get-device-id',        () => getOrCreateDeviceId());
 ipcMain.handle('get-last-server-hint', () => getLastServerHint());
 ipcMain.handle('get-connection-status',() => ({ connected: socket?.connected || false }));

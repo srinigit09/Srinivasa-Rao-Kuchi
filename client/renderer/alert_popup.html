@@ -99,7 +99,8 @@ html, body { width: 580px; height: 300px; overflow: hidden; background: #1a0000;
     } catch { /* best effort */ }
   }
 
-  api.onNewAlarm(data => {
+  function handleAlarm(data) {
+    if (!data) return;
     currentAlarmId = data.alarmId;
     document.getElementById('userName').textContent   = data.triggeredBy || '—';
     const uid = data.userId ? `  ·  ID: ${data.userId}` : '';
@@ -107,7 +108,10 @@ html, body { width: 580px; height: 300px; overflow: hidden; background: #1a0000;
       `Room: ${data.roomNumber || '—'}${uid}   ·   Hospital: ${data.hospitalCode || '—'}`;
     document.getElementById('timeDetail').textContent = `Triggered at: ${new Date(data.triggeredAt).toLocaleString()}`;
     startCountdown();
-  });
+  }
+
+  api.getCurrentAlarm().then(d => { if (d) handleAlarm(d); });
+  api.onNewAlarm(handleAlarm);
 
   // OK button — records acknowledgement and closes
   document.getElementById('btnOk').addEventListener('click', async () => {

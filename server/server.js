@@ -660,17 +660,21 @@ app.post('/api/client/alarm/trigger', requireClient, (req, res) => {
 
   insertLog.run(alarmId, u.hospital_code, u.user_name, userId, u.room_number, u.system_number, u.deviceId, severity, message);
 
+  const hCode = (u.hospital_code || '').toString().trim().toUpperCase();
+  const roomName = `hospital_${hCode}`;
+
   // Broadcast to all OTHER clients in the same hospital — exclude the triggering socket
   const triggeringSocket = [...io.sockets.sockets.values()]
     .find(s => s.data && s.data.deviceId === u.deviceId);
 
   const alarmPayload = {
     alarmId,
-    hospitalCode : u.hospital_code,
+    hospitalCode : hCode,
     triggeredBy  : u.user_name,
     userId       : userId,
     roomNumber   : u.room_number,
     systemNumber : u.system_number,
+    deviceId     : u.deviceId,
     severity,
     message,
     triggeredAt  : new Date().toISOString(),
@@ -678,13 +682,15 @@ app.post('/api/client/alarm/trigger', requireClient, (req, res) => {
 
   if (triggeringSocket) {
     // Broadcast to everyone in the room EXCEPT the triggering socket
-    triggeringSocket.to(`hospital_${u.hospital_code}`).emit('panic_alarm', alarmPayload);
+    triggeringSocket.to(roomName).emit('panic_alarm', alarmPayload);
   } else {
     // Fallback: broadcast to all (triggering socket not found)
-    io.to(`hospital_${u.hospital_code}`).emit('panic_alarm', alarmPayload);
+    io.to(roomName).emit('panic_alarm', alarmPayload);
   }
+  // Also push to admin panel room
+  io.to('admin').emit('panic_alarm', alarmPayload);
 
-  console.log(`[ALARM] ${new Date().toISOString()} | ${u.hospital_code} | ${u.user_name} (${userId}) | Room ${u.room_number}`);
+  console.log(`[ALARM] ${new Date().toISOString()} | ${hCode} | ${u.user_name} (${userId}) | Room ${u.room_number}`);
   res.json({ alarmId, message: 'Alarm sent' });
 });
 
@@ -693,8 +699,12 @@ app.post('/api/client/alarm/acknowledge', requireClient, (req, res) => {
   const { alarmId } = req.body || {};
   if (!alarmId) return res.status(400).json({ error: 'alarmId required' });
   const u = req.clientUser;
+  const hCode = (u.hospital_code || '').toString().trim().toUpperCase();
   acknowledgeAlarm.run(u.user_name, alarmId);
-  io.to(`hospital_${u.hospital_code}`).emit('alarm_acknowledged', {
+  io.to(`hospital_${hCode}`).emit('alarm_acknowledged', {
+    alarmId, ackBy: u.user_name, ackAt: new Date().toISOString(),
+  });
+  io.to('admin').emit('alarm_acknowledged', {
     alarmId, ackBy: u.user_name, ackAt: new Date().toISOString(),
   });
   res.json({ message: 'Acknowledged' });
