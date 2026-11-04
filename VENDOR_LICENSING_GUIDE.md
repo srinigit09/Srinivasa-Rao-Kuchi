@@ -92,13 +92,14 @@ When a hospital purchases your system and sends you their **Request Code**:
 6. Click **Copy Code** and paste it into an email or message to send back to the hospital.
 
 ### Step 4.5: Daily Procedure — Generating Password Reset Codes
-If a customer forgets their admin password and clicks "Forgot Password" on their server:
-1. They will send you a **Reset Request Code**.
-2. Unlock your **Key Issuer** app.
-3. Go to the **"Reset Password"** tab.
-4. Paste their Reset Request Code.
-5. Click **Generate Reset Code**.
-6. Copy this code and send it back to the customer. This single-use code lets them set a new password safely.
+If a customer forgets their admin password or on a fresh installation needs to set an initial admin password:
+1. On the customer server login screen, they click **"Forgot admin password?"** and click **"Copy Request Code"** (e.g. `ABCD-1234-EFGH-5678`).
+2. They send you that **Reset Request Code**.
+3. Unlock your **Key Issuer** app on your workstation.
+4. Go to the **"Reset Password"** tab.
+5. Paste their Reset Request Code and click **"Generate Reset Code"**.
+6. Click **"Copy Code"** and send the Reset Code back to the customer.
+7. The customer pastes the code into their screen, types their **New Password** (e.g. `Admin@123`), and clicks **"RESET PASSWORD"**. They can now log in immediately.
 
 ---
 
@@ -129,15 +130,27 @@ The 3 vendor public keys are securely pre-bundled inside the installer. Customer
 5. The IT admin pastes the Activation Code into their lock screen and clicks **Activate**.
 6. The server validates the cryptographic signature with its internal padlock, saves the active license, and unlocks the login screen.
 
-### Step 5.5: First-Time Login & Security Seeding
-1. Once activated, the login screen appears.
-2. The server reads the **`bootstrap.env`** file (placed next to the executable before first launch) to find the admin credentials you set. The file must contain:
-   * **`ADMIN_USERNAME`** — the username you choose for the admin account.
-   * **`ADMIN_PASSWORD`** — the password you choose for the admin account.
-3. The admin logs in using those credentials.
-4. **Forced Password Change:** On successful first login, the application immediately forces the admin to type a new, strong administrator password.
-5. Once saved, the seeded password is overwritten and the `bootstrap.env` file has no further effect.
-6. *🔒 IT Security Rule: After completing this first-run setup, the IT administrator should completely delete the `bootstrap.env` file from their computer for safety.*
+### Step 5.5: First-Time Login & Admin Password Setup
+Once the server is activated, the admin login screen appears:
+* **Default Admin Username:** `admin`
+
+There are two easy methods to set/access the administrator password:
+
+#### Method A: Instant In-App Reset (Recommended — No Files Needed)
+1. On the login screen, click **"Forgot admin password?"**.
+2. Click **"Copy Request Code"** and send it to the vendor.
+3. The vendor generates a **Reset Code** from the Key Issuer app (Part 4.5).
+4. Paste the Reset Code into the server screen, enter your new password, and click **"RESET PASSWORD"**.
+5. Return to login and sign in with `admin` and your new password.
+
+#### Method B: Optional Pre-Seeding via File (`bootstrap.env`)
+Before launching the server for the first time, place a file named **`bootstrap.env`** next to `PanicAlarmServer.exe`:
+```properties
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=YourStrongPassword123
+```
+* On first startup, the database is initialized with these credentials.
+* *🔒 Security Rule: Once the server has launched once, delete `bootstrap.env` from disk.*
 
 ---
 
@@ -353,12 +366,12 @@ Here is the exact technical reference guide showing where every configuration, p
 
 | Component | File Name | Purpose / Description | Location on Windows (Default) | Location on macOS (Default) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Vendor App** | `vault.json` | Stores encrypted private signing keys. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmKeyIssuer\vault.json` | `/Users/<Username>/Library/Application Support/PanicAlarmKeyIssuer/vault.json` |
+| **Vendor App** | `vault.json` | Stores encrypted private signing keys. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmKeyIssuer\vault.json` | `/Users/<Username>/Library/Application Support/panic-alarm-key-issuer/vault.json` |
 | **Server App** | `license-keys.js` | Pre-bundled public keys used to verify Activation Codes. Securely compiled inside app package. | Bundled inside installer (`app.asar`) | Bundled inside installer (`app.asar`) |
 | **Server App** | `server.env` | (Optional) IT override for port, IP bind, and DB path. Or configure port directly in Admin UI Settings. | Place directly in the installation folder (next to `PanicAlarmServer.exe`) | Place directly in the installation folder (next to the main App package) |
 | **Server App** | `bootstrap.env` | (Optional) One-time initial admin username and password seed. | Place directly in the installation folder (next to `PanicAlarmServer.exe`) | Place directly in the installation folder (next to the main App package) |
-| **Server App** | `panic_alarm.db` | Core SQLite database storing accounts, logs, etc. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmServer\data\panic_alarm.db` | `/Users/<Username>/Library/Application Support/PanicAlarmServer/data/panic_alarm.db` |
-| **Client App** | `panic-alarm-config.json` | Stores essential server IP / URL connection properties. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmClient\panic-alarm-config.json` | `/Users/<Username>/Library/Application Support/PanicAlarmClient/panic-alarm-config.json` |
+| **Server App** | `panic_alarm.db` | Core SQLite database storing accounts, logs, etc. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmServer\data\panic_alarm.db` | `/Users/<Username>/Library/Application Support/panic-alarm-server/data/panic_alarm.db` |
+| **Client App** | `panic-alarm-config.json` | Stores essential server IP / URL connection properties. | `C:\Users\<Username>\AppData\Roaming\PanicAlarmClient\panic-alarm-config.json` | `/Users/<Username>/Library/Application Support/panic-alarm-client/panic-alarm-config.json` |
 
 *💡 Windows Tip: To quickly open the AppData folder on Windows, press `Win + R`, type `%appdata%`, and hit Enter.*
 
@@ -382,6 +395,17 @@ Open this file in Notepad next to the executable to set the first administrator 
 Used to back up or mass-deploy the network configuration required to launch and connect the Client app to the server:
 * **`serverUrl`:** The server URL shown on the server app's login screen after startup (format: `http://<server-ip>:<port>`).
 * *Note: Staff details, room numbers, station names, and roles are configured visually inside the application GUI and are NOT managed in raw properties files.*
+
+---
+
+### C. Email & File Transfer Guidelines (Sending Files via Gmail)
+
+* **Why Gmail Blocks `.js` files:** Gmail automatically blocks all `.js` files (including `license-keys.js` and `vault.js`) even inside ZIP archives because `.js` files can execute on Windows.
+* **How to Send `.js` Files Safely:**
+  1. **Rename to `.txt`:** Rename `license-keys.js` to `license-keys.js.txt` before attaching. The recipient renames it back to `.js` after downloading.
+  2. **Use Google Drive:** Insert as a Google Drive link directly inside Gmail.
+  3. **Password-Protected ZIP / 7-Zip:** Create a password-protected `.7z` or `.zip` archive using 7-Zip.
+* **Sending `vault.json` or Backup Files:** Files ending in **`.json`** (e.g. `vault.json`, `panic-alarm-key-backup.json`) are plain data files and are **never blocked by Gmail**.
 
 ---
 
