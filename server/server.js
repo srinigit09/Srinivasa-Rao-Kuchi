@@ -45,13 +45,20 @@ const {
   listClientUsers, findClientUser, findClientUserById, findClientUserByUserId,
   createClientUser, createClientUserAdmin, updateClientUser,
   updateClientUserToken, deleteClientUser,
-  insertLog, acknowledgeAlarm, markNoResponse, listLogs, listLogsByHospital, listLogsByDate,
+  insertLog, acknowledgeAlarm, markNoResponse, settleStaleAlarms, listLogs, listLogsByHospital, listLogsByDate,
   deleteLogById, deleteAllLogs,
   getSetting, setSetting,
   listLocations, listLocationsByHospital,
   listDeptBlocks, listDeptBlocksByHospital,
   listDepartments, listDepartmentsByHospital, findDepartmentById, createDepartment, updateDepartment, deleteDepartment,
 } = require('./db');
+
+const ALARM_SETTLE_MS = 20 * 1000;   // popup auto-close time
+// On startup, settle alarms left unresolved by a previous run/restart
+settleStaleAlarms.run('-20 seconds');
+setInterval(() => {
+  try { settleStaleAlarms.run('-20 seconds'); } catch { /* ignore */ }
+}, 10 * 1000).unref();
 
 const app    = express();
 const server = http.createServer(app);
@@ -650,8 +657,23 @@ app.put('/api/client/me', requireClient, (req, res) => {
 });
 
 // POST /api/client/alarm/trigger
+const lastAlarmByDevice = new Map();   // deviceId -> timestamp of last accepted alarm
+const ALARM_LOCK_MS = 20 * 1000;
+
 app.post('/api/client/alarm/trigger', requireClient, (req, res) => {
   const u = req.clientUser;
+
+  // Server-side lock: one alarm per device per 20 s (matches the solid button on the client)
+  const lockKey = u.deviceId || u.user_id || u.user_name;
+  const now = Date.now();
+  const last = lastAlarmByDevice.get(lockKey);
+  if (last && now - last < ALARM_LOCK_MS) {
+    return res.json({ ignored: true });   // silently ignored — nothing is logged or broadcast
+  }
+  lastAlarmByDevice.set(lockKey, now);
+  if (lastAlarmByDevice.size > 1000) {
+    for (const [k, t] of lastAlarmByDevice) if (now - t >= ALARM_LOCK_MS) lastAlarmByDevice.delete(k);
+  }
 
   const alarmId  = uuidv4();
   const userId   = u.user_id || u.userId || '';
@@ -689,6 +711,12 @@ app.post('/api/client/alarm/trigger', requireClient, (req, res) => {
   }
   // Also push to admin panel room
   io.to('admin').emit('panic_alarm', alarmPayload);
+
+  // Popup auto-closes after 20 s. If no OK / No-Response arrives by then
+  // (e.g. nobody online, popup crashed) settle the alarm so it never stays "Active".
+  setTimeout(() => {
+    try { markNoResponse.run(alarmId); } catch (e) { console.error('[ALARM] settle failed', e.message); }
+  }, ALARM_SETTLE_MS);
 
   console.log(`[ALARM] ${new Date().toISOString()} | ${hCode} | ${u.user_name} (${userId}) | Room ${u.room_number}`);
   res.json({ alarmId, message: 'Alarm sent' });

@@ -52,6 +52,31 @@ try {
 // ── Paths ─────────────────────────────────────────────────────────────────────
 const USER_DATA = app.getPath('userData');
 
+// ── Single instance — a newer installed build replaces an old one still running in the tray ──
+function getBuildStamp() {
+  try {
+    const f = path.join(process.resourcesPath, 'install-id');
+    const id = fs.readFileSync(f, 'utf8').trim();
+    const st = fs.statSync(f);
+    return id ? `${id}:${Math.floor(st.birthtimeMs || st.mtimeMs)}` : null;
+  } catch { return null; }   // dev mode
+}
+const MY_BUILD_STAMP = getBuildStamp();
+const gotLock = app.requestSingleInstanceLock({ buildStamp: MY_BUILD_STAMP });
+if (!gotLock) app.quit();
+app.on('second-instance', (_event, _argv, _cwd, additionalData) => {
+  const otherStamp = additionalData && additionalData.buildStamp;
+  if (otherStamp && otherStamp !== MY_BUILD_STAMP) {
+    console.log('[Server] Newer build detected — restarting');
+    app.relaunch();
+    app.quit();
+    return;
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
+  else if (loginWindow && !loginWindow.isDestroyed()) { loginWindow.show(); loginWindow.focus(); }
+  else if (app.isReady()) createLoginWindow();
+});
+
 // When packaged, all server files sit alongside server-main.js in app.asar (__dirname)
 // In dev, __dirname is the server/ folder itself — same path either way
 function getServerRoot() {
@@ -65,6 +90,82 @@ let tray          = null;
 let serverPort         = 0;
 let serverStarted      = false;
 let httpServerInstance = null;
+
+// ── New-install handling ──────────────────────────────────────────────────────
+// afterPack.js stamps a new UUID into resources/install-id for every build; the file
+// is also re-created each time the installer runs. If the stamp differs from the one
+// seen on the previous launch, this is a new installation. When an old database exists
+// the user chooses: keep it (upgrade) or start fresh. Starting fresh first backs the old
+// database up, then creates a new one that carries over only the license (key validation).
+const KEEP_SETTINGS = ['license_code', 'license_nonce', 'reset_nonce', 'machine_fallback_id'];
+
+function isFreshInstall() {
+  try {
+    const stampFile = path.join(process.resourcesPath, 'install-id');
+    if (!fs.existsSync(stampFile)) return false;           // dev mode → never reset
+    const stampId = fs.readFileSync(stampFile, 'utf8').trim();
+    if (!stampId) return false;
+    const st = fs.statSync(stampFile);
+    const currentId = `${stampId}:${Math.floor(st.birthtimeMs || st.mtimeMs)}`;
+
+    const seenFile = path.join(USER_DATA, 'seen-install-id');
+    let seenId = null;
+    try { seenId = fs.readFileSync(seenFile, 'utf8').trim(); } catch { /* first launch */ }
+    if (seenId === currentId) return false;
+
+    if (!fs.existsSync(USER_DATA)) fs.mkdirSync(USER_DATA, { recursive: true });
+    fs.writeFileSync(seenFile, currentId, 'utf8');
+    return true;
+  } catch (e) {
+    console.error('[Server] Fresh-install check failed:', e.message);
+    return false;
+  }
+}
+
+function chooseKeepOrFresh() {
+  const { dialog } = require('electron');
+  const choice = dialog.showMessageBoxSync({
+    type: 'question',
+    title: 'Panic Alarm Server — Existing data found',
+    message: 'Existing server data was found from a previous installation.',
+    detail: 'Keep data (upgrade): hospitals, users, alarm logs and settings are kept, and registered clients keep working.\n\n' +
+            'Start fresh: all data is cleared (only the license activation is kept). The old database is saved as a backup file first, and clients must register again.',
+    buttons: ['Keep data (upgrade)', 'Start fresh'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  });
+  return choice === 1 ? 'fresh' : 'keep';
+}
+
+function resetDatabaseKeepingLicense(dbPath) {
+  const Database = require('better-sqlite3');
+  const kept = [];
+  if (fs.existsSync(dbPath)) {
+    try {
+      const old = new Database(dbPath, { readonly: true, fileMustExist: true });
+      for (const k of KEEP_SETTINGS) {
+        const r = old.prepare('SELECT value FROM settings WHERE key=?').get(k);
+        if (r) kept.push([k, r.value]);
+      }
+      old.close();
+    } catch (e) { console.warn('[Server] Could not read license settings from old DB:', e.message); }
+  }
+  // Back up (rename together so the files stay consistent) instead of deleting
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  for (const suffix of ['', '-wal', '-shm', '-journal']) {
+    try { fs.renameSync(dbPath + suffix, `${dbPath}.backup-${stamp}${suffix}`); } catch { /* not present */ }
+  }
+  console.log(`[Server] Old database backed up as ${dbPath}.backup-${stamp}`);
+  if (kept.length) {
+    const fresh = new Database(dbPath);
+    fresh.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+    const ins = fresh.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
+    for (const [k, v] of kept) ins.run(k, v);
+    fresh.close();
+  }
+  console.log(`[Server] Fresh install: database reset (kept ${kept.length} license setting(s))`);
+}
 
 // ── Start embedded server ─────────────────────────────────────────────────────
 function startEmbeddedServer() {
@@ -87,6 +188,16 @@ function startEmbeddedServer() {
       const dbDir = path.join(USER_DATA, 'data');
       if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
       process.env.DB_PATH = path.join(dbDir, 'panic_alarm.db');
+    }
+
+    if (isFreshInstall()) {
+      const dbFile = path.resolve(process.env.DB_PATH);
+      // First ever install (no DB yet) → nothing to ask. Otherwise let the user decide.
+      if (fs.existsSync(dbFile) && chooseKeepOrFresh() === 'fresh') {
+        resetDatabaseKeepingLicense(dbFile);
+      } else {
+        console.log('[Server] New install: keeping existing data');
+      }
     }
 
     const serverRoot = getServerRoot();
@@ -349,6 +460,7 @@ ipcMain.handle('get-server-info', () => {
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
+  if (!gotLock) return;   // another instance owns the server — this one is quitting
   // Start embedded server immediately (before showing any window)
   startEmbeddedServer();
   createTray();

@@ -9,14 +9,14 @@
 body {
   font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
   background: #f0f4f8; color: #1e293b;
-  height: 100vh; overflow: hidden;
-  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; overflow-y: auto; overflow-x: hidden;
+  display: flex;
   padding: 12px;
 }
 
 /* ── Card ── */
 .card {
-  width: 460px; background: #fff;
+  width: 460px; background: #fff; margin: auto;
   border-radius: 14px; overflow: hidden;
   box-shadow: 0 4px 24px rgba(0,0,0,0.10);
 }
@@ -615,6 +615,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
         method : 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.token}` },
         body   : JSON.stringify({ user_id, user_name, room_number, system_number, role: selectedRole, department }),
+        signal : AbortSignal.timeout(10000),
       });
       const data = await resp.json();
       if (!resp.ok) { flash(data.error || 'Update failed', false); return; }
@@ -629,7 +630,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
       await api.settingsUpdated(newConfig);
       flash('✅ Profile updated successfully!', true);
     } catch {
-      flash('Cannot connect to server. Check the Server URL.', false);
+      flash(`Cannot connect to ${serverUrl}. Check the Server URL and that the server is running.`, false);
     } finally {
       setBusy(false);
     }
@@ -649,6 +650,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     el.textContent = msg;
     el.className = 'flash ' + (ok ? 'ok' : 'err');
     el.style.display = msg ? 'block' : 'none';
+    if (msg) el.scrollIntoView({ block: 'end', behavior: 'smooth' });
     if (ok) setTimeout(() => el.style.display = 'none', 3000);
   }
 

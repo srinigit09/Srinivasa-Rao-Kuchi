@@ -50,14 +50,15 @@ html, body { width: 580px; height: 300px; overflow: hidden; background: #1a0000;
   <div class="btn-row">
     <button class="btn-ok" id="btnOk">OK</button>
   </div>
-  <div class="timer" id="timerLabel">Auto-closing in 30s…</div>
+  <div class="timer" id="timerLabel">Auto-closing in 20s…</div>
 </div>
 
 <script>
   const api = window.electronAPI;
-  let countdown = 30;          // auto-close countdown in seconds
+  let countdown = 20;          // auto-close countdown in seconds
   let timerInterval = null;
   let currentAlarmId = null;
+  let pendingAlarmIds = new Set();   // every alarm shown in this popup and not yet resolved
   let config = null;
   let acknowledged = false;
 
@@ -65,7 +66,7 @@ html, body { width: 580px; height: 300px; overflow: hidden; background: #1a0000;
 
   function startCountdown() {
     clearInterval(timerInterval);
-    countdown = 30;
+    countdown = 20;
     acknowledged = false;
     const timerLbl = document.getElementById('timerLabel');
     timerLbl.className = 'timer';
@@ -88,20 +89,25 @@ html, body { width: 580px; height: 300px; overflow: hidden; background: #1a0000;
     }, 1000);
   }
 
-  async function logNoResponse() {
-    if (!config || !currentAlarmId) return;
-    try {
-      await fetch(`${config.serverUrl}/api/client/alarm/no-response`, {
+  async function postForAll(path) {
+    if (!config) return;
+    const ids = [...pendingAlarmIds];
+    pendingAlarmIds.clear();
+    await Promise.all(ids.map(alarmId =>
+      fetch(`${config.serverUrl}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.token}` },
-        body: JSON.stringify({ alarmId: currentAlarmId }),
-      });
-    } catch { /* best effort */ }
+        body: JSON.stringify({ alarmId }),
+      }).catch(() => { /* best effort */ })
+    ));
   }
+
+  async function logNoResponse() { await postForAll('/api/client/alarm/no-response'); }
 
   function handleAlarm(data) {
     if (!data) return;
     currentAlarmId = data.alarmId;
+    pendingAlarmIds.add(data.alarmId);   // keep earlier unresolved alarms so OK/timeout covers them too
     document.getElementById('userName').textContent   = data.triggeredBy || '—';
     const uid = data.userId ? `  ·  ID: ${data.userId}` : '';
     document.getElementById('roomDetail').textContent =
@@ -121,13 +127,7 @@ html, body { width: 580px; height: 300px; overflow: hidden; background: #1a0000;
     const btn = document.getElementById('btnOk');
     btn.disabled = true;
     btn.textContent = '✔ Acknowledged';
-    try {
-      await fetch(`${config.serverUrl}/api/client/alarm/acknowledge`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.token}` },
-        body: JSON.stringify({ alarmId: currentAlarmId }),
-      });
-    } catch { /* best effort */ }
+    await postForAll('/api/client/alarm/acknowledge');
     setTimeout(() => api.dismissAlert(), 400);
   });
 </script>

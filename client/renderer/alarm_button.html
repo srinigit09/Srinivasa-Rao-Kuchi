@@ -95,7 +95,7 @@ html, body {
 
   function applyConfig(cfg) {
     config = cfg;
-    // If the sent-solid timer is active, preserve the temporary solid state visually
+    // While locked after sending, keep the temporary solid state visually
     if (!sentSolidTimer) {
       isSolid = cfg?.alertButtonSolid ?? false;
     }
@@ -133,7 +133,7 @@ html, body {
 
   // ── Click: arm → confirm → fire ──────────────────────────────────
   function handleClick() {
-    if (isFiring) return;
+    if (isFiring || sentSolidTimer) return;   // solid after a send = locked, no new alarm
     if (!armed) { arm(); } else { disarm(); fireAlarm(); }
   }
 
@@ -163,28 +163,39 @@ html, body {
     document.getElementById('btnLabel').textContent = 'SENT';
     document.getElementById('btnSub').textContent   = '...';
 
+    let sent = false;
     try {
-      await fetch(`${config.serverUrl}/api/client/alarm/trigger`, {
+      const resp = await fetch(`${config.serverUrl}/api/client/alarm/trigger`, {
         method : 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.token}` },
         body   : '{}',
+        signal : AbortSignal.timeout(10000),
       });
-    } catch { /* best effort */ }
+      if (resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        sent = !body.ignored;   // server ignores alarms inside its 20 s lock
+      }
+    } catch { /* sent stays false */ }
 
-    // Temporarily show solid for 20 s (visual only — does not save to config)
-    const colourIdx = config?.alertButtonColour ?? 3;
-    const wasAlreadySolid = isSolid;
-    if (!isSolid) {
-      isSolid = true;
-      applyColour(colourIdx);
+    if (!sent) {
+      // Not delivered (or ignored by the server's 20 s lock) — stay silent, do not lock
+      setTimeout(() => {
+        document.getElementById('btnLabel').textContent = 'PANIC';
+        document.getElementById('btnSub').textContent   = 'ALARM';
+        isFiring = false;
+      }, 2000);
+      return;
     }
+
+    // Show solid for 20 s and block new alarms; then always revert to the
+    // user's saved preference (visual only — does not save to config)
+    isSolid = true;
+    applyColour(config?.alertButtonColour ?? 3);
     if (sentSolidTimer) clearTimeout(sentSolidTimer);
     sentSolidTimer = setTimeout(() => {
       sentSolidTimer = null;
-      if (!wasAlreadySolid) {
-        isSolid = false;
-        applyColour(colourIdx);
-      }
+      isSolid = config?.alertButtonSolid ?? false;
+      applyColour(config?.alertButtonColour ?? 3);
     }, 20000);
 
     setTimeout(() => {

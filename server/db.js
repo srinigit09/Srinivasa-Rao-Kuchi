@@ -219,10 +219,16 @@ module.exports = {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `),
   acknowledgeAlarm:    db.prepare(`
-    UPDATE alarm_log SET acknowledged=1, ack_by=?, ack_at=datetime('now') WHERE alarm_id=?
+    UPDATE alarm_log SET acknowledged=1, ack_by=?, ack_at=datetime('now'), no_response=0 WHERE alarm_id=?
   `),
   markNoResponse:      db.prepare(`
-    UPDATE alarm_log SET no_response=1 WHERE alarm_id=?
+    UPDATE alarm_log SET no_response=1 WHERE alarm_id=? AND acknowledged=0
+  `),
+  // Any alarm still unresolved after the cut-off is a "No Response"
+  settleStaleAlarms:   db.prepare(`
+    UPDATE alarm_log SET no_response=1
+    WHERE acknowledged=0 AND no_response=0
+      AND triggered_at <= datetime('now', ?)
   `),
   listLogs:            db.prepare('SELECT * FROM alarm_log ORDER BY triggered_at DESC LIMIT 500'),
   listLogsByHospital:  db.prepare('SELECT * FROM alarm_log WHERE hospital_code=? ORDER BY triggered_at DESC LIMIT 200'),

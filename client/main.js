@@ -50,11 +50,10 @@ function initConfigDir() {
  * Returns true if this is a fresh install (config should be wiped).
  */
 function isFreshInstall() {
-  const installIdFile = path.join(process.resourcesPath, 'install-id');
-  if (!fs.existsSync(installIdFile)) return false;  // dev mode / no stamp → treat as reopen
-
-  const currentId = fs.readFileSync(installIdFile, 'utf8').trim();
-  if (!currentId) return false;
+  // The build-time UUID is identical when the same installer is run twice, so the stamp also
+  // includes the file's creation time — it is new every time the installer writes the file.
+  const currentId = getBuildStamp();
+  if (!currentId) return false;  // dev mode / no stamp → treat as reopen
 
   let seenId = null;
   try { seenId = fs.readFileSync(SEEN_INSTALL_FILE, 'utf8').trim(); } catch { /* not yet written */ }
@@ -67,10 +66,12 @@ function isFreshInstall() {
   return true;
 }
 
-/** Wipe user config (but keep server hint so new-install form is pre-filled). */
+/** Fresh install = full reset: registration, saved server address, device identity. */
 function wipeConfigForFreshInstall() {
-  try { fs.unlinkSync(CONFIG_FILE); } catch { /* already gone */ }
-  // Keep LAST_HINT_FILE and LAST_SERVER_FILE so the server URL field is pre-filled
+  for (const f of [CONFIG_FILE, CONFIG_FILE + '.bak', LAST_SERVER_FILE, LAST_HINT_FILE,
+                   path.join(CONFIG_DIR, 'device-id')]) {
+    try { fs.unlinkSync(f); } catch { /* already gone */ }
+  }
 }
 
 function loadConfig() {
@@ -117,12 +118,35 @@ let socket         = null;   // Socket.IO connection in main process
 let isQuitting     = false;  // true once the user has quit — suppresses disconnect dialog
 
 // ── Single instance lock — prevents multiple tray icons ──────────────────────
-const gotLock = app.requestSingleInstanceLock();
+// Identifies THIS build/install (read once at startup, so a running old process keeps its old id
+// even after the installer has replaced the files on disk).
+function getBuildStamp() {
+  try {
+    const f = path.join(process.resourcesPath, 'install-id');
+    const id = fs.readFileSync(f, 'utf8').trim();
+    const st = fs.statSync(f);
+    return id ? `${id}:${Math.floor(st.birthtimeMs || st.mtimeMs)}` : null;
+  } catch { return null; }   // dev mode
+}
+const MY_BUILD_STAMP = getBuildStamp();
+
+const gotLock = app.requestSingleInstanceLock({ buildStamp: MY_BUILD_STAMP });
 if (!gotLock) {
-  // Another instance is already running — quit this one immediately
+  // Another instance is already running — quit this one immediately.
+  // If that instance is an OLDER build it will notice and restart itself with the new code.
   app.quit();
 }
-app.on('second-instance', () => {
+app.on('second-instance', (_event, _argv, _cwd, additionalData) => {
+  // A newer build was launched while this old one was still running in the tray:
+  // restart so the freshly installed code is the one that runs.
+  const otherStamp = additionalData && additionalData.buildStamp;
+  if (otherStamp && otherStamp !== MY_BUILD_STAMP) {
+    console.log('[App] Newer build detected — restarting');
+    isQuitting = true;
+    app.relaunch();
+    app.quit();
+    return;
+  }
   // Someone tried to open a second instance — bring existing window to front
   if (setupWindow && !setupWindow.isDestroyed()) {
     setupWindow.show(); setupWindow.focus(); setupWindow.moveTop();
@@ -333,7 +357,7 @@ function createSettingsWindow() {
   if (settingsWindow && !settingsWindow.isDestroyed()) { settingsWindow.focus(); return; }
   const config = loadConfig();
   settingsWindow = new BrowserWindow({
-    width: 500, height: 560,
+    width: 500, height: 680,
     resizable: false, center: true,
     title: 'Panic Alarm — User Details',
     icon: path.join(__dirname, 'assets', 'icon.png'),
@@ -543,6 +567,7 @@ function launchAfterSetup(config) {
 }
 
 app.whenReady().then(() => {
+  if (!gotLock) return;   // duplicate instance is quitting — must not touch config or create a tray
   initConfigDir();
   hideDock();
 
