@@ -124,8 +124,20 @@ function getBuildStamp() {
   try {
     const f = path.join(process.resourcesPath, 'install-id');
     const id = fs.readFileSync(f, 'utf8').trim();
-    const st = fs.statSync(f);
-    return id ? `${id}:${Math.floor(st.birthtimeMs || st.mtimeMs)}` : null;
+    if (!id) return null;
+    // Must change on EVERY (re)install, even of the same installer. Windows keeps old file
+    // times for re-created files (NTFS tunneling), so use the uninstaller the installer
+    // writes fresh each time; elsewhere use the stamp file's creation time.
+    let t = 0;
+    if (process.platform === 'win32') {
+      try {
+        const dir  = path.dirname(process.execPath);
+        const unin = fs.readdirSync(dir).find(n => /^Uninstall .*\.exe$/i.test(n));
+        if (unin) t = Math.max(fs.statSync(path.join(dir, unin)).mtimeMs, fs.statSync(path.join(dir, unin)).birthtimeMs);
+      } catch { /* fall through */ }
+    }
+    if (!t) { const st = fs.statSync(f); t = st.birthtimeMs || st.mtimeMs; }
+    return `${id}:${Math.floor(t)}`;
   } catch { return null; }   // dev mode
 }
 const MY_BUILD_STAMP = getBuildStamp();
@@ -147,11 +159,15 @@ app.on('second-instance', (_event, _argv, _cwd, additionalData) => {
     app.quit();
     return;
   }
-  // Someone tried to open a second instance — bring existing window to front
+  // Someone tried to open a second instance — bring existing window to front.
+  // This also gives Windows users (where the tray icon may be hidden in the overflow
+  // area) a way in: launching the app again opens Edit User Details / the setup form.
   if (setupWindow && !setupWindow.isDestroyed()) {
     setupWindow.show(); setupWindow.focus(); setupWindow.moveTop();
   } else if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.show(); settingsWindow.focus();
+  } else if (app.isReady()) {
+    if (loadConfig()) createSettingsWindow(); else createSetupWindow();
   }
 });
 
@@ -185,9 +201,11 @@ function connectSocket(config) {
         type   : 'warning',
         title  : 'Server Not Reachable',
         message: 'Cannot connect to the Panic Alarm Server.',
-        detail : `The Panic Alarm app is running in the tray and will keep retrying automatically.\n\nThe alarm button will appear as soon as the server becomes reachable.\n\nServer: ${config.serverUrl}\n\nTo change the server address: right-click tray icon → Edit User Details.`,
-        buttons: ['OK'],
-      });
+        detail : `The Panic Alarm app is running in the tray and will keep retrying automatically.\n\nThe alarm button will appear as soon as the server becomes reachable.\n\nServer: ${config.serverUrl}\n\nTo change the server address click "Edit User Details" below (or right-click the tray icon → Edit User Details; on Windows the icon may be under the ^ arrow).`,
+        buttons: ['OK', 'Edit User Details'],
+        defaultId: 1,
+        cancelId : 0,
+      }).then(({ response }) => { if (response === 1) createSettingsWindow(); });
     }
   }, 10000);
 

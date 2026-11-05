@@ -57,8 +57,20 @@ function getBuildStamp() {
   try {
     const f = path.join(process.resourcesPath, 'install-id');
     const id = fs.readFileSync(f, 'utf8').trim();
-    const st = fs.statSync(f);
-    return id ? `${id}:${Math.floor(st.birthtimeMs || st.mtimeMs)}` : null;
+    if (!id) return null;
+    // Must change on EVERY (re)install, even of the same installer. Windows keeps old file
+    // times for re-created files (NTFS tunneling), so use the uninstaller the installer
+    // writes fresh each time; elsewhere use the stamp file's creation time.
+    let t = 0;
+    if (process.platform === 'win32') {
+      try {
+        const dir  = path.dirname(process.execPath);
+        const unin = fs.readdirSync(dir).find(n => /^Uninstall .*\.exe$/i.test(n));
+        if (unin) t = Math.max(fs.statSync(path.join(dir, unin)).mtimeMs, fs.statSync(path.join(dir, unin)).birthtimeMs);
+      } catch { /* fall through */ }
+    }
+    if (!t) { const st = fs.statSync(f); t = st.birthtimeMs || st.mtimeMs; }
+    return `${id}:${Math.floor(t)}`;
   } catch { return null; }   // dev mode
 }
 const MY_BUILD_STAMP = getBuildStamp();
@@ -101,12 +113,8 @@ const KEEP_SETTINGS = ['license_code', 'license_nonce', 'reset_nonce', 'machine_
 
 function isFreshInstall() {
   try {
-    const stampFile = path.join(process.resourcesPath, 'install-id');
-    if (!fs.existsSync(stampFile)) return false;           // dev mode → never reset
-    const stampId = fs.readFileSync(stampFile, 'utf8').trim();
-    if (!stampId) return false;
-    const st = fs.statSync(stampFile);
-    const currentId = `${stampId}:${Math.floor(st.birthtimeMs || st.mtimeMs)}`;
+    const currentId = MY_BUILD_STAMP;
+    if (!currentId) return false;                          // dev mode → never reset
 
     const seenFile = path.join(USER_DATA, 'seen-install-id');
     let seenId = null;
