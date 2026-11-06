@@ -190,8 +190,14 @@ app.post('/api/public/reset-admin-password', localOnly, (req, res) => {
   const r = license.checkReset(code);
   if (!r.ok) return sendCheckFailure(res, r);
   const admin = db.prepare('SELECT id FROM admin_users ORDER BY id LIMIT 1').get();
-  if (!admin) return res.status(500).json({ error: 'No admin account found' });
-  updateAdminPassword.run(bcrypt.hashSync(newPassword, 12), admin.id);
+  const hash = bcrypt.hashSync(newPassword, 12);
+  if (admin) {
+    updateAdminPassword.run(hash, admin.id);
+  } else {
+    // Fresh install with no bootstrap.env: the vendor Reset Code creates the first admin account.
+    db.prepare('INSERT INTO admin_users (username, password) VALUES (?, ?)').run('admin', hash);
+    console.log('[License] Admin account created with vendor code');
+  }
   license.consumeReset();
   console.log('[License] Admin password reset with vendor code');
   res.json({ message: 'Admin password reset. Sign in with the new password.' });
