@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   settingsUpdated     : (cfg)   => ipcRenderer.invoke('settings-updated', cfg),
   dismissAlert        : ()      => ipcRenderer.invoke('dismiss-alert'),
   moveAlarmWindow     : (delta) => ipcRenderer.send('move-alarm-window', delta),
+  resizeAlert         : (h)     => ipcRenderer.send('resize-alert', h),
   showColourMenu      : ()      => ipcRenderer.send('show-colour-menu'),
   setAlertButtonColour: (idx)   => ipcRenderer.invoke('set-alert-colour', idx),
   setAlertSolid       : (solid) => ipcRenderer.invoke('set-alert-solid', solid),

@@ -345,7 +345,7 @@ function showAlertPopup(alarmData) {
   const primary = screen.getPrimaryDisplay();
 
   alertPopup = new BrowserWindow({
-    width: 580, height: 350,
+    width: 580, height: 230, useContentSize: true,
     x: Math.round((primary.workAreaSize.width - 580) / 2),
     y: 20,
     frame: false, alwaysOnTop: true, resizable: false,
@@ -465,6 +465,11 @@ function rebuildTrayMenu(config, connected) {
 // ═══════════════════════════════════════════════════════════════════════════════
 ipcMain.handle('get-config',           () => loadConfig());
 ipcMain.handle('get-current-alarm',    () => activeAlarmData);
+// Alert popup reports its content height so the window can fit it exactly
+ipcMain.on('resize-alert', (_e, h) => {
+  const height = Math.min(Math.max(Math.round(Number(h)) || 0, 150), 500);
+  if (alertPopup && !alertPopup.isDestroyed()) alertPopup.setContentSize(580, height);
+});
 ipcMain.handle('get-device-id',        () => getOrCreateDeviceId());
 ipcMain.handle('get-last-server-hint', () => getLastServerHint());
 ipcMain.handle('get-connection-status',() => ({ connected: socket?.connected || false }));

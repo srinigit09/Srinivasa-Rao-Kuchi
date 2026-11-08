@@ -6,17 +6,16 @@
 <title>PANIC ALARM</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { width: 580px; height: 350px; overflow: hidden; background: #1a0000; font-family: -apple-system,"Segoe UI",sans-serif; }
+html, body { width: 580px; overflow: hidden; background: #1a0000; font-family: -apple-system,"Segoe UI",sans-serif; }
+/* Height follows the content; the window is resized to match (see resizeAlert below) */
 .popup {
-  width: 580px; height: 350px;
+  width: 580px;
   background: linear-gradient(155deg, #1a0000 0%, #3d0000 100%);
   border: 4px solid #e74c3c;
   display: flex; flex-direction: column; align-items: center;
-  padding: 12px 36px; position: relative; color: #fff;
+  padding: 22px 36px 14px; position: relative; color: #fff;
 }
-/* Title sits at the exact vertical middle: equal flexible space above and below it */
-.top-space { flex: 1; }
-.lower { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; width: 100%; }
+.lower { display: flex; flex-direction: column; align-items: center; width: 100%; }
 .blink-bar { position: absolute; top: 0; left: 0; right: 0; height: 7px; background: #e74c3c; animation: blk .5s step-start infinite; }
 @keyframes blk { 50% { background: #ffcc00; } }
 .title-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
@@ -47,7 +46,6 @@ html, body { width: 580px; height: 350px; overflow: hidden; background: #1a0000;
 <body>
 <div class="popup">
   <div class="blink-bar"></div>
-  <div class="top-space"></div>
   <div class="title-row">
     <span class="icon">🚨</span>
     <span class="heading">PANIC ALARM</span>
@@ -123,7 +121,13 @@ html, body { width: 580px; height: 350px; overflow: hidden; background: #1a0000;
     document.getElementById('userName').textContent   = data.triggeredBy || '—';
     // locationLabel already carries the field name, e.g. "Consulting Room: 12" or "Reception Area"
     document.getElementById('roomDetail').textContent = data.locationLabel || data.roomNumber || '—';
+    fitWindow();
     startCountdown();
+  }
+
+  // Resize the window to the content height (long locations wrap onto a second line)
+  function fitWindow() {
+    api.resizeAlert(Math.ceil(document.querySelector('.popup').getBoundingClientRect().height));
   }
 
   api.getCurrentAlarm().then(d => { if (d) handleAlarm(d); });
