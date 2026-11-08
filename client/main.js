@@ -345,7 +345,7 @@ function showAlertPopup(alarmData) {
   const primary = screen.getPrimaryDisplay();
 
   alertPopup = new BrowserWindow({
-    width: 580, height: 230, useContentSize: true,
+    width: 580, height: 260, useContentSize: true,
     x: Math.round((primary.workAreaSize.width - 580) / 2),
     y: 20,
     frame: false, alwaysOnTop: true, resizable: false,
