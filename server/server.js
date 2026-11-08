@@ -310,22 +310,21 @@ app.post('/api/admin/clients/:id/users', requireAdmin, (req, res) => {
   const client = findClientById.get(req.params.id);
   if (!client) return res.status(404).json({ error: 'Client not found' });
   const { user_id, room_number, system_number, user_name, role = 'staff', department = null } = req.body || {};
-  if (!user_id || !user_id.trim())
-    return res.status(400).json({ error: 'User ID is required' });
-  if (!user_name)
-    return res.status(400).json({ error: 'user_name required' });
-  const existing = findClientUserByUserId.get(user_id.trim(), client.hospital_code);
-  if (existing)
-    return res.status(409).json({ error: `User ID "${user_id}" already exists in this hospital` });
   const normalizedRole = normalizeRole(role);
+  const room = checkRoom(normalizedRole, room_number);
+  if (room.error) return res.status(400).json({ error: room.error });
+  const uid  = String(user_id ?? '').trim();
+  const name = String(user_name ?? '').trim() || roleTitle(normalizedRole);
+  if (uid && findClientUserByUserId.get(uid, client.hospital_code))
+    return res.status(409).json({ error: `User ID "${uid}" already exists in this hospital` });
   const deviceId = 'admin-' + uuidv4();
   const token    = signClientToken({
     deviceId, hospital_code: client.hospital_code,
-    user_id: user_id.trim(), room_number, system_number, user_name, role: normalizedRole,
+    user_id: uid, room_number: room.value, system_number: system_number || '', user_name: name, role: normalizedRole,
   });
   createClientUserAdmin.run(
-    client.id, client.hospital_code, user_id.trim(),
-    room_number || '', system_number || '', user_name, normalizedRole,
+    client.id, client.hospital_code, uid,
+    room.value, system_number || '', name, normalizedRole,
     deviceId, token, department || null,
   );
   res.status(201).json({ message: 'User added', token, deviceId });
@@ -342,11 +341,20 @@ app.put('/api/admin/client-users/:id', requireAdmin, (req, res) => {
       return res.status(409).json({ error: `User ID "${user_id}" already exists in this hospital` });
   }
   const normalizedRole = normalizeRole(role || u.role);
+  let roomValue = u.room_number;
+  if (room_number !== undefined || role !== undefined) {
+    const room = checkRoom(normalizedRole, room_number !== undefined ? room_number : u.room_number);
+    if (room.error) return res.status(400).json({ error: room.error });
+    roomValue = room.value;
+  }
+  // Names are derived from the role; follow a role change unless an admin set a custom name
+  const nameValue = user_name !== undefined ? (user_name || u.user_name)
+    : (u.user_name === roleTitle(u.role) ? roleTitle(normalizedRole) : u.user_name);
   updateClientUser.run(
     user_id       !== undefined ? user_id       : u.user_id,
-    room_number   !== undefined ? room_number   : u.room_number,
+    roomValue,
     system_number !== undefined ? system_number : u.system_number,
-    user_name     !== undefined ? (user_name || u.user_name) : u.user_name,
+    nameValue,
     normalizedRole,
     department    !== undefined ? department    : u.department,
     req.params.id
@@ -567,17 +575,20 @@ app.post('/api/admin/network-settings', requireAdmin, async (req, res) => {
 // POST /api/client/register  — called once at first-run wizard
 app.post('/api/client/register', (req, res) => {
   const {
-    hospital_code, user_id, room_number, system_number, user_name,
+    hospital_code, room_number, system_number,
     role = 'staff', device_id, department = null,
   } = req.body || {};
 
-  if (!hospital_code || !user_name || !device_id)
-    return res.status(400).json({ error: 'Required: hospital_code, user_name, device_id' });
-  if (!user_id || !user_id.trim())
-    return res.status(400).json({ error: 'User ID is required' });
+  if (!hospital_code || !device_id)
+    return res.status(400).json({ error: 'Required: hospital_code, device_id' });
+
+  const normalizedRole = normalizeRole(role);
+  const room = checkRoom(normalizedRole, room_number);
+  if (room.error) return res.status(400).json({ error: room.error });
+  const name = roleTitle(normalizedRole);
+  const uid  = '';
 
   const code   = hospital_code.trim().toUpperCase();
-  const uid    = user_id.trim();
   const client = findClientByCode.get(code);
   if (!client) return res.status(404).json({ error: 'Hospital code not recognised. Contact your administrator.' });
 
@@ -585,23 +596,16 @@ app.post('/api/client/register', (req, res) => {
   const { cnt } = countClientUsers.get(client.id);
   const existingDevice = findClientUser.get(device_id);
 
-  if (!existingDevice) {
-    const existingUid = findClientUserByUserId.get(uid, code);
-    if (existingUid)
-      return res.status(409).json({ error: `User ID "${uid}" is already registered in this hospital. Use a unique ID.` });
-  }
-
   if (!existingDevice && cnt >= client.system_limit)
     return res.status(403).json({ error: `System limit reached (${client.system_limit}). Contact administrator.` });
 
-  const normalizedRole = normalizeRole(role);
   const token = signClientToken({
     deviceId: device_id, hospital_code: code, user_id: uid,
-    room_number, system_number, user_name, role: normalizedRole,
+    room_number: room.value, system_number: system_number || '', user_name: name, role: normalizedRole,
   });
 
   if (existingDevice) {
-    updateClientUser.run(uid, room_number, system_number, user_name, normalizedRole,
+    updateClientUser.run(uid, room.value, system_number || '', name, normalizedRole,
       department || existingDevice.department, existingDevice.id);
     updateClientUserToken.run(token, device_id);
     // Re-activate in case the record was deactivated by an admin
@@ -613,7 +617,7 @@ app.post('/api/client/register', (req, res) => {
     });
   }
 
-  createClientUser.run(client.id, code, uid, room_number || '', system_number || '', user_name, normalizedRole, 'client', device_id, token, department || null);
+  createClientUser.run(client.id, code, uid, room.value, system_number || '', name, normalizedRole, 'client', device_id, token, department || null);
   io.to('admin').emit('user_registered', { hospitalCode: code, clientId: client.id });
   res.status(201).json({
     message: 'Registered', token, deviceId: device_id,
@@ -632,21 +636,16 @@ app.get('/api/client/me', requireClient, (req, res) => {
 app.put('/api/client/me', requireClient, (req, res) => {
   const u = findClientUser.get(req.clientUser.deviceId);
   if (!u) return res.status(404).json({ error: 'Not found' });
-  const { user_id, room_number, system_number, user_name, role, department } = req.body || {};
-
-  const newUserId = (user_id || u.user_id || '').trim();
-  if (newUserId && newUserId !== u.user_id) {
-    const existingUid = findClientUserByUserId.get(newUserId, u.hospital_code);
-    if (existingUid && existingUid.id !== u.id)
-      return res.status(409).json({ error: `User ID "${newUserId}" is already taken in this hospital` });
-  }
+  const { room_number, system_number, role, department } = req.body || {};
 
   const normalizedRole = normalizeRole(role || u.role);
+  const room = checkRoom(normalizedRole, room_number !== undefined ? room_number : u.room_number);
+  if (room.error) return res.status(400).json({ error: room.error });
   updateClientUser.run(
-    newUserId,
-    room_number   !== undefined ? room_number   : u.room_number,
+    u.user_id || '',
+    room.value,
     system_number !== undefined ? system_number : u.system_number,
-    user_name     !== undefined ? (user_name || u.user_name) : u.user_name,
+    roleTitle(normalizedRole),
     normalizedRole,
     department    !== undefined ? department : u.department,
     u.id
@@ -683,10 +682,13 @@ app.post('/api/client/alarm/trigger', requireClient, (req, res) => {
 
   const alarmId  = uuidv4();
   const userId   = u.user_id || u.userId || '';
-  const message  = `🚨 PANIC ALARM — ${u.user_name}${userId ? ' (ID: ' + userId + ')' : ''} in Room ${u.room_number} needs IMMEDIATE HELP!`;
+  const role     = normalizeRole(u.role);
+  const title    = roleTitle(role);
+  const location = roomLabel(role, u.room_number);
+  const message  = `🚨 PANIC ALARM — ${title} (${location}) needs IMMEDIATE HELP!`;
   const severity = 'PANIC';
 
-  insertLog.run(alarmId, u.hospital_code, u.user_name, userId, u.room_number, u.system_number, u.deviceId, severity, message);
+  insertLog.run(alarmId, u.hospital_code, title, userId, location, u.system_number || '', u.deviceId, severity, message);
 
   const hCode = (u.hospital_code || '').toString().trim().toUpperCase();
   const roomName = `hospital_${hCode}`;
@@ -698,9 +700,11 @@ app.post('/api/client/alarm/trigger', requireClient, (req, res) => {
   const alarmPayload = {
     alarmId,
     hospitalCode : hCode,
-    triggeredBy  : u.user_name,
+    triggeredBy  : title,
+    role,
     userId       : userId,
     roomNumber   : u.room_number,
+    locationLabel: location,
     systemNumber : u.system_number,
     deviceId     : u.deviceId,
     severity,
@@ -724,7 +728,7 @@ app.post('/api/client/alarm/trigger', requireClient, (req, res) => {
     try { markNoResponse.run(alarmId); } catch (e) { console.error('[ALARM] settle failed', e.message); }
   }, ALARM_SETTLE_MS);
 
-  console.log(`[ALARM] ${new Date().toISOString()} | ${hCode} | ${u.user_name} (${userId}) | Room ${u.room_number}`);
+  console.log(`[ALARM] ${new Date().toISOString()} | ${hCode} | ${title} | ${location}`);
   res.json({ alarmId, message: 'Alarm sent' });
 });
 
@@ -816,10 +820,44 @@ process.on('SIGTERM', () => { db.close(); process.exit(0); });
 module.exports = { server };
 
 // ── Helpers ────────────────────────────────────────────────────
+// Roles: doctor | nurse | staff. Older records used 'other', which now maps to staff.
 function normalizeRole(role) {
   if (!role) return 'staff';
   const r = role.toString().toLowerCase().trim();
   if (r === 'doctor') return 'doctor';
-  if (r === 'other')  return 'other';
+  if (r === 'nurse')  return 'nurse';
   return 'staff';
+}
+
+const ROLE_TITLE = { doctor: 'Doctor', nurse: 'Nurse', staff: 'Staff' };
+const ROOM_FIELD = { doctor: 'Consulting Room', nurse: 'Treatment Room' };
+const RECEPTION = 'Reception Area';
+const MGMT_PREFIX = 'Management Room: ';
+const MAX_ROOM_LEN = 40;
+
+function roleTitle(role) { return ROLE_TITLE[role] || 'Staff'; }
+
+// Validates the role-specific location. Returns { value } or { error }.
+function checkRoom(role, raw) {
+  const v = String(raw ?? '').trim();
+  if (role === 'staff') {
+    // Reception Area needs no room number; Management Room is stored as "Management Room: <number>"
+    if (v === RECEPTION) return { value: v };
+    const m = v.match(/^Management Room(?::\s*(.*))?$/);
+    if (!m) return { error: 'Select Reception Area or Management Room' };
+    const num = (m[1] || '').trim();
+    if (!num) return { error: 'Management Room number is required' };
+    if (num.length > MAX_ROOM_LEN) return { error: `Management Room number must be ${MAX_ROOM_LEN} characters or less` };
+    return { value: MGMT_PREFIX + num };
+  }
+  if (!v) return { error: `${ROOM_FIELD[role]} is required` };
+  if (v.length > MAX_ROOM_LEN) return { error: `${ROOM_FIELD[role]} must be ${MAX_ROOM_LEN} characters or less` };
+  return { value: v };
+}
+
+// Text shown in alerts and logs: "Consulting Room: 12", "Treatment Room: 5", "Reception Area", "Management Room: 3".
+function roomLabel(role, room) {
+  const v = String(room ?? '').trim();
+  if (role === 'staff') return v || 'Staff';
+  return `${ROOM_FIELD[role] || 'Room'}: ${v || '—'}`;
 }

@@ -216,7 +216,7 @@ function connectSocket(config) {
     launchTimer = null;
     socket.emit('join', {
       hospitalCode: (config.hospitalCode || '').toUpperCase(),
-      userName    : config.user_name,
+      userName    : config.user_name || config.role,
       deviceId    : config.deviceId,
     });
     rebuildTrayMenu(config, true);
@@ -261,7 +261,7 @@ function connectSocket(config) {
 
   // ── This is the key event — show popup on every registered PC ────────────────
   socket.on('panic_alarm', (alarmData) => {
-    console.log('[Alarm] Received:', alarmData.triggeredBy, alarmData.roomNumber);
+    console.log('[Alarm] Received:', alarmData.triggeredBy, alarmData.locationLabel || alarmData.roomNumber);
     showAlertPopup(alarmData);
   });
 
@@ -345,7 +345,7 @@ function showAlertPopup(alarmData) {
   const primary = screen.getPrimaryDisplay();
 
   alertPopup = new BrowserWindow({
-    width: 580, height: 300,
+    width: 580, height: 350,
     x: Math.round((primary.workAreaSize.width - 580) / 2),
     y: 20,
     frame: false, alwaysOnTop: true, resizable: false,
@@ -413,12 +413,15 @@ function rebuildTrayMenu(config, connected) {
   if (!tray) return;
   const statusLabel = connected ? '🟢 Connected' : '🔴 Disconnected';
   const roleLabel = config
-    ? (config.role === 'doctor' ? '👨‍⚕️ Doctor' : config.role === 'other' ? '👤 Other' : '🩺 Staff/Nurse')
+    ? (config.role === 'doctor' ? '👨‍⚕️ Doctor' : config.role === 'nurse' ? '🩺 Nurse' : '👤 Staff')
     : '';
+  const roomField = config && config.role === 'doctor' ? 'Consulting Room'
+    : config && config.role === 'nurse' ? 'Treatment Room' : '';
+  const roomLine  = config ? (roomField ? `${roomField}: ${config.room_number || '—'}` : (config.room_number || '—')) : '';
   const serverInfo = config && config.serverUrl ? `Server: ${config.serverUrl}` : '⚠️ Server URL not set — open My Details';
   const items = config ? [
-    { label: `${config.user_name}  ·  ${roleLabel}`, enabled: false },
-    { label: `Room: ${config.room_number}  ·  System: ${config.system_number}`, enabled: false },
+    { label: roleLabel, enabled: false },
+    { label: roomLine, enabled: false },
     { label: `Hospital: ${config.clientName || config.hospitalCode}`, enabled: false },
     { label: serverInfo, enabled: false },
     { label: statusLabel, enabled: false },
@@ -453,7 +456,7 @@ function rebuildTrayMenu(config, connected) {
     tray.on('click', () => tray.popUpContextMenu());
   }
   tray.setToolTip(config
-    ? `Panic Alarm — ${config.user_name} ${connected ? '(Connected)' : '(Disconnected)'}`
+    ? `Panic Alarm — ${roleLabel.replace(/^\S+\s/, '')} ${connected ? '(Connected)' : '(Disconnected)'}`
     : 'Panic Alarm — Click to Setup');
 }
 

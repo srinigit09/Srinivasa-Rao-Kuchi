@@ -6,22 +6,27 @@
 <title>PANIC ALARM</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { width: 580px; height: 300px; overflow: hidden; background: #1a0000; font-family: -apple-system,"Segoe UI",sans-serif; }
+html, body { width: 580px; height: 350px; overflow: hidden; background: #1a0000; font-family: -apple-system,"Segoe UI",sans-serif; }
 .popup {
-  width: 580px; height: 300px;
+  width: 580px; height: 350px;
   background: linear-gradient(155deg, #1a0000 0%, #3d0000 100%);
   border: 4px solid #e74c3c;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 20px 36px; position: relative; color: #fff;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 12px 36px; position: relative; color: #fff;
 }
+/* Title sits at the exact vertical middle: equal flexible space above and below it */
+.top-space { flex: 1; }
+.lower { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; width: 100%; }
 .blink-bar { position: absolute; top: 0; left: 0; right: 0; height: 7px; background: #e74c3c; animation: blk .5s step-start infinite; }
 @keyframes blk { 50% { background: #ffcc00; } }
-.icon { font-size: 44px; margin-bottom: 4px; animation: shake 0.6s ease-in-out infinite alternate; }
+.title-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.icon { display: inline-block; font-size: 40px; animation: shake 0.6s ease-in-out infinite alternate; }
 @keyframes shake { 0% { transform: rotate(-5deg); } 100% { transform: rotate(5deg); } }
-.heading { font-size: 24px; font-weight: 900; color: #ff4444; letter-spacing: 4px; text-transform: uppercase; }
-.user-name { margin-top: 8px; font-size: 20px; font-weight: 800; color: #fff; text-align: center; }
-.room-detail { margin-top: 6px; font-size: 13px; color: rgba(255,255,255,0.75); text-align: center; }
-.time-detail { margin-top: 4px; font-size: 11px; color: rgba(255,255,255,0.4); }
+.heading { font-size: 28px; font-weight: 900; color: #ff4444; letter-spacing: 4px; text-transform: uppercase; }
+.detail { margin-top: 14px; font-size: 24px; font-weight: 800; text-align: center; word-break: break-word; }
+.user-name { color: #fff; }
+.sep { color: rgba(255,255,255,0.5); }
+.room-detail { color: #ffcc00; }
 .btn-row { margin-top: 14px; display: flex; gap: 12px; align-items: center; }
 /* OK button — records acknowledgement and closes */
 .btn-ok {
@@ -42,15 +47,22 @@ html, body { width: 580px; height: 300px; overflow: hidden; background: #1a0000;
 <body>
 <div class="popup">
   <div class="blink-bar"></div>
-  <div class="icon">🚨</div>
-  <div class="heading">PANIC ALARM</div>
-  <div class="user-name"   id="userName">—</div>
-  <div class="room-detail" id="roomDetail"></div>
-  <div class="time-detail" id="timeDetail"></div>
-  <div class="btn-row">
-    <button class="btn-ok" id="btnOk">OK</button>
+  <div class="top-space"></div>
+  <div class="title-row">
+    <span class="icon">🚨</span>
+    <span class="heading">PANIC ALARM</span>
   </div>
-  <div class="timer" id="timerLabel">Auto-closing in 20s…</div>
+  <div class="lower">
+    <div class="detail">
+      <span class="user-name" id="userName">—</span>
+      <span class="sep"> - </span>
+      <span class="room-detail" id="roomDetail"></span>
+    </div>
+    <div class="btn-row">
+      <button class="btn-ok" id="btnOk">OK</button>
+    </div>
+    <div class="timer" id="timerLabel">Auto-closing in 20s…</div>
+  </div>
 </div>
 
 <script>
@@ -109,10 +121,8 @@ html, body { width: 580px; height: 300px; overflow: hidden; background: #1a0000;
     currentAlarmId = data.alarmId;
     pendingAlarmIds.add(data.alarmId);   // keep earlier unresolved alarms so OK/timeout covers them too
     document.getElementById('userName').textContent   = data.triggeredBy || '—';
-    const uid = data.userId ? `  ·  ID: ${data.userId}` : '';
-    document.getElementById('roomDetail').textContent =
-      `Room: ${data.roomNumber || '—'}${uid}   ·   Hospital: ${data.hospitalCode || '—'}`;
-    document.getElementById('timeDetail').textContent = `Triggered at: ${new Date(data.triggeredAt).toLocaleString()}`;
+    // locationLabel already carries the field name, e.g. "Consulting Room: 12" or "Reception Area"
+    document.getElementById('roomDetail').textContent = data.locationLabel || data.roomNumber || '—';
     startCountdown();
   }
 

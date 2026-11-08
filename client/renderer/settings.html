@@ -51,13 +51,13 @@ body {
 }
 .role-card:hover { background: #f1f5f9; border-color: #cbd5e1; }
 .role-card.selected.doctor { background: #fff1f2; border-color: #e74c3c; }
+.role-card.selected.nurse  { background: #f0fdf4; border-color: #22c55e; }
 .role-card.selected.staff  { background: #eff6ff; border-color: #3498db; }
-.role-card.selected.other  { background: #faf5ff; border-color: #9b59b6; }
 .role-card .rc-icon  { font-size: 18px; margin-bottom: 3px; display: block; }
 .role-card .rc-label { font-size: 10px; font-weight: 700; color: #64748b; }
 .role-card.selected.doctor .rc-label { color: #e74c3c; }
+.role-card.selected.nurse  .rc-label { color: #16a34a; }
 .role-card.selected.staff  .rc-label { color: #3498db; }
-.role-card.selected.other  .rc-label { color: #9b59b6; }
 .role-card .rc-check { display: none; font-size: 10px; margin-top: 2px; color: #22c55e; }
 .role-card.selected .rc-check { display: block; }
 .role-card.required { animation: shake .3s ease; border-color: #e74c3c !important; }
@@ -91,6 +91,17 @@ select {
 }
 select:disabled { opacity: 0.5; cursor: not-allowed; }
 .hint { font-size: 10px; color: #94a3b8; margin-top: -6px; margin-bottom: 10px; }
+
+/* ── Staff area radios ── */
+.radio-row { display: flex; gap: 8px; }
+.radio-opt {
+  flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer;
+  padding: 8px 10px; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 7px;
+  font-size: 12px; font-weight: 600; color: #1e293b; text-transform: none; letter-spacing: 0; margin: 0;
+}
+.radio-opt:hover { background: #f1f5f9; }
+.radio-opt input { width: auto; padding: 0; margin: 0; accent-color: #1565c0; }
+#mgmtRoomGroup { margin-top: 10px; }
 
 /* ── Buttons ── */
 .btn-primary {
@@ -183,38 +194,35 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
         <div class="rc-label">Doctor</div>
         <div class="rc-check">✔</div>
       </div>
-      <div class="role-card staff" id="rcStaff" onclick="selectRole('staff')">
+      <div class="role-card nurse" id="rcNurse" onclick="selectRole('nurse')">
         <span class="rc-icon">🩺</span>
-        <div class="rc-label">Staff / Nurse</div>
+        <div class="rc-label">Nurse</div>
         <div class="rc-check">✔</div>
       </div>
-      <div class="role-card other" id="rcOther" onclick="selectRole('other')">
+      <div class="role-card staff" id="rcStaff" onclick="selectRole('staff')">
         <span class="rc-icon">👤</span>
-        <div class="rc-label">Other</div>
+        <div class="rc-label">Staff</div>
         <div class="rc-check">✔</div>
       </div>
     </div>
 
-    <!-- User details -->
-    <div class="section-title">Your Details</div>
-    <div class="form-row">
-      <div class="fg">
-        <label>User ID <span class="required-star">*</span></label>
-        <input type="text" id="userId" placeholder="e.g. EMP-001" autocomplete="off">
+    <!-- Location: the field depends on the selected role -->
+    <div id="roomSection" style="display:none">
+      <div class="section-title">Location</div>
+      <div class="fg" id="roomTextGroup" style="display:none">
+        <label id="roomLabel">Consulting Room <span class="required-star">*</span></label>
+        <input type="text" id="roomNumber" maxlength="40" placeholder="Room number" autocomplete="off">
       </div>
-      <div class="fg">
-        <label>Full Name <span class="required-star">*</span></label>
-        <input type="text" id="userName" placeholder="e.g. Dr. John Smith" autocomplete="off">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="fg">
-        <label>Room Number</label>
-        <input type="text" id="roomNumber" placeholder="e.g. ICU-3" autocomplete="off">
-      </div>
-      <div class="fg">
-        <label>System / PC No.</label>
-        <input type="text" id="systemNumber" placeholder="e.g. PC-07" autocomplete="off">
+      <div class="fg" id="roomRadioGroup" style="display:none">
+        <label>Area <span class="required-star">*</span></label>
+        <div class="radio-row">
+          <label class="radio-opt"><input type="radio" name="staffArea" value="Reception Area"> Reception Area</label>
+          <label class="radio-opt"><input type="radio" name="staffArea" value="Management Room"> Management Room</label>
+        </div>
+        <div id="mgmtRoomGroup" style="display:none">
+          <label>Management Room No. <span class="required-star">*</span></label>
+          <input type="text" id="mgmtRoom" maxlength="40" placeholder="Enter Management Room number" autocomplete="off">
+        </div>
       </div>
     </div>
 
@@ -248,18 +256,89 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
   let verifiedHospitalCode = null;
   let verifiedHospitalName = null;
 
+  const ROLE_IDS    = ['rcDoctor', 'rcNurse', 'rcStaff'];
+  const ROLE_TITLE  = { doctor: 'Doctor', nurse: 'Nurse', staff: 'Staff' };
+  const ROOM_FIELD  = { doctor: 'Consulting Room', nurse: 'Treatment Room' };
+
+  // Older saved configs may carry a retired role ('other') — treat it as staff.
+  const knownRole = r => (r === 'doctor' || r === 'nurse') ? r : 'staff';
+
   // ── Role selection ────────────────────────────────────────────────────────────
   function selectRole(role) {
+    role = knownRole(role);
+    if (role !== selectedRole) setRoomValue('');   // a different role means a different field
     selectedRole = role;
-    ['doctor','staff','other'].forEach(r => {
+    ['doctor', 'nurse', 'staff'].forEach(r => {
       document.getElementById('rc' + r.charAt(0).toUpperCase() + r.slice(1))
         .classList.toggle('selected', r === role);
     });
+    renderRoomField();
   }
   function clearRole() {
     selectedRole = null;
-    ['rcDoctor','rcStaff','rcOther'].forEach(id =>
-      document.getElementById(id).classList.remove('selected'));
+    ROLE_IDS.forEach(id => document.getElementById(id).classList.remove('selected'));
+    setRoomValue('');
+    renderRoomField();
+  }
+
+  // ── Role-specific location field ─────────────────────────────────────────────
+  function renderRoomField() {
+    document.getElementById('roomSection').style.display = selectedRole ? 'block' : 'none';
+    const isStaff = selectedRole === 'staff';
+    document.getElementById('roomTextGroup').style.display  = selectedRole && !isStaff ? 'block' : 'none';
+    document.getElementById('roomRadioGroup').style.display = isStaff ? 'block' : 'none';
+    if (selectedRole && !isStaff) {
+      document.getElementById('roomLabel').innerHTML =
+        `${ROOM_FIELD[selectedRole]} <span class="required-star">*</span>`;
+      document.getElementById('roomNumber').placeholder = `Enter ${ROOM_FIELD[selectedRole]} number`;
+    }
+  }
+  // Staff: "Reception Area" (no number) or "Management Room: <number>"
+  function getRoomValue() {
+    if (selectedRole === 'staff') {
+      const r = document.querySelector('input[name="staffArea"]:checked');
+      if (!r) return '';
+      if (r.value === 'Reception Area') return 'Reception Area';
+      const num = document.getElementById('mgmtRoom').value.trim();
+      return num ? `Management Room: ${num}` : '';
+    }
+    return document.getElementById('roomNumber').value.trim();
+  }
+  function setRoomValue(v) {
+    v = v || '';
+    const isStaff = selectedRole === 'staff';
+    document.getElementById('roomNumber').value = isStaff ? '' : v;
+    const mgmt = isStaff && v.startsWith('Management Room');
+    document.querySelectorAll('input[name="staffArea"]').forEach(r => {
+      r.checked = isStaff && (r.value === 'Reception Area' ? v === 'Reception Area' : mgmt);
+    });
+    document.getElementById('mgmtRoom').value = mgmt ? v.replace(/^Management Room:?\s*/, '') : '';
+    syncMgmtRoom();
+  }
+  function syncMgmtRoom() {
+    const r = document.querySelector('input[name="staffArea"]:checked');
+    document.getElementById('mgmtRoomGroup').style.display = (r && r.value === 'Management Room') ? 'block' : 'none';
+  }
+  document.querySelectorAll('input[name="staffArea"]').forEach(r => r.addEventListener('change', syncMgmtRoom));
+
+  // Returns an error message, or '' when the role + location are valid.
+  function roomError() {
+    if (!selectedRole) return 'Please select a role.';
+    if (selectedRole === 'staff') {
+      const r = document.querySelector('input[name="staffArea"]:checked');
+      if (!r) return 'Select Reception Area or Management Room.';
+      if (r.value === 'Management Room' && !document.getElementById('mgmtRoom').value.trim())
+        return 'Management Room number is required.';
+      return '';
+    }
+    return getRoomValue() ? '' : `${ROOM_FIELD[selectedRole]} is required.`;
+  }
+  function shakeRoles() {
+    ROLE_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      el.classList.add('required');
+      setTimeout(() => el.classList.remove('required'), 400);
+    });
   }
 
   // ── Normalise URL ─────────────────────────────────────────────────────────────
@@ -393,10 +472,6 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     document.getElementById('btnSecondary').title          = 'Clear form and reload server data';
     // All user fields blank
     clearRole();
-    document.getElementById('userId').value       = '';
-    document.getElementById('userName').value     = '';
-    document.getElementById('roomNumber').value   = '';
-    document.getElementById('systemNumber').value = '';
     // Auto-connect: load last known server URL + pre-select saved hospital + dept
     const hint = await api.getLastServerHint();
     if (hint && hint.serverUrl) {
@@ -423,12 +498,8 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     // Server URL (edit section)
     document.getElementById('serverUrlEdit').value = cfg.serverUrl || '';
 
-    // Pre-fill user fields
-    if (cfg.role) selectRole(cfg.role);
-    document.getElementById('userId').value       = cfg.user_id      || '';
-    document.getElementById('userName').value     = cfg.user_name    || '';
-    document.getElementById('roomNumber').value   = cfg.room_number  || '';
-    document.getElementById('systemNumber').value = cfg.system_number || '';
+    // Pre-fill role + location
+    if (cfg.role) { selectRole(cfg.role); setRoomValue(cfg.room_number || ''); }
 
     // Show live connection status
     const connEl = document.getElementById('connStatus');
@@ -497,11 +568,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
       flash('↺ Form reset', true);
     } else if (config) {
       // Edit mode: restore saved values
-      if (config.role) selectRole(config.role);
-      document.getElementById('userId').value        = config.user_id      || '';
-      document.getElementById('userName').value      = config.user_name    || '';
-      document.getElementById('roomNumber').value    = config.room_number  || '';
-      document.getElementById('systemNumber').value  = config.system_number || '';
+      if (config.role) { selectRole(config.role); setRoomValue(config.room_number || ''); }
       document.getElementById('serverUrlEdit').value = config.serverUrl    || '';
       loadDepartmentsEdit(config.serverUrl, config.hospitalCode, config.department || '');
       flash('↺ Reset to saved values', true);
@@ -520,25 +587,14 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
   // ── REGISTER new user ─────────────────────────────────────────────────────────
   async function doRegister() {
     const serverUrl    = normaliseUrl(document.getElementById('serverUrl').value);
-    const userId       = document.getElementById('userId').value.trim();
-    const userName     = document.getElementById('userName').value.trim();
-    const roomNumber   = document.getElementById('roomNumber').value.trim() || '';
-    const systemNumber = document.getElementById('systemNumber').value.trim() || '';
     const department   = document.getElementById('departmentSelect').value || null;
 
     if (!serverUrl)            { flash('Server URL is required.', false); return; }
     if (!verifiedHospitalCode) { flash('Please select a hospital from the dropdown.', false); return; }
-    if (!userName)             { flash('Full Name is required.', false); return; }
-    if (!userId)               { flash('User ID is required.', false); return; }
-    if (!selectedRole) {
-      flash('Please select a role.', false);
-      ['rcDoctor','rcStaff','rcOther'].forEach(id => {
-        const el = document.getElementById(id);
-        el.classList.add('required');
-        setTimeout(() => el.classList.remove('required'), 400);
-      });
-      return;
-    }
+    const err = roomError();
+    if (err) { flash(err, false); if (!selectedRole) shakeRoles(); return; }
+    const roomNumber = getRoomValue();
+    const userName   = ROLE_TITLE[selectedRole];
 
     document.getElementById('serverUrl').value = serverUrl;
     setBusy(true);
@@ -550,10 +606,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
         headers: { 'Content-Type': 'application/json' },
         body   : JSON.stringify({
           hospital_code : verifiedHospitalCode,
-          user_id       : userId,
           room_number   : roomNumber,
-          system_number : systemNumber,
-          user_name     : userName,
           role          : selectedRole,
           device_id     : deviceId,
           department    : department,
@@ -567,9 +620,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
         serverUrl,
         hospitalCode  : data.hospitalCode  || verifiedHospitalCode,
         clientName    : data.clientName    || verifiedHospitalName || verifiedHospitalCode,
-        user_id       : userId,
         room_number   : roomNumber,
-        system_number : systemNumber,
         user_name     : userName,
         role          : selectedRole,
         department    : department,
@@ -591,30 +642,19 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     let serverUrl = normaliseUrl(document.getElementById('serverUrlEdit').value);
     if (!serverUrl) { flash('Server URL is required', false); return; }
 
-    const user_id       = document.getElementById('userId').value.trim();
-    const user_name     = document.getElementById('userName').value.trim();
-    const room_number   = document.getElementById('roomNumber').value.trim();
-    const system_number = document.getElementById('systemNumber').value.trim();
-    const department    = document.getElementById('departmentSelectEdit').value || null;
+    const department = document.getElementById('departmentSelectEdit').value || null;
 
-    if (!user_id)   { flash('User ID is required', false); return; }
-    if (!user_name) { flash('Full Name is required', false); return; }
-    if (!selectedRole) {
-      flash('Please select a role', false);
-      ['rcDoctor','rcStaff','rcOther'].forEach(id => {
-        const el = document.getElementById(id);
-        el.classList.add('required');
-        setTimeout(() => el.classList.remove('required'), 400);
-      });
-      return;
-    }
+    const err = roomError();
+    if (err) { flash(err, false); if (!selectedRole) shakeRoles(); return; }
+    const room_number = getRoomValue();
+    const user_name   = ROLE_TITLE[selectedRole];
 
     setBusy(true);
     try {
       const resp = await fetch(`${serverUrl}/api/client/me`, {
         method : 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.token}` },
-        body   : JSON.stringify({ user_id, user_name, room_number, system_number, role: selectedRole, department }),
+        body   : JSON.stringify({ room_number, role: selectedRole, department }),
         signal : AbortSignal.timeout(10000),
       });
       const data = await resp.json();
@@ -622,7 +662,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
 
       const newConfig = {
         ...config,
-        serverUrl, user_id, user_name, room_number, system_number,
+        serverUrl, user_name, room_number,
         role: selectedRole, department,
         token: data.token || config.token,
       };

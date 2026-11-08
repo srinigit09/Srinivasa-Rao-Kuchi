@@ -179,8 +179,8 @@ tr:hover td { background: #f8fafc; }
 /* Badges */
 .badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; }
 .badge-doctor { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
+.badge-nurse  { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
 .badge-staff  { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
-.badge-other  { background: #faf5ff; color: #7c3aed; border: 1px solid #ddd6fe; }
 .badge-active { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
 .badge-alarm  { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
 .badge-no-resp{ background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
@@ -358,8 +358,8 @@ tr:hover td { background: #f8fafc; }
         <div class="section-hdr"><h3>All Users</h3></div>
         <div class="section-body" style="padding:0">
           <table>
-            <thead><tr><th>User ID</th><th>Full Name</th><th>Hospital</th><th>Room</th><th>Role</th><th>Dept/Block</th></tr></thead>
-            <tbody id="dash-users-body"><tr class="empty-row"><td colspan="6">Loading…</td></tr></tbody>
+            <thead><tr><th>Role</th><th>Hospital</th><th>Location</th><th>Dept/Block</th></tr></thead>
+            <tbody id="dash-users-body"><tr class="empty-row"><td colspan="4">Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -432,17 +432,28 @@ tr:hover td { background: #f8fafc; }
         <div class="section-hdr"><h3>Add New User</h3></div>
         <div class="section-body">
           <div class="form-grid">
-            <div class="fg"><label>User ID <span class="required-star">*</span></label><input type="text" id="uUserId" placeholder="e.g. EMP-001"></div>
-            <div class="fg"><label>Full Name <span class="required-star">*</span></label><input type="text" id="uName" placeholder="e.g. Dr. John Smith"></div>
-            <div class="fg"><label>Room Number</label><input type="text" id="uRoom" placeholder="Room number"></div>
-            <div class="fg"><label>System / PC No.</label><input type="text" id="uSysNum" placeholder="PC number"></div>
             <div class="fg">
               <label>Role <span class="required-star">*</span></label>
               <select id="uRole">
-                <option value="staff">🩺 Staff / Nurse</option>
                 <option value="doctor">👨‍⚕️ Doctor</option>
-                <option value="other">👤 Other</option>
+                <option value="nurse">🩺 Nurse</option>
+                <option value="staff">👤 Staff</option>
               </select>
+            </div>
+            <div class="fg" id="uRoomText">
+              <label id="uRoomLabel">Consulting Room <span class="required-star">*</span></label>
+              <input type="text" id="uRoom" maxlength="40" placeholder="Room number">
+            </div>
+            <div class="fg" id="uRoomArea" style="display:none">
+              <label>Area <span class="required-star">*</span></label>
+              <div style="display:flex;gap:16px;flex-wrap:wrap;padding-top:6px">
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="radio" name="uArea" value="Reception Area" checked> Reception Area</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="radio" name="uArea" value="Management Room"> Management Room</label>
+              </div>
+            </div>
+            <div class="fg" id="uMgmtGroup" style="display:none">
+              <label>Management Room No. <span class="required-star">*</span></label>
+              <input type="text" id="uMgmt" maxlength="40" placeholder="Room number">
             </div>
             <div class="fg">
               <label>Department / Block</label>
@@ -466,9 +477,9 @@ tr:hover td { background: #f8fafc; }
         <div class="section-body" style="padding:0">
           <table>
             <thead>
-              <tr><th>User ID</th><th>Full Name</th><th>Room No.</th><th>System</th><th>Role</th><th>Dept/Block</th><th>Source</th><th>Registered</th><th style="text-align:right">Actions</th></tr>
+              <tr><th>Role</th><th>Location</th><th>Dept/Block</th><th>Source</th><th>Registered</th><th style="text-align:right">Actions</th></tr>
             </thead>
-            <tbody id="usersTableBody"><tr class="empty-row"><td colspan="9">No users yet</td></tr></tbody>
+            <tbody id="usersTableBody"><tr class="empty-row"><td colspan="6">No users yet</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -732,17 +743,28 @@ tr:hover td { background: #f8fafc; }
     <div class="modal-title">Edit User</div>
     <input type="hidden" id="euId">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-      <div class="fg"><label>User ID</label><input type="text" id="euUserId" placeholder="e.g. EMP-001"></div>
-      <div class="fg"><label>Full Name</label><input type="text" id="euName" placeholder="e.g. Dr. John Smith"></div>
-      <div class="fg"><label>Room Number</label><input type="text" id="euRoom" placeholder="Room number"></div>
-      <div class="fg"><label>System / PC No.</label><input type="text" id="euSys" placeholder="PC number"></div>
       <div class="fg">
         <label>Role</label>
         <select id="euRole">
-          <option value="staff">🩺 Staff / Nurse</option>
           <option value="doctor">👨‍⚕️ Doctor</option>
-          <option value="other">👤 Other</option>
+          <option value="nurse">🩺 Nurse</option>
+          <option value="staff">👤 Staff</option>
         </select>
+      </div>
+      <div class="fg" id="euRoomText">
+        <label id="euRoomLabel">Consulting Room</label>
+        <input type="text" id="euRoom" maxlength="40" placeholder="Room number">
+      </div>
+      <div class="fg" id="euRoomArea" style="display:none">
+        <label>Area <span class="required-star">*</span></label>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;padding-top:6px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="radio" name="euArea" value="Reception Area" checked> Reception Area</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="radio" name="euArea" value="Management Room"> Management Room</label>
+        </div>
+      </div>
+      <div class="fg" id="euMgmtGroup" style="display:none">
+        <label>Management Room No. <span class="required-star">*</span></label>
+        <input type="text" id="euMgmt" maxlength="40" placeholder="Room number">
       </div>
       <div class="fg">
         <label>Department / Block</label>
@@ -977,16 +999,14 @@ async function _renderDashUsers(ca) {
   );
   const all = results.flatMap(r => r.users.map(u => ({ ...u, hospital_code: r.code })));
   if (!all.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No users registered</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">No users registered</td></tr>';
     return;
   }
   tbody.innerHTML = all.map(u=>`
     <tr>
-      <td>${esc(u.user_id||u.device_id||'—')}</td>
-      <td>${esc(u.user_name||'—')}</td>
+      <td>${roleBadge(u.role)}</td>
       <td>${esc(u.hospital_code)}</td>
-      <td>${esc(u.room_number||'—')}</td>
-      <td>${esc(u.role||'—')}</td>
+      <td>${esc(roomLabel(u.role, u.room_number))}</td>
       <td>${esc(u.department||'—')}</td>
     </tr>`).join('');
 }
@@ -1149,23 +1169,20 @@ async function loadClientUsers() {
   const data = await api('GET', `/api/admin/clients/${currentClientId}/users`);
   const tbody = document.getElementById('usersTableBody');
   if (!Array.isArray(data) || !data.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="9">No users yet — add one above or they self-register via the client app.</td></tr>'; return;
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No users yet — add one above or they self-register via the client app.</td></tr>'; return;
   }
   tbody.innerHTML = data.map(u => {
     const isAdmin = (u.source === 'admin') || (u.device_id && u.device_id.startsWith('admin-'));
     const src = isAdmin ? '<span class="badge badge-admin">Admin</span>' : '<span class="badge badge-self">Self-reg</span>';
     return `<tr>
-      <td>${esc(u.user_id||'—')}</td>
-      <td>${esc(u.user_name)}</td>
-      <td>${esc(u.room_number)}</td>
-      <td>${esc(u.system_number)}</td>
       <td>${roleBadge(u.role)}</td>
+      <td>${esc(roomLabel(u.role, u.room_number))}</td>
       <td>${esc(u.department||'—')}</td>
       <td>${src}</td>
       <td>${new Date(u.registered_at).toLocaleDateString()}</td>
       <td class="actions">
         <button class="btn-sm btn-edit" onclick="openEditUser(${JSON.stringify(u)})">Edit</button>
-        <button class="btn-sm btn-del"  onclick="deleteUser(${u.id},'${esc(u.user_name)}')">Delete</button>
+        <button class="btn-sm btn-del"  onclick="deleteUser(${u.id},'${esc(roleName(u.role))}')">Delete</button>
       </td>
     </tr>`;
   }).join('');
@@ -1189,34 +1206,82 @@ async function loadDeptDropdown(selectId, hospitalCode) {
   }
 }
 
+// Role → location field. Mirrors the server rules (server.js checkRoom / roomLabel).
+const ROLE_NAME  = { doctor: 'Doctor', nurse: 'Nurse', staff: 'Staff' };
+const ROOM_FIELD = { doctor: 'Consulting Room', nurse: 'Treatment Room' };
+function roleName(role) { return ROLE_NAME[role] || 'Staff'; }
+function roomLabel(role, room) {
+  const v = String(room || '').trim();
+  if (role === 'doctor' || role === 'nurse') return `${ROOM_FIELD[role]}: ${v || '—'}`;
+  return v || '—';
+}
+function getArea(prefix) {
+  const r = document.querySelector(`input[name="${prefix}Area"]:checked`);
+  return r ? r.value : 'Reception Area';
+}
+function setArea(prefix, value) {
+  document.querySelectorAll(`input[name="${prefix}Area"]`).forEach(r => { r.checked = (r.value === value); });
+}
+// Shows the text input (doctor/nurse) or the area radio buttons (staff) for the chosen role.
+function syncRoomField(prefix) {
+  const role = document.getElementById(prefix + 'Role').value;
+  const isStaff = role === 'staff';
+  document.getElementById(prefix + 'RoomText').style.display = isStaff ? 'none' : '';
+  document.getElementById(prefix + 'RoomArea').style.display = isStaff ? '' : 'none';
+  // Management Room (staff) needs a room number; Reception Area does not
+  const mgmt = isStaff && getArea(prefix) === 'Management Room';
+  document.getElementById(prefix + 'MgmtGroup').style.display = mgmt ? '' : 'none';
+  if (!isStaff) {
+    const star = prefix === 'u' ? ' <span class="required-star">*</span>' : '';
+    document.getElementById(prefix + 'RoomLabel').innerHTML = ROOM_FIELD[role] + star;
+  }
+}
+// Value to send for the current role. Staff: "Reception Area" or "Management Room: <no.>"; '' when incomplete.
+function roomFieldValue(prefix) {
+  const role = document.getElementById(prefix + 'Role').value;
+  if (role !== 'staff') return document.getElementById(prefix + 'Room').value.trim();
+  if (getArea(prefix) === 'Reception Area') return 'Reception Area';
+  const num = document.getElementById(prefix + 'Mgmt').value.trim();
+  return num ? `Management Room: ${num}` : '';
+}
+function roomRequiredMsg(prefix) {
+  const role = document.getElementById(prefix + 'Role').value;
+  return role === 'staff' ? 'Management Room number is required' : `${ROOM_FIELD[role]} is required`;
+}
+
 function initAddUser() {
+  document.getElementById('uRole').addEventListener('change', () => syncRoomField('u'));
+  document.querySelectorAll('input[name="uArea"]').forEach(r => r.addEventListener('change', () => syncRoomField('u')));
+  syncRoomField('u');
   document.getElementById('btnAddUser').addEventListener('click', async () => {
-    const uid  = document.getElementById('uUserId').value.trim();
-    const name = document.getElementById('uName').value.trim();
-    const room = document.getElementById('uRoom').value.trim() || '';
-    const sys  = document.getElementById('uSysNum').value.trim() || '';
     const role = document.getElementById('uRole').value;
+    const room = roomFieldValue('u');
     const dept = document.getElementById('uDept').value || null;
-    if (!uid)  { flash('User ID is required', false); return; }
-    if (!name) { flash('Full name is required', false); return; }
-    const r = await api('POST', `/api/admin/clients/${currentClientId}/users`, { user_id: uid, user_name: name, room_number: room, system_number: sys, role, department: dept });
+    if (!room) { flash(roomRequiredMsg('u'), false); return; }
+    const r = await api('POST', `/api/admin/clients/${currentClientId}/users`, { room_number: room, role, department: dept });
     if (r.error) { flash(r.error, false); return; }
-    flash('✅ User added: ' + name, true);
-    ['uUserId','uName','uRoom','uSysNum'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('uRole').value = 'staff';
+    flash('✅ User added: ' + roleName(role), true);
+    document.getElementById('uRoom').value = '';
+    document.getElementById('uMgmt').value = '';
+    setArea('u', 'Reception Area');
+    document.getElementById('uRole').value = 'doctor';
     document.getElementById('uDept').value = '';
+    syncRoomField('u');
     loadClientUsers();
   });
 }
 
 function openEditUser(u) {
   if (typeof u === 'string') u = JSON.parse(u);
-  document.getElementById('euId').value    = u.id;
-  document.getElementById('euUserId').value = u.user_id || '';
-  document.getElementById('euName').value  = u.user_name;
-  document.getElementById('euRoom').value  = u.room_number;
-  document.getElementById('euSys').value   = u.system_number;
-  document.getElementById('euRole').value  = (u.role === 'viewer') ? 'staff' : (u.role || 'staff');
+  const role = (u.role === 'doctor' || u.role === 'nurse') ? u.role : 'staff';
+  document.getElementById('euId').value   = u.id;
+  document.getElementById('euRole').value = role;
+  const rn = u.room_number || '';
+  const isMgmt = role === 'staff' && rn.startsWith('Management Room');
+  document.getElementById('euRoom').value = role === 'staff' ? '' : rn;
+  setArea('eu', isMgmt ? 'Management Room' : 'Reception Area');
+  document.getElementById('euMgmt').value = isMgmt ? rn.replace(/^Management Room:?\s*/, '') : '';
+  syncRoomField('eu');
   loadDeptDropdown('euDept', currentHospitalCode).then(() => {
     document.getElementById('euDept').value = u.department || '';
   });
@@ -1224,16 +1289,15 @@ function openEditUser(u) {
 }
 
 function initSaveUser() {
+  document.getElementById('euRole').addEventListener('change', () => syncRoomField('eu'));
+  document.querySelectorAll('input[name="euArea"]').forEach(r => r.addEventListener('change', () => syncRoomField('eu')));
   document.getElementById('btnSaveUser').addEventListener('click', async () => {
     const id   = document.getElementById('euId').value;
-    const uid  = document.getElementById('euUserId').value.trim();
-    const name = document.getElementById('euName').value.trim();
-    const room = document.getElementById('euRoom').value.trim() || '';
-    const sys  = document.getElementById('euSys').value.trim() || '';
     const role = document.getElementById('euRole').value;
+    const room = roomFieldValue('eu');
     const dept = document.getElementById('euDept').value || null;
-    if (!name) { flash('Full name is required', false); return; }
-    const r = await api('PUT', `/api/admin/client-users/${id}`, { user_id: uid||undefined, user_name: name, room_number: room, system_number: sys, role, department: dept });
+    if (!room) { flash(roomRequiredMsg('eu'), false); return; }
+    const r = await api('PUT', `/api/admin/client-users/${id}`, { room_number: room, role, department: dept });
     if (r.error) { flash(r.error, false); return; }
     flash('✅ User updated', true);
     closeModal('editUserModal');
@@ -1590,8 +1654,8 @@ async function saveNetworkSettings() {
 function roleBadge(role) {
   const r = (role||'').toLowerCase();
   if (r === 'doctor') return '<span class="badge badge-doctor">👨‍⚕️ Doctor</span>';
-  if (r === 'other')  return '<span class="badge badge-other">👤 Other</span>';
-  return '<span class="badge badge-staff">🩺 Staff</span>';
+  if (r === 'nurse')  return '<span class="badge badge-nurse">🩺 Nurse</span>';
+  return '<span class="badge badge-staff">👤 Staff</span>';
 }
 
 function alarmStatusBadge(l) {
