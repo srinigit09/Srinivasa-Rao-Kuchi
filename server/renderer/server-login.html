@@ -121,10 +121,21 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
   <div id="loginSection">
     <p id="licenseLine" style="font-size:11px;color:#16a34a;text-align:center;margin-bottom:12px;"></p>
     <label>Username</label>
-    <input type="text" id="username" placeholder="Username" autocomplete="username">
+    <input type="text" id="username" value="admin" placeholder="Username" autocomplete="username">
 
     <label>Password</label>
     <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+
+    <div style="display:flex; flex-direction:column; gap:8px; margin: 2px 0 16px 2px;">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; font-weight:500; color:#1f2328; margin:0; text-transform:none; letter-spacing:normal;">
+        <input type="checkbox" id="rememberPassword" style="width:auto; margin:0; accent-color:#3b82d4; cursor:pointer;">
+        Remember Password
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; font-weight:500; color:#1f2328; margin:0; text-transform:none; letter-spacing:normal;">
+        <input type="checkbox" id="autoLogin" style="width:auto; margin:0; accent-color:#3b82d4; cursor:pointer;">
+        Auto Login (Run automatically on system restarts)
+      </label>
+    </div>
 
     <button class="btn-login" id="btnLogin">SIGN IN</button>
     <button class="btn-link" id="btnShowReset">Forgot admin password?</button>
@@ -285,14 +296,54 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
     document.getElementById('errMsg').style.display = 'none';
   }
 
+  // ── Load saved login preferences ────────────────────────────────
+  async function loadLoginPrefs() {
+    try {
+      const prefs = await sapi.getLoginPrefs();
+      if (prefs) {
+        document.getElementById('username').value = prefs.username || 'admin';
+        if (prefs.rememberPassword) {
+          document.getElementById('rememberPassword').checked = true;
+          document.getElementById('password').value = prefs.password || '';
+        }
+        if (prefs.autoLogin) {
+          document.getElementById('autoLogin').checked = true;
+        }
+      }
+    } catch {}
+  }
+  loadLoginPrefs();
+
+  // Checkbox bindings: Auto-login implies Remember Password
+  document.getElementById('autoLogin').addEventListener('change', e => {
+    if (e.target.checked) {
+      document.getElementById('rememberPassword').checked = true;
+    }
+  });
+  document.getElementById('rememberPassword').addEventListener('change', e => {
+    if (!e.target.checked) {
+      document.getElementById('autoLogin').checked = false;
+    }
+  });
+
   document.getElementById('btnLogin').addEventListener('click', doLogin);
   document.getElementById('password').addEventListener('keydown', e => {
     if (e.key === 'Enter') doLogin();
+  });
+  document.getElementById('username').addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const pass = document.getElementById('password').value;
+      if (!pass) document.getElementById('password').focus();
+      else doLogin();
+    }
   });
 
   async function doLogin() {
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value;
+    const remember = document.getElementById('rememberPassword').checked;
+    const auto     = document.getElementById('autoLogin').checked;
+
     clearMessages();
     if (!username || !password) { showErr('Please enter username and password'); return; }
 
@@ -306,6 +357,13 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
       const result = await sapi.login({ username, password });
       if (result.ok) {
         spinner.textContent = '✅ Logging in…';
+        // Persist login preferences
+        await sapi.saveLoginPrefs({
+          username,
+          password: remember ? password : '',
+          rememberPassword: remember,
+          autoLogin: auto,
+        });
         await sapi.loginSuccess({ token: result.token });
       } else {
         showErr(result.error || 'Invalid credentials');

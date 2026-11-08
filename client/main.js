@@ -1,20 +1,74 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, dialog, powerMonitor } = require('electron');
 const path   = require('path');
 const fs     = require('fs');
 const { io } = require('socket.io-client');
 
-// ── Config (stored in user data dir) ──────────────────────────────────────────
-const CONFIG_DIR        = app.getPath('userData');
+// ── Device-Based Shared Config Directory (Device-wide for all users) ──────────
+function getSharedConfigDir() {
+  if (process.platform === 'win32') {
+    // Windows: C:\ProgramData\PanicAlarmClient (accessible to all Windows users on this device)
+    const progData = process.env.ProgramData || process.env.ALLUSERSPROFILE || 'C:\\ProgramData';
+    const sharedDir = path.join(progData, 'PanicAlarmClient');
+    try {
+      if (!fs.existsSync(sharedDir)) fs.mkdirSync(sharedDir, { recursive: true });
+      const testFile = path.join(sharedDir, '.perm_test');
+      fs.writeFileSync(testFile, '1');
+      fs.unlinkSync(testFile);
+      return sharedDir;
+    } catch (e) {
+      console.warn('[Config] Shared ProgramData not writable, using userData fallback:', e.message);
+      return app.getPath('userData');
+    }
+  } else if (process.platform === 'darwin') {
+    // macOS: /Users/Shared/PanicAlarmClient (accessible to all macOS users without root)
+    const sharedDir = '/Users/Shared/PanicAlarmClient';
+    try {
+      if (!fs.existsSync(sharedDir)) fs.mkdirSync(sharedDir, { recursive: true });
+      return sharedDir;
+    } catch {
+      return app.getPath('userData');
+    }
+  } else {
+    // Linux: /var/lib/panic-alarm-client or fallback
+    const sharedDir = '/var/lib/panic-alarm-client';
+    try {
+      if (!fs.existsSync(sharedDir)) fs.mkdirSync(sharedDir, { recursive: true });
+      return sharedDir;
+    } catch {
+      return app.getPath('userData');
+    }
+  }
+}
+
+const CONFIG_DIR        = getSharedConfigDir();
 const CONFIG_FILE       = path.join(CONFIG_DIR, 'panic-alarm-config.json');
 const LAST_SERVER_FILE  = path.join(CONFIG_DIR, 'last-server-url');   // survives config wipe
 const LAST_HINT_FILE    = path.join(CONFIG_DIR, 'last-server-hint');  // serverUrl|hospitalCode
 const SEEN_INSTALL_FILE = path.join(CONFIG_DIR, 'seen-install-id');   // tracks last seen install stamp
 
-// Ensure config dir exists and seed hint from backup on very first run
+// Ensure config dir exists, migrate per-user legacy data if present, and seed hint
 function initConfigDir() {
   if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+
+  // Migrate legacy per-user config from app.getPath('userData') to device-wide CONFIG_DIR
+  try {
+    const userDir = app.getPath('userData');
+    if (userDir !== CONFIG_DIR && fs.existsSync(userDir)) {
+      const userConfigFile = path.join(userDir, 'panic-alarm-config.json');
+      if (fs.existsSync(userConfigFile) && !fs.existsSync(CONFIG_FILE)) {
+        fs.copyFileSync(userConfigFile, CONFIG_FILE);
+      }
+      const userDeviceId = path.join(userDir, 'device-id');
+      const sharedDeviceId = path.join(CONFIG_DIR, 'device-id');
+      if (fs.existsSync(userDeviceId) && !fs.existsSync(sharedDeviceId)) {
+        fs.copyFileSync(userDeviceId, sharedDeviceId);
+      }
+    }
+  } catch (err) {
+    console.warn('[Config] Migration check notice:', err.message);
+  }
 
   // Seed last-server-hint from .bak if hint file doesn't exist yet
   if (!fs.existsSync(LAST_HINT_FILE)) {
@@ -32,6 +86,20 @@ function initConfigDir() {
   // Remove legacy installed-version file if present
   const legacyVer = path.join(CONFIG_DIR, 'installed-version');
   if (fs.existsSync(legacyVer)) fs.unlinkSync(legacyVer);
+}
+
+// ── Windows Firewall rule verification (Requirement 7) ────────────────────────
+function ensureWindowsFirewallRule() {
+  if (process.platform !== 'win32' || !app.isPackaged) return;
+  try {
+    const { exec } = require('child_process');
+    const exe = process.execPath;
+    exec(`netsh advfirewall firewall show rule name="Panic Alarm Client"`, (err, stdout) => {
+      if (err || !stdout.includes('Panic Alarm Client')) {
+        exec(`netsh advfirewall firewall add rule name="Panic Alarm Client" dir=in action=allow program="${exe}" enable=yes profile=any`, () => {});
+      }
+    });
+  } catch {}
 }
 
 /**
@@ -188,73 +256,39 @@ function connectSocket(config) {
 
   console.log('[Socket] Connecting to', config.serverUrl);
   socket = io(config.serverUrl, {
-    transports      : ['websocket', 'polling'],
-    reconnectionDelay: 3000,
-    auth            : { token: config.token },
+    transports        : ['websocket', 'polling'],
+    reconnection      : true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay : 2000,
+    reconnectionDelayMax: 5000,
+    timeout           : 10000,
+    auth              : { token: config.token },
   });
   let wasConnected = false;
 
-  // Show "server not reachable" dialog if no connection within 10s on launch
-  let launchTimer = setTimeout(() => {
-    if (!socket.connected) {
-      dialog.showMessageBox({
-        type   : 'warning',
-        title  : 'Server Not Reachable',
-        message: 'Cannot connect to the Panic Alarm Server.',
-        detail : `The Panic Alarm app is running in the tray and will keep retrying automatically.\n\nThe alarm button will appear as soon as the server becomes reachable.\n\nServer: ${config.serverUrl}\n\nTo change the server address click "Edit User Details" below (or right-click the tray icon → Edit User Details; on Windows the icon may be under the ^ arrow).`,
-        buttons: ['OK', 'Edit User Details'],
-        defaultId: 1,
-        cancelId : 0,
-      }).then(({ response }) => { if (response === 1) createSettingsWindow(); });
-    }
-  }, 10000);
-
   socket.on('connect', () => {
-    console.log('[Socket] Connected');
+    console.log('[Socket] Connected to server successfully');
     wasConnected = true;
-    clearTimeout(launchTimer);
-    launchTimer = null;
     socket.emit('join', {
       hospitalCode: (config.hospitalCode || '').toUpperCase(),
       userName    : config.user_name || config.role,
       deviceId    : config.deviceId,
     });
     rebuildTrayMenu(config, true);
-    // Show alarm button only when connected
+    // Show alarm button automatically as soon as server is connected
     if (!alarmButton || alarmButton.isDestroyed()) createAlarmButton(config);
   });
 
-  socket.on('disconnect', () => {
-    console.log('[Socket] Disconnected');
+  socket.on('disconnect', (reason) => {
+    console.log(`[Socket] Disconnected from server (${reason}) — retrying automatically in background...`);
+    wasConnected = false;
+    rebuildTrayMenu(config, false);
     if (alarmButton && !alarmButton.isDestroyed()) alarmButton.close();
-    // Only show dialog if we had an established connection AND the user did not already quit
-    if (wasConnected && !isQuitting) {
-      wasConnected = false;
-      isQuitting = true;  // tentatively set — cleared if user chooses Reconnect
-      rebuildTrayMenu(config, false);
-      dialog.showMessageBox({
-        type      : 'warning',
-        title     : 'Panic Alarm Server Disconnected',
-        message   : 'The Panic Alarm Server has stopped or is unreachable.',
-        detail    : `The alarm button has been disabled.\n\nIf the server has been restarted, click "Try Reconnect".\nOtherwise click "Close App" and reopen once the server is running.\n\nServer: ${config.serverUrl}`,
-        buttons   : ['Try Reconnect', 'Close App'],
-        defaultId : 0,
-        cancelId  : 1,
-      }).then(({ response }) => {
-        if (response === 0) {
-          // User chose Reconnect — reset state and reconnect socket
-          isQuitting = false;
-          wasConnected = false;
-          connectSocket(config);
-        } else {
-          app.quit();
-        }
-      });
-    }
+    // Do NOT exit or block with a modal dialog — automatically keep retrying
   });
 
   socket.on('connect_error', (err) => {
-    console.log('[Socket] Error:', err.message);
+    console.log('[Socket] Connection attempt error:', err.message, '— will keep retrying...');
     rebuildTrayMenu(config, false);
     if (alarmButton && !alarmButton.isDestroyed()) alarmButton.close();
   });
@@ -584,18 +618,32 @@ function hideDock() {
   if (app.dock) app.dock.hide();
 }
 
+let reconnectWatchdogTimer = null;
+function startReconnectWatchdog(config) {
+  if (reconnectWatchdogTimer) clearInterval(reconnectWatchdogTimer);
+  reconnectWatchdogTimer = setInterval(() => {
+    if (isQuitting) return;
+    if (socket && !socket.connected) {
+      console.log('[Socket] Watchdog check: connecting to server...');
+      socket.connect();
+    }
+  }, 3500);
+}
+
 function launchAfterSetup(config) {
   hideDock();
   setAutoLaunch(true);
   rebuildTrayMenu(config, false);
   // Alarm button only appears once socket connects — see socket.on('connect')
   connectSocket(config);
+  startReconnectWatchdog(config);
 }
 
 app.whenReady().then(() => {
   if (!gotLock) return;   // duplicate instance is quitting — must not touch config or create a tray
   initConfigDir();
   hideDock();
+  ensureWindowsFirewallRule();
 
   // Detect reinstall: if resources/install-id changed since last launch, wipe config
   if (isFreshInstall()) {
@@ -612,6 +660,32 @@ app.whenReady().then(() => {
     createTray(null);
     createSetupWindow();
   }
+});
+
+// Always On: Reconnect on system wake / unlock
+if (powerMonitor) {
+  powerMonitor.on('resume', () => {
+    const config = loadConfig();
+    if (config && socket && !socket.connected) {
+      console.log('[App] System resumed from sleep — reconnecting socket');
+      socket.connect();
+    }
+  });
+  powerMonitor.on('unlock-screen', () => {
+    const config = loadConfig();
+    if (config && socket && !socket.connected) {
+      console.log('[App] Screen unlocked — reconnecting socket');
+      socket.connect();
+    }
+  });
+}
+
+// Global crash resilience for Always-On operation
+process.on('uncaughtException', (err) => {
+  console.error('[Client] Uncaught exception:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[Client] Unhandled rejection:', reason);
 });
 
 // On macOS activate — do NOT show dock icon; open settings via tray instead

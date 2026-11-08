@@ -19,16 +19,17 @@ html, body {
   width: 86px; height: 86px;
   border-radius: 50%;
   background: var(--btn-fill, rgba(5,150,105,0.25));
-  border: 0.5px solid var(--btn-border, rgba(5,150,105,0.55));
-  box-shadow: none;
+  border: 1.5px solid #000000;
+  box-shadow: 0 0 0 1px #000000;
   cursor: grab;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  transition: transform .08s, background .15s, border-color .15s;
+  transition: transform .08s, background .15s;
 }
 .btn-alert:hover {
   background: var(--btn-fill-hover, rgba(5,150,105,0.45));
-  border-color: var(--btn-border-hover, rgba(5,150,105,0.8));
+  border: 1.5px solid #000000;
+  box-shadow: 0 0 0 1px #000000;
   transform: scale(1.04);
 }
 .btn-alert:active { cursor: grabbing; transform: scale(0.95); }
@@ -36,7 +37,8 @@ html, body {
 /* Armed state */
 .btn-alert.armed {
   background: rgba(255,200,0,0.35);
-  border-color: rgba(255,200,0,0.75);
+  border: 1.5px solid #000000;
+  box-shadow: 0 0 0 1px #000000;
   transform: scale(1.04);
 }
 
@@ -77,37 +79,50 @@ html, body {
     const [r, g, b] = COLOURS[idx] || COLOURS[3];
     const root = document.documentElement;
     const fill   = isSolid ? 1.0 : 0.25;
-    const border = isSolid ? 1.0 : 0.55;
     const fillH  = isSolid ? 1.0 : 0.45;
-    const bordH  = isSolid ? 1.0 : 0.8;
     root.style.setProperty('--btn-fill',         `rgba(${r},${g},${b},${fill})`);
-    root.style.setProperty('--btn-border',        `rgba(${r},${g},${b},${border})`);
     root.style.setProperty('--btn-fill-hover',    `rgba(${r},${g},${b},${fillH})`);
-    root.style.setProperty('--btn-border-hover',  `rgba(${r},${g},${b},${bordH})`);
   }
 
   function applySolid(solid) {
     isSolid = solid;
-    const cfg = config;
-    applyColour(cfg?.alertButtonColour ?? 3);
+    if (!config) config = {};
+    config.alertButtonSolid = solid;
+    applyColour(config?.alertButtonColour ?? 3);
     api.setAlertSolid(solid);
   }
 
   function applyConfig(cfg) {
+    if (!cfg) return;
     config = cfg;
-    // While locked after sending, keep the temporary solid state visually
+    // While locked after sending (in 20s alarm red state), keep the red state
     if (!sentSolidTimer) {
       isSolid = cfg?.alertButtonSolid ?? false;
+      applyColour(cfg?.alertButtonColour ?? 3);
     }
-    applyColour(cfg?.alertButtonColour ?? 3);
   }
   api.getConfig().then(applyConfig);
   api.onClientConfig(applyConfig);
 
   // ── Right-click → colour picker ───────────────────────────────────
   document.addEventListener('contextmenu', e => { e.preventDefault(); api.showColourMenu(); });
-  api.onColourChange(idx => { applyColour(idx); api.setAlertButtonColour(idx); });
-  api.onSolidChange(solid => applySolid(solid));
+  api.onColourChange(idx => {
+    if (!config) config = {};
+    config.alertButtonColour = idx;
+    if (!sentSolidTimer) {
+      applyColour(idx);
+    }
+    api.setAlertButtonColour(idx);
+  });
+  api.onSolidChange(solid => {
+    if (!config) config = {};
+    config.alertButtonSolid = solid;
+    if (!sentSolidTimer) {
+      applySolid(solid);
+    } else {
+      api.setAlertSolid(solid);
+    }
+  });
 
   // ── Drag to move ──────────────────────────────────────────────────
   let dragging = false, dragX = 0, dragY = 0, moved = false;
@@ -187,10 +202,10 @@ html, body {
       return;
     }
 
-    // Show solid for 20 s and block new alarms; then always revert to the
-    // user's saved preference (visual only — does not save to config)
+    // Change to RED colour (solid) on Alarm trigger for next 20 seconds,
+    // and block new alarms; then revert to the user's saved colour preference
     isSolid = true;
-    applyColour(config?.alertButtonColour ?? 3);
+    applyColour(0); // Index 0 is Red [220, 38, 38]
     if (sentSolidTimer) clearTimeout(sentSolidTimer);
     sentSolidTimer = setTimeout(() => {
       sentSolidTimer = null;

@@ -11,11 +11,12 @@
  *  4. System tray icon keeps the server running even when window is closed
  */
 
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, powerMonitor } = require('electron');
 const path   = require('path');
 const fs     = require('fs');
 const http   = require('http');
 const os     = require('os');
+const net    = require('net');
 
 // ── Load Environment Variables (Properties) ──────────────────────────────────
 try {
@@ -98,10 +99,55 @@ function getServerRoot() {
 // ── Window + state refs ───────────────────────────────────────────────────────
 let loginWindow   = null;
 let mainWindow    = null;
+let portPromptWindow = null;
 let tray          = null;
 let serverPort         = 0;
 let serverStarted      = false;
 let httpServerInstance = null;
+let serverModule       = null;
+let suppressAutoLogin  = false;
+
+const LOGIN_PREFS_FILE = path.join(USER_DATA, 'server-login-prefs.json');
+
+function getLoginPrefs() {
+  try {
+    if (fs.existsSync(LOGIN_PREFS_FILE)) {
+      return JSON.parse(fs.readFileSync(LOGIN_PREFS_FILE, 'utf8'));
+    }
+  } catch {}
+  return { username: 'admin', password: '', rememberPassword: false, autoLogin: false };
+}
+
+function saveLoginPrefs(prefs) {
+  try {
+    if (!fs.existsSync(USER_DATA)) fs.mkdirSync(USER_DATA, { recursive: true });
+    fs.writeFileSync(LOGIN_PREFS_FILE, JSON.stringify(prefs, null, 2), 'utf8');
+  } catch (e) {
+    console.error('[Server] Failed to save login prefs:', e.message);
+  }
+}
+
+// ── Windows Firewall rule verification (Requirement 7) ────────────────────────
+function ensureWindowsFirewallRule() {
+  if (process.platform !== 'win32' || !app.isPackaged) return;
+  try {
+    const { exec } = require('child_process');
+    const exe = process.execPath;
+    exec(`netsh advfirewall firewall show rule name="Panic Alarm Server"`, (err, stdout) => {
+      if (err || !stdout.includes('Panic Alarm Server')) {
+        exec(`netsh advfirewall firewall add rule name="Panic Alarm Server" dir=in action=allow program="${exe}" enable=yes profile=any`, () => {});
+      }
+    });
+  } catch {}
+}
+
+function setAutoLaunch(enabled) {
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+    });
+  } catch {}
+}
 
 // ── New-install handling ──────────────────────────────────────────────────────
 // afterPack.js stamps a new UUID into resources/install-id for every build; the file
@@ -175,6 +221,117 @@ function resetDatabaseKeepingLicense(dbPath) {
   console.log(`[Server] Fresh install: database reset (kept ${kept.length} license setting(s))`);
 }
 
+// ── Port Unavailable Conflict Handler (Requirement 6) ────────────────────────
+global.__onServerPortError = (busyPort, err) => {
+  console.error(`[Server] Port ${busyPort} unavailable callback triggered:`, err.message);
+  if (!app.isReady()) {
+    app.whenReady().then(() => promptPortUnavailable(busyPort));
+  } else {
+    promptPortUnavailable(busyPort);
+  }
+};
+
+function promptPortUnavailable(busyPort) {
+  const choice = dialog.showMessageBoxSync({
+    type: 'error',
+    title: 'Panic Alarm Server — Port Unavailable',
+    message: `Server Port ${busyPort} is currently unavailable because it is in use by another program on this computer.`,
+    detail: 'The server requires an open network port to communicate with Panic Alarm clients.\n\nPlease choose an action below:',
+    buttons: ['Auto-find Available Port', 'Change Port', 'Retry', 'Quit Server'],
+    defaultId: 0,
+    cancelId: 3,
+    noLink: true,
+  });
+
+  if (choice === 0) {
+    // Auto-find available port
+    if (serverModule && serverModule.findAvailablePort) {
+      serverModule.findAvailablePort(5000).then((freePort) => {
+        if (serverModule.savePortSetting) serverModule.savePortSetting(freePort);
+        dialog.showMessageBoxSync({
+          type: 'info',
+          title: 'Port Updated',
+          message: `Found available port ${freePort}.`,
+          detail: 'The server will now restart using this new port.',
+          buttons: ['OK'],
+        });
+        app.relaunch();
+        app.quit();
+      });
+    }
+  } else if (choice === 1) {
+    // Custom port prompt window
+    showPortPromptWindow(busyPort);
+  } else if (choice === 2) {
+    // Retry
+    app.relaunch();
+    app.quit();
+  } else {
+    app.quit();
+  }
+}
+
+function showPortPromptWindow(currentPort) {
+  if (portPromptWindow && !portPromptWindow.isDestroyed()) {
+    portPromptWindow.focus();
+    return;
+  }
+  portPromptWindow = new BrowserWindow({
+    width: 420, height: 260,
+    resizable: false, center: true,
+    title: 'Change Server Port',
+    icon: path.join(__dirname, 'assets', 'server-icon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'server-preload.js'),
+      contextIsolation: true, nodeIntegration: false,
+    },
+  });
+  portPromptWindow.setMenu(null);
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body { font-family: -apple-system, "Segoe UI", sans-serif; background: #fff; padding: 20px; color: #1e293b; margin:0; }
+h3 { margin: 0 0 8px 0; font-size: 15px; }
+p { font-size: 12px; color: #64748b; margin: 0 0 14px 0; }
+label { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; }
+input { width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 14px; border: 1.5px solid #cbd5e1; border-radius: 6px; margin: 6px 0 14px 0; outline: none; }
+input:focus { border-color: #3b82d4; }
+.btns { display: flex; gap: 8px; justify-content: flex-end; }
+button { padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 6px; cursor: pointer; border: none; }
+.btn-save { background: #3b82d4; color: #fff; }
+.btn-auto { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+</style>
+</head>
+<body>
+<h3>Change Server Port</h3>
+<p>Enter a port between 1024 and 65535 for the Panic Alarm Server.</p>
+<label>Port Number</label>
+<input type="number" id="portInput" value="${currentPort || 5000}" min="1024" max="65535">
+<div class="btns">
+  <button class="btn-auto" id="btnAuto">Auto-Find Port</button>
+  <button class="btn-save" id="btnSave">Save & Restart</button>
+</div>
+<script>
+document.getElementById('btnAuto').onclick = async () => {
+  await window.serverAPI.autoFindPort();
+};
+document.getElementById('btnSave').onclick = async () => {
+  const p = parseInt(document.getElementById('portInput').value, 10);
+  if (!p || p < 1024 || p > 65535) {
+    alert('Please enter a valid port between 1024 and 65535');
+    return;
+  }
+  await window.serverAPI.changeServerPort(p);
+};
+</script>
+</body>
+</html>`;
+  portPromptWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+  portPromptWindow.on('closed', () => { portPromptWindow = null; });
+}
+
 // ── Start embedded server ─────────────────────────────────────────────────────
 function startEmbeddedServer() {
   if (serverStarted) return;
@@ -215,8 +372,8 @@ function startEmbeddedServer() {
       return;
     }
     // Load server module inline (same process — clean for desktop app).
-    const { server: httpServer } = require(serverJs);
-    httpServerInstance = httpServer;
+    serverModule = require(serverJs);
+    httpServerInstance = serverModule.server;
 
     const readPort = () => {
       if (httpServerInstance && httpServerInstance.address()) {
@@ -441,9 +598,53 @@ ipcMain.handle('login-success', (_, { token }) => {
 });
 
 ipcMain.handle('admin-logout', () => {
-  // Close the admin panel window and reopen the login window
+  // Close the admin panel window and reopen the login window, suppressing auto-login
+  suppressAutoLogin = true;
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
   createLoginWindow();
+});
+
+ipcMain.handle('get-login-prefs', () => {
+  return getLoginPrefs();
+});
+
+ipcMain.handle('save-login-prefs', (_, prefs) => {
+  saveLoginPrefs(prefs);
+  return { ok: true };
+});
+
+ipcMain.handle('auto-find-port', async () => {
+  if (serverModule && serverModule.findAvailablePort) {
+    const freePort = await serverModule.findAvailablePort(5000);
+    if (serverModule.savePortSetting) serverModule.savePortSetting(freePort);
+    if (portPromptWindow && !portPromptWindow.isDestroyed()) portPromptWindow.close();
+    dialog.showMessageBoxSync({
+      type: 'info',
+      title: 'Port Updated',
+      message: `Found available port ${freePort}.`,
+      detail: 'The server will restart with the new port.',
+      buttons: ['OK'],
+    });
+    app.relaunch();
+    app.quit();
+  }
+});
+
+ipcMain.handle('change-server-port', async (_, port) => {
+  const p = parseInt(port, 10);
+  if (serverModule && serverModule.savePortSetting) {
+    serverModule.savePortSetting(p);
+  }
+  if (portPromptWindow && !portPromptWindow.isDestroyed()) portPromptWindow.close();
+  dialog.showMessageBoxSync({
+    type: 'info',
+    title: 'Port Updated',
+    message: `Server port set to ${p}.`,
+    detail: 'The server will restart with the new port.',
+    buttons: ['OK'],
+  });
+  app.relaunch();
+  app.quit();
 });
 
 ipcMain.handle('get-server-info', () => {
@@ -467,13 +668,68 @@ ipcMain.handle('get-server-info', () => {
 });
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
-app.whenReady().then(() => {
+async function attemptAutoLogin(username, password) {
+  const RETRY_DELAYS = [300, 600, 1000, 1500, 2000, 2000, 2000];
+  let attempt = 0;
+  while (attempt <= RETRY_DELAYS.length) {
+    const result = await attemptLogin(username, password);
+    if (!result.retry) return result;
+    if (attempt >= RETRY_DELAYS.length) break;
+    await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
+    attempt++;
+  }
+  return { ok: false, error: 'Server not ready' };
+}
+
+app.whenReady().then(async () => {
   if (!gotLock) return;   // another instance owns the server — this one is quitting
   // Start embedded server immediately (before showing any window)
   startEmbeddedServer();
   createTray();
-  // Show login window promptly — the login IPC handler now retries automatically
+  ensureWindowsFirewallRule();
+  setAutoLaunch(true);
+
+  // Check if Auto Login is enabled (Requirement 5 & 8)
+  const prefs = getLoginPrefs();
+  if (!suppressAutoLogin && prefs.autoLogin && prefs.username && prefs.password) {
+    console.log('[Server] Auto Login is enabled. Attempting automatic sign-in...');
+    const result = await attemptAutoLogin(prefs.username, prefs.password);
+    if (result.ok && result.token) {
+      console.log('[Server] Auto Login successful');
+      createMainWindow();
+      if (mainWindow) {
+        mainWindow.webContents.once('did-finish-load', () => {
+          mainWindow.webContents.executeJavaScript(
+            `localStorage.setItem('adminToken', ${JSON.stringify(result.token)}); location.reload();`
+          );
+        });
+      }
+      return;
+    } else {
+      console.warn('[Server] Auto Login could not complete:', result.error);
+    }
+  }
+
+  // Show login window promptly if auto-login is not active
   setTimeout(createLoginWindow, 400);
+});
+
+// Always On: Handle system resume / unlock
+if (powerMonitor) {
+  powerMonitor.on('resume', () => {
+    console.log('[Server] System resumed from sleep');
+  });
+  powerMonitor.on('unlock-screen', () => {
+    console.log('[Server] Screen unlocked');
+  });
+}
+
+// Global crash resilience for Always-On operation
+process.on('uncaughtException', (err) => {
+  console.error('[Server] Uncaught exception:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[Server] Unhandled rejection:', reason);
 });
 
 app.on('window-all-closed', () => {

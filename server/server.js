@@ -66,8 +66,8 @@ const io     = new Server(server, { cors: { origin: '*', methods: ['GET','POST',
 
 // PORT priority:
 // 1. Environment / server.env (if explicitly set > 0)
-// 2. Database setting 'server_port' saved via Admin UI (if set > 0)
-// 3. 0 to let the OS pick any free port automatically.
+// 2. Database setting 'server_port' saved from previous installation/run (if set > 0)
+// 3. Default fixed port 5000 (persisted permanently on first install so restarts retain the same port)
 let initialPort = parseInt(process.env.PORT || '0', 10);
 if (!initialPort) {
   try {
@@ -80,7 +80,10 @@ if (!initialPort) {
     }
   } catch {}
 }
-const PORT = initialPort || 0;
+if (!initialPort) {
+  initialPort = 5000; // Fixed default port for first installation
+}
+const PORT = initialPort;
 const HOST = process.env.HOST || '0.0.0.0';
 
 // ── Middleware ─────────────────────────────────────────────────
@@ -535,6 +538,37 @@ function testPortAvailability(portNum) {
   });
 }
 
+// Find an available port (checking startPort, otherwise auto-allocating)
+function findAvailablePort(startPort = 5000) {
+  return new Promise((resolve) => {
+    const tester = net.createServer()
+      .once('error', () => {
+        const autoTester = net.createServer()
+          .once('error', () => resolve(5000))
+          .once('listening', () => {
+            const p = autoTester.address().port;
+            autoTester.once('close', () => resolve(p)).close();
+          });
+        autoTester.listen(0, '0.0.0.0');
+      })
+      .once('listening', () => {
+        tester.once('close', () => resolve(startPort)).close();
+      });
+    tester.listen(startPort, '0.0.0.0');
+  });
+}
+
+function savePortSetting(portNum) {
+  try {
+    setSetting.run('server_port', String(portNum));
+    process.env.PORT = String(portNum);
+    return true;
+  } catch (e) {
+    console.error('[Server] Failed to save port setting:', e.message);
+    return false;
+  }
+}
+
 // POST /api/admin/network-settings — update saved port setting with validation & live conflict test
 app.post('/api/admin/network-settings', requireAdmin, async (req, res) => {
   const { port, autoPort } = req.body || {};
@@ -791,12 +825,29 @@ app.use((err, req, res, next) => {
 });
 
 // ── Start ──────────────────────────────────────────────────────
-// Passing PORT=0 tells the OS to assign the next available free port automatically.
+// Handle port binding errors (e.g. EADDRINUSE)
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[Server] Port ${PORT} is already in use by another application!`);
+    if (typeof global.__onServerPortError === 'function') {
+      global.__onServerPortError(PORT, err);
+    }
+  } else {
+    console.error('[Server] Server error:', err);
+  }
+});
+
 server.listen(PORT, HOST, () => {
   const bound = server.address();
   const actualPort = bound ? bound.port : PORT;
-  // Write the actual port back to the environment so other modules can read it.
+  // Write the actual port back to the environment and database so it is retained on all restarts
   process.env.PORT = String(actualPort);
+  try {
+    const current = getSetting.get('server_port');
+    if (!current || !current.value || current.value === '0') {
+      setSetting.run('server_port', String(actualPort));
+    }
+  } catch {}
 
   const ips = Object.values(os.networkInterfaces())
     .flat().filter(i => i && i.family === 'IPv4' && !i.internal).map(i => i.address);
@@ -805,7 +856,7 @@ server.listen(PORT, HOST, () => {
   console.log('╔══════════════════════════════════════════════════╗');
   console.log('║   🚨  PANIC ALARM SERVER — RUNNING  🚨           ║');
   console.log('╠══════════════════════════════════════════════════╣');
-  console.log(`║  Port        : ${actualPort}${PORT === 0 ? '  (auto-assigned)' : ''}`);
+  console.log(`║  Port        : ${actualPort}`);
   console.log(`║  Intranet IP : ${ips.join(' | ') || 'N/A'}`);
   console.log(`║  Admin Panel : http://${ips[0] || 'localhost'}:${actualPort}/admin/`);
   console.log('║  DB          : SQLite ./data/panic_alarm.db');
@@ -816,8 +867,8 @@ server.listen(PORT, HOST, () => {
 process.on('SIGINT',  () => { db.close(); process.exit(0); });
 process.on('SIGTERM', () => { db.close(); process.exit(0); });
 
-// Export the http server so server-main.js can read the actual bound port.
-module.exports = { server };
+// Export the http server and helpers so server-main.js can interact with them.
+module.exports = { server, app, io, testPortAvailability, findAvailablePort, savePortSetting };
 
 // ── Helpers ────────────────────────────────────────────────────
 // Roles: doctor | nurse | staff. Older records used 'other', which now maps to staff.
