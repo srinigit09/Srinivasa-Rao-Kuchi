@@ -1,9 +1,28 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, dialog, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, dialog, powerMonitor, Notification, shell } = require('electron');
 const path   = require('path');
 const fs     = require('fs');
 const { io } = require('socket.io-client');
+
+// ── Notification Helper ───────────────────────────────────────────────────────
+let lastNotificationType = null;
+function notifyClientUser(type, title, message) {
+  if (lastNotificationType === type) return;
+  lastNotificationType = type;
+  try {
+    if (Notification.isSupported()) {
+      new Notification({
+        title: title || 'Panic Alarm',
+        body: message || '',
+        icon: path.join(__dirname, 'assets', 'icon.png'),
+        silent: false,
+      }).show();
+    }
+  } catch (e) {
+    console.warn('[Notify] Failed to display notification:', e.message);
+  }
+}
 
 // ── Device-Based Shared Config Directory (Device-wide for all users) ──────────
 function getSharedConfigDir() {
@@ -97,6 +116,7 @@ function ensureWindowsFirewallRule() {
     exec(`netsh advfirewall firewall show rule name="Panic Alarm Client"`, (err, stdout) => {
       if (err || !stdout.includes('Panic Alarm Client')) {
         exec(`netsh advfirewall firewall add rule name="Panic Alarm Client" dir=in action=allow program="${exe}" enable=yes profile=any`, () => {});
+        exec(`netsh advfirewall firewall add rule name="Panic Alarm Client Outbound" dir=out action=allow program="${exe}" enable=yes profile=any`, () => {});
       }
     });
   } catch {}
@@ -184,6 +204,7 @@ let activeAlarmData = null;  // currently active alarm payload
 let tray           = null;
 let socket         = null;   // Socket.IO connection in main process
 let isQuitting     = false;  // true once the user has quit — suppresses disconnect dialog
+let isServerReadyState = false; // true when server has reported authenticated ready state
 
 // ── Single instance lock — prevents multiple tray icons ──────────────────────
 // Identifies THIS build/install (read once at startup, so a running old process keeps its old id
@@ -227,15 +248,25 @@ app.on('second-instance', (_event, _argv, _cwd, additionalData) => {
     app.quit();
     return;
   }
-  // Someone tried to open a second instance — bring existing window to front.
-  // This also gives Windows users (where the tray icon may be hidden in the overflow
-  // area) a way in: launching the app again opens Edit User Details / the setup form.
-  if (setupWindow && !setupWindow.isDestroyed()) {
-    setupWindow.show(); setupWindow.focus(); setupWindow.moveTop();
-  } else if (settingsWindow && !settingsWindow.isDestroyed()) {
-    settingsWindow.show(); settingsWindow.focus();
-  } else if (app.isReady()) {
-    if (loadConfig()) createSettingsWindow(); else createSetupWindow();
+
+  const config = loadConfig();
+  if (!config || !config.token) {
+    // Unconfigured — show setup wizard
+    if (setupWindow && !setupWindow.isDestroyed()) {
+      setupWindow.show(); setupWindow.focus(); setupWindow.moveTop();
+    } else {
+      createSetupWindow();
+    }
+    return;
+  }
+
+  // Configured client: clicking application icon brings Panic Alarm button to top
+  if (!alarmButton || alarmButton.isDestroyed()) {
+    createAlarmButton(config);
+  } else {
+    alarmButton.show();
+    alarmButton.setAlwaysOnTop(true, 'screen-saver');
+    alarmButton.focus();
   }
 });
 
@@ -267,30 +298,51 @@ function connectSocket(config) {
   let wasConnected = false;
 
   socket.on('connect', () => {
-    console.log('[Socket] Connected to server successfully');
+    console.log('[Socket] Connected to server transport');
     wasConnected = true;
     socket.emit('join', {
       hospitalCode: (config.hospitalCode || '').toUpperCase(),
       userName    : config.user_name || config.role,
       deviceId    : config.deviceId,
     });
-    rebuildTrayMenu(config, true);
-    // Show alarm button automatically as soon as server is connected
-    if (!alarmButton || alarmButton.isDestroyed()) createAlarmButton(config);
+  });
+
+  socket.on('server_state', (state) => {
+    console.log('[Socket] Server readiness state:', state);
+    isServerReadyState = !!(state && state.ready);
+    if (isServerReadyState) {
+      rebuildTrayMenu(config, 'connected');
+      if (!alarmButton || alarmButton.isDestroyed()) {
+        createAlarmButton(config);
+      }
+      // No popup on (re)connect — only record the state so a later failure is notified again
+      lastNotificationType = 'connected';
+    } else {
+      // Server is running but Admin is not logged in yet — do not show button
+      if (alarmButton && !alarmButton.isDestroyed()) {
+        alarmButton.close();
+      }
+      rebuildTrayMenu(config, 'awaiting_login');
+      notifyClientUser('awaiting_login', 'Server Awaiting Admin Login', 'Panic Alarm server is running but awaiting administrator sign-in. Alarm button will appear once Admin logs in.');
+    }
   });
 
   socket.on('disconnect', (reason) => {
     console.log(`[Socket] Disconnected from server (${reason}) — retrying automatically in background...`);
     wasConnected = false;
-    rebuildTrayMenu(config, false);
+    isServerReadyState = false;
+    rebuildTrayMenu(config, 'disconnected');
     if (alarmButton && !alarmButton.isDestroyed()) alarmButton.close();
-    // Do NOT exit or block with a modal dialog — automatically keep retrying
+    if (shell && shell.beep) shell.beep();
+    notifyClientUser('disconnected', 'Panic Alarm Server Unavailable', `Cannot connect to Panic Alarm Server at ${config.serverUrl}. Reconnecting automatically...`);
   });
 
   socket.on('connect_error', (err) => {
     console.log('[Socket] Connection attempt error:', err.message, '— will keep retrying...');
-    rebuildTrayMenu(config, false);
+    isServerReadyState = false;
+    rebuildTrayMenu(config, 'disconnected');
     if (alarmButton && !alarmButton.isDestroyed()) alarmButton.close();
+    notifyClientUser('disconnected', 'Panic Alarm Server Unavailable', `Panic Alarm Server at ${config.serverUrl} is currently unreachable. Reconnecting automatically in background...`);
   });
 
   // ── This is the key event — show popup on every registered PC ────────────────
@@ -441,11 +493,34 @@ function createTray(config) {
     tray.setTitle('🏥');
   }
   rebuildTrayMenu(config, false);
+
+  tray.on('click', () => {
+    const currentCfg = loadConfig();
+    if (!currentCfg || !currentCfg.token) {
+      if (!setupWindow || setupWindow.isDestroyed()) createSetupWindow();
+      else { setupWindow.show(); setupWindow.focus(); }
+      return;
+    }
+    // Left-clicking tray icon brings Panic Alarm button to top
+    if (!alarmButton || alarmButton.isDestroyed()) {
+      createAlarmButton(currentCfg);
+    } else {
+      alarmButton.show();
+      alarmButton.setAlwaysOnTop(true, 'screen-saver');
+      alarmButton.focus();
+    }
+  });
 }
 
-function rebuildTrayMenu(config, connected) {
+function rebuildTrayMenu(config, state) {
   if (!tray) return;
-  const statusLabel = connected ? '🟢 Connected' : '🔴 Disconnected';
+  const isConnected = state === 'connected' || state === true;
+  const isAwaitingLogin = state === 'awaiting_login';
+
+  const statusLabel = isConnected
+    ? '🟢 Connected & Active'
+    : (isAwaitingLogin ? '🟡 Server Awaiting Admin Login' : '🔴 Server Unavailable (Retrying...)');
+
   const roleLabel = config
     ? (config.role === 'doctor' ? '👨‍⚕️ Doctor' : config.role === 'nurse' ? '🩺 Nurse' : '👤 Staff')
     : '';
@@ -468,9 +543,10 @@ function rebuildTrayMenu(config, connected) {
       click: () => {
         if (!alarmButton || alarmButton.isDestroyed()) createAlarmButton(loadConfig());
       },
-      enabled: !alarmButton || alarmButton.isDestroyed(),
+      enabled: isConnected && (!alarmButton || alarmButton.isDestroyed()),
     },
     { type: 'separator' },
+    { label: '🔄 Reconnect Now', click: () => { connectSocket(loadConfig()); } },
     { label: 'Quit Panic Alarm', click: () => app.quit() },
   ] : [
     { label: '🚨 Panic Alarm — Click to Setup', enabled: false },
@@ -485,12 +561,8 @@ function rebuildTrayMenu(config, connected) {
     { label: 'Quit', click: () => app.quit() },
   ];
   tray.setContextMenu(Menu.buildFromTemplate(items));
-  // Also open context menu on left-click when not configured
-  if (!config) {
-    tray.on('click', () => tray.popUpContextMenu());
-  }
   tray.setToolTip(config
-    ? `Panic Alarm — ${roleLabel.replace(/^\S+\s/, '')} ${connected ? '(Connected)' : '(Disconnected)'}`
+    ? `Panic Alarm — ${statusLabel} (${config.serverUrl || ''})`
     : 'Panic Alarm — Click to Setup');
 }
 
@@ -531,6 +603,16 @@ ipcMain.handle('settings-updated', (_, newConfig) => {
 // Alert popup dismiss (called from alert_popup.html)
 ipcMain.handle('dismiss-alert', () => {
   if (alertPopup && !alertPopup.isDestroyed()) alertPopup.close();
+});
+
+// Alarm transmission failure alert
+ipcMain.on('alarm-delivery-failed', () => {
+  if (shell && shell.beep) shell.beep();
+  notifyClientUser(
+    'alarm_failed',
+    '🚨 CRITICAL: Panic Alarm Transmission Failed!',
+    'The panic alarm could not reach the server. Please check your network connection immediately!'
+  );
 });
 
 // Drag the frameless alarm button
@@ -621,13 +703,50 @@ function hideDock() {
 let reconnectWatchdogTimer = null;
 function startReconnectWatchdog(config) {
   if (reconnectWatchdogTimer) clearInterval(reconnectWatchdogTimer);
-  reconnectWatchdogTimer = setInterval(() => {
+  reconnectWatchdogTimer = setInterval(async () => {
     if (isQuitting) return;
+    const currentConfig = loadConfig() || config;
+    if (!currentConfig || !currentConfig.token || !currentConfig.serverUrl) return;
+
+    // 1. Ensure socket stays connected
     if (socket && !socket.connected) {
-      console.log('[Socket] Watchdog check: connecting to server...');
+      console.log('[Watchdog] Socket disconnected — connecting to server...');
       socket.connect();
     }
-  }, 3500);
+
+    // 2. Redundant HTTP health check: ensures instant auto-start as soon as server is ready
+    try {
+      const resp = await fetch(`${currentConfig.serverUrl}/health`, { signal: AbortSignal.timeout(1500) });
+      if (resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        if (data && data.serverReady && !isServerReadyState) {
+          console.log('[Watchdog] Server ready detected via health probe — autostarting alarm button');
+          isServerReadyState = true;
+          rebuildTrayMenu(currentConfig, 'connected');
+          if (!alarmButton || alarmButton.isDestroyed()) {
+            createAlarmButton(currentConfig);
+          }
+          if (socket && !socket.connected) socket.connect();
+        } else if (data && data.serverReady === false && isServerReadyState) {
+          isServerReadyState = false;
+          if (alarmButton && !alarmButton.isDestroyed()) alarmButton.close();
+          rebuildTrayMenu(currentConfig, 'awaiting_login');
+        }
+      }
+    } catch {
+      // Server currently unreachable
+    }
+
+    // 3. Ensure Panic Alarm button automatically appears and stays on top whenever server is ready
+    if (isServerReadyState) {
+      if (!alarmButton || alarmButton.isDestroyed()) {
+        console.log('[Watchdog] Autostarting Panic Alarm button...');
+        createAlarmButton(currentConfig);
+      } else {
+        alarmButton.setAlwaysOnTop(true, 'screen-saver');
+      }
+    }
+  }, 2500);
 }
 
 function launchAfterSetup(config) {
@@ -680,24 +799,47 @@ if (powerMonitor) {
   });
 }
 
-// Global crash resilience for Always-On operation
-process.on('uncaughtException', (err) => {
-  console.error('[Client] Uncaught exception:', err);
-});
-process.on('unhandledRejection', (reason) => {
-  console.error('[Client] Unhandled rejection:', reason);
+// Global crash resilience & self-healing for Always-On operation
+app.on('render-process-gone', (event, webContents, details) => {
+  console.error('[Client Crash Guard] Renderer process crashed:', details.reason);
+  const config = loadConfig();
+  if (alarmButton && alarmButton.webContents === webContents) {
+    alarmButton = null;
+    if (isServerReadyState && config) {
+      setTimeout(() => createAlarmButton(config), 600);
+    }
+  }
 });
 
-// On macOS activate — do NOT show dock icon; open settings via tray instead
+app.on('child-process-gone', (event, details) => {
+  console.error('[Client Crash Guard] Child process exited:', details.reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[Client Crash Guard] Uncaught exception:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[Client Crash Guard] Unhandled rejection:', reason);
+});
+
+// On macOS activate / click on icon
 app.on('activate', () => {
   if (!app.isReady()) return;
-  if (setupWindow && !setupWindow.isDestroyed()) {
-    setupWindow.show(); setupWindow.focus(); setupWindow.moveTop();
+  const config = loadConfig();
+  if (!config || !config.token) {
+    if (setupWindow && !setupWindow.isDestroyed()) {
+      setupWindow.show(); setupWindow.focus(); setupWindow.moveTop();
+    } else {
+      createSetupWindow();
+    }
     return;
   }
-  if (settingsWindow && !settingsWindow.isDestroyed()) {
-    settingsWindow.show(); settingsWindow.focus();
-    return;
+  if (!alarmButton || alarmButton.isDestroyed()) {
+    createAlarmButton(config);
+  } else {
+    alarmButton.show();
+    alarmButton.setAlwaysOnTop(true, 'screen-saver');
+    alarmButton.focus();
   }
 });
 

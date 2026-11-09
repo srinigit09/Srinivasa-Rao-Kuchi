@@ -10,4 +10,6 @@ contextBridge.exposeInMainWorld('serverAPI', {
   saveLoginPrefs  : (prefs) => ipcRenderer.invoke('save-login-prefs', prefs),
   autoFindPort    : ()      => ipcRenderer.invoke('auto-find-port'),
   changeServerPort: (port)  => ipcRenderer.invoke('change-server-port', port),
+  restartServer   : ()      => ipcRenderer.invoke('restart-server'),
+  stopServer      : ()      => ipcRenderer.invoke('stop-server'),
 });

@@ -288,7 +288,7 @@ tr:hover td { background: #f8fafc; }
           <span class="icon">⚙️</span> Server & Network
         </a>
         <a class="nav-link" onclick="showPage('changePassword')" id="nav-changePassword">
-          <span class="icon">🔑</span> Change Password
+          <span class="icon">🔑</span> Admin Account
         </a>
       </div>
     </div><!-- /.sidebar-scroll -->
@@ -304,6 +304,14 @@ tr:hover td { background: #f8fafc; }
       <button class="btn-logout" id="btnLogout">
         <span>⏻</span> Sign Out
       </button>
+      <div style="display:flex; gap:6px; margin-top:8px;">
+        <button class="btn-logout" id="btnRestartServer" style="background:#334155; flex:1; font-size:11px; padding:6px 8px; justify-content:center;" title="Restart Panic Alarm Server Application">
+          <span>🔄</span> Restart
+        </button>
+        <button class="btn-logout" id="btnCloseServer" style="background:#7f1d1d; flex:1; font-size:11px; padding:6px 8px; justify-content:center;" title="Close and Exit Server Application">
+          <span>⏻</span> Close
+        </button>
+      </div>
     </div>
   </div>
 
@@ -685,20 +693,26 @@ tr:hover td { background: #f8fafc; }
 
     <!-- CHANGE PASSWORD -->
     <div class="tab-content" id="page-changePassword">
-      <div class="page-title">Change Password</div>
-      <div class="page-sub">Update the admin login password for this panel</div>
+      <div class="page-title">Admin Account & Credentials</div>
+      <div class="page-sub">Update the administrator username and password for this server</div>
       <div class="section">
-        <div class="section-hdr"><h3>Set New Password</h3></div>
+        <div class="section-hdr"><h3>Account Credentials</h3></div>
         <div class="section-body">
           <div class="pw-form">
-            <label>Current Password <span class="required-star">*</span></label>
+            <label>Admin Username <span class="required-star">*</span></label>
+            <input type="text" id="cpUsername" placeholder="Username" value="admin" autocomplete="username">
+
+            <label style="margin-top:14px;">Current Password <span class="required-star">*</span></label>
             <input type="password" id="cpCurrent" placeholder="Enter your current password" autocomplete="current-password">
-            <label>New Password <span class="required-star">*</span></label>
+
+            <label style="margin-top:14px;">New Password <span style="font-size:11px; font-weight:normal; color:#64748b;">(leave blank to keep current password)</span></label>
             <input type="password" id="cpNew" placeholder="At least 8 characters">
-            <label>Confirm New Password <span class="required-star">*</span></label>
+
+            <label style="margin-top:14px;">Confirm New Password</label>
             <input type="password" id="cpConfirm" placeholder="Re-enter new password">
+
             <p class="pw-hint" style="margin-top:10px">Use a strong password with letters, numbers and symbols.</p>
-            <button class="btn btn-primary" id="btnChangePassword" style="margin-top:20px;padding:11px 30px">Update Password</button>
+            <button class="btn btn-primary" id="btnChangePassword" style="margin-top:20px;padding:11px 30px">Save Changes</button>
             <div class="flash" id="cpFlash" style="margin-top:14px"></div>
           </div>
         </div>
@@ -806,6 +820,16 @@ tr:hover td { background: #f8fafc; }
 
 <script>
 // ── State ──────────────────────────────────────────────────────
+// The desktop wrapper passes the fresh admin token in the URL hash (#adminToken=...) so it is
+// stored BEFORE boot; otherwise a stale token left from a previous install would be used first,
+// get a 401 and bounce the user back to the login window.
+(function () {
+  const m = /[#&]adminToken=([^&]+)/.exec(location.hash);
+  if (m) {
+    try { localStorage.setItem('adminToken', decodeURIComponent(m[1])); } catch {}
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+})();
 let token = localStorage.getItem('adminToken') || '';
 let currentClientId = null;
 let currentHospitalCode = null;
@@ -816,6 +840,22 @@ window.addEventListener('DOMContentLoaded', () => {
   if (token) bootApp();
 
   document.getElementById('btnLogout').addEventListener('click', logout);
+  document.getElementById('btnRestartServer').addEventListener('click', async () => {
+    if (confirm('Are you sure you want to restart the Panic Alarm Server?')) {
+      try { await api('/api/admin/restart-server', 'POST'); } catch {}
+      if (window.serverAPI && window.serverAPI.restartServer) {
+        window.serverAPI.restartServer();
+      }
+    }
+  });
+  document.getElementById('btnCloseServer').addEventListener('click', async () => {
+    if (confirm('Are you sure you want to stop and close the Panic Alarm Server?')) {
+      try { await api('/api/admin/stop-server', 'POST'); } catch {}
+      if (window.serverAPI && window.serverAPI.stopServer) {
+        window.serverAPI.stopServer();
+      }
+    }
+  });
   initChangePassword();
   initAddClient();
   initAddUser();
@@ -832,6 +872,7 @@ function bootApp() {
   const payload = parseJwt(token);
   if (!payload) { logout(); return; }
   const uname = payload.username || 'admin';
+  window._currentAdminUsername = uname;
   document.getElementById('adminName').textContent = uname;
   document.getElementById('userAvatar').textContent = uname.charAt(0).toUpperCase();
   document.getElementById('app').style.display = 'block';
@@ -905,6 +946,7 @@ async function showPage(page) {
   if (page === 'logs')        loadLogs();
   if (page === 'networkSettings') loadNetworkSettings();
   if (page === 'changePassword') {
+    document.getElementById('cpUsername').value = window._currentAdminUsername || 'admin';
     ['cpCurrent','cpNew','cpConfirm'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('cpFlash').style.display = 'none';
   }
@@ -1534,22 +1576,44 @@ function initLogsClear() {
   });
 }
 
-// ── Change Password ────────────────────────────────────────────
+// ── Admin Account & Change Password ────────────────────────────
 function initChangePassword() {
   document.getElementById('btnChangePassword').addEventListener('click', async () => {
+    const un  = document.getElementById('cpUsername').value.trim();
     const cur = document.getElementById('cpCurrent').value;
     const np  = document.getElementById('cpNew').value;
     const cf  = document.getElementById('cpConfirm').value;
     document.getElementById('cpFlash').style.display = 'none';
-    if (!cur || !np || !cf) { cpFlash('All fields are required', false); return; }
-    if (np.length < 8)      { cpFlash('New password must be at least 8 characters', false); return; }
-    if (np === cur)         { cpFlash('New password must be different from the current password', false); return; }
-    if (np !== cf)           { cpFlash('New passwords do not match', false); return; }
-    const r = await api('POST', '/api/admin/change-password', { currentPassword: cur, newPassword: np });
+
+    if (!un)  { cpFlash('Admin username cannot be empty', false); return; }
+    if (!cur) { cpFlash('Current password is required to save changes', false); return; }
+    if (np) {
+      if (np.length < 8) { cpFlash('New password must be at least 8 characters', false); return; }
+      if (np === cur)    { cpFlash('New password must be different from current password', false); return; }
+      if (np !== cf)     { cpFlash('New passwords do not match', false); return; }
+    }
+
+    const payload = { currentPassword: cur, newUsername: un };
+    if (np) payload.newPassword = np;
+
+    const r = await api('POST', '/api/admin/change-password', payload);
     if (r.error) { cpFlash(r.error, false); return; }
-    cpFlash('✅ Password changed! Logging out…', true);
+
+    // Update electron remembered credentials if active
+    if (window.serverAPI && window.serverAPI.saveLoginPrefs) {
+      try {
+        const prefs = await window.serverAPI.getLoginPrefs();
+        if (prefs) {
+          prefs.username = un;
+          if (np && prefs.rememberPassword) prefs.password = np;
+          await window.serverAPI.saveLoginPrefs(prefs);
+        }
+      } catch {}
+    }
+
+    cpFlash('✅ Account credentials updated! Logging out…', true);
     ['cpCurrent','cpNew','cpConfirm'].forEach(id => document.getElementById(id).value = '');
-    setTimeout(() => logout(), 2500);
+    setTimeout(() => logout(), 2000);
   });
 }
 

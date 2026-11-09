@@ -40,7 +40,7 @@ const { createLicense } = require('./license');
 const { requireAdmin, requireClient, adminLogin, signClientToken, signAdminToken, DEFAULT_ADMIN_PASSWORD } = require('./auth');
 const {
   db,
-  findAdmin, updateAdminPassword,
+  findAdmin, updateAdminPassword, updateAdminUsername, updateAdminCredentials,
   listClients, findClientByCode, findClientById, createClient, updateClient, deleteClient, countClientUsers, setClientLocation,
   listClientUsers, findClientUser, findClientUserById, findClientUserByUserId,
   createClientUser, createClientUserAdmin, updateClientUser,
@@ -86,6 +86,22 @@ if (!initialPort) {
 const PORT = initialPort;
 const HOST = process.env.HOST || '0.0.0.0';
 
+// ── Server ready state (tracks whether Admin is logged in) ─────
+let isServerLoggedIn = false;
+
+function setServerLoggedIn(loggedIn) {
+  isServerLoggedIn = !!loggedIn;
+  console.log(`[Server] Server ready state changed: ready = ${isServerLoggedIn}`);
+  io.emit('server_state', {
+    ready: isServerLoggedIn,
+    message: isServerLoggedIn ? 'Server is active and ready' : 'Server is awaiting administrator login',
+  });
+}
+
+function getServerLoggedIn() {
+  return isServerLoggedIn;
+}
+
 // ── Middleware ─────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
@@ -95,7 +111,11 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/admin', express.static(path.join(__dirname, 'public')));
 
 // ── Health ─────────────────────────────────────────────────────
-app.get('/health', (req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));
+app.get('/health', (req, res) => res.json({
+  status: 'ok',
+  serverReady: isServerLoggedIn,
+  ts: new Date().toISOString()
+}));
 
 // ── Public: list hospitals for client dropdown (no auth) ───────
 app.get('/api/public/hospitals', (req, res) => {
@@ -176,34 +196,55 @@ app.post('/api/public/activate', localOnly, (req, res) => {
   res.json({ ok: true, status: r.status });
 });
 
-// GET /api/public/reset-request  → { requestCode }  (code the vendor needs for an admin password reset)
+// GET /api/public/reset-request  → { requestCode, currentUsername }  (code the vendor needs for an admin password reset)
 app.get('/api/public/reset-request', localOnly, (req, res) => {
   if (!license.isActivated()) return res.status(403).json({ error: 'Activate the server first', activationRequired: true });
-  res.json({ requestCode: license.resetRequestCode() });
+  const admin = db.prepare('SELECT username FROM admin_users ORDER BY id LIMIT 1').get();
+  res.json({
+    requestCode: license.resetRequestCode(),
+    currentUsername: admin ? admin.username : 'admin',
+  });
 });
 
-// POST /api/public/reset-admin-password  { code, newPassword }
+// POST /api/public/reset-admin-password  { code, newPassword, newUsername }
 app.post('/api/public/reset-admin-password', localOnly, (req, res) => {
-  const { code, newPassword } = req.body || {};
+  const { code, newPassword, newUsername } = req.body || {};
   if (!license.isActivated()) return res.status(403).json({ error: 'Activate the server first', activationRequired: true });
   if (typeof code !== 'string' || code.length < 20 || code.length > 600)
     return res.status(400).json({ error: 'Paste the full Reset Code' });
   if (typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 128 || newPassword === DEFAULT_ADMIN_PASSWORD)
     return res.status(400).json({ error: 'New password must be 8–128 characters and not the default password' });
+
   const r = license.checkReset(code);
   if (!r.ok) return sendCheckFailure(res, r);
-  const admin = db.prepare('SELECT id FROM admin_users ORDER BY id LIMIT 1').get();
+
+  const admin = db.prepare('SELECT id, username FROM admin_users ORDER BY id LIMIT 1').get();
   const hash = bcrypt.hashSync(newPassword, 12);
+  let activeUsername = 'admin';
+
+  if (newUsername && typeof newUsername === 'string' && newUsername.trim()) {
+    const trimmed = newUsername.trim();
+    if (trimmed.length < 3 || trimmed.length > 50) {
+      return res.status(400).json({ error: 'Username must be between 3 and 50 characters' });
+    }
+    activeUsername = trimmed;
+  } else if (admin && admin.username) {
+    activeUsername = admin.username;
+  }
+
   if (admin) {
-    updateAdminPassword.run(hash, admin.id);
+    updateAdminCredentials.run(activeUsername, hash, admin.id);
   } else {
     // Fresh install with no bootstrap.env: the vendor Reset Code creates the first admin account.
-    db.prepare('INSERT INTO admin_users (username, password) VALUES (?, ?)').run('admin', hash);
+    db.prepare('INSERT INTO admin_users (username, password) VALUES (?, ?)').run(activeUsername, hash);
     console.log('[License] Admin account created with vendor code');
   }
   license.consumeReset();
-  console.log('[License] Admin password reset with vendor code');
-  res.json({ message: 'Admin password reset. Sign in with the new password.' });
+  console.log('[License] Admin credentials reset with vendor code');
+  res.json({
+    message: `Credentials reset successfully. Sign in with username "${activeUsername}" and your new password.`,
+    username: activeUsername,
+  });
 });
 
 // ══════════════════════════════════════════════════════════════
@@ -222,21 +263,40 @@ app.post('/api/admin/login', (req, res) => {
   res.json(result);
 });
 
-// POST /api/admin/change-password
+// POST /api/admin/change-password (supports updating Username and/or Password)
 app.post('/api/admin/change-password', requireAdmin, (req, res) => {
-  const { currentPassword, newPassword } = req.body || {};
-  if (typeof currentPassword !== 'string' || typeof newPassword !== 'string')
-    return res.status(400).json({ error: 'Current and new password required' });
-  if (newPassword.length < 8 || newPassword.length > 128)
-    return res.status(400).json({ error: 'New password must be 8–128 characters' });
-  if (newPassword === DEFAULT_ADMIN_PASSWORD)
-    return res.status(400).json({ error: 'Choose a password different from the default one' });
+  const { currentPassword, newPassword, newUsername } = req.body || {};
+  if (typeof currentPassword !== 'string' || !currentPassword)
+    return res.status(400).json({ error: 'Current password is required to save changes' });
+
   const user = findAdmin.get(req.admin.username);
-  if (!bcrypt.compareSync(currentPassword, user.password))
-    return res.status(400).json({ error: 'Current password incorrect' });
-  const hash = bcrypt.hashSync(newPassword, 12);
-  updateAdminPassword.run(hash, user.id);
-  res.json({ message: 'Password changed' });
+  if (!user || !bcrypt.compareSync(currentPassword, user.password))
+    return res.status(400).json({ error: 'Current password is incorrect' });
+
+  let targetUsername = user.username;
+  if (newUsername && typeof newUsername === 'string' && newUsername.trim()) {
+    const trimmed = newUsername.trim();
+    if (trimmed.length < 3 || trimmed.length > 50) {
+      return res.status(400).json({ error: 'Username must be between 3 and 50 characters' });
+    }
+    const existing = findAdmin.get(trimmed);
+    if (existing && existing.id !== user.id) {
+      return res.status(400).json({ error: `Username "${trimmed}" is already in use by another account` });
+    }
+    targetUsername = trimmed;
+  }
+
+  let targetHash = user.password;
+  if (newPassword && typeof newPassword === 'string' && newPassword.trim()) {
+    if (newPassword.length < 8 || newPassword.length > 128)
+      return res.status(400).json({ error: 'New password must be 8–128 characters' });
+    if (newPassword === DEFAULT_ADMIN_PASSWORD)
+      return res.status(400).json({ error: 'Choose a password different from the default one' });
+    targetHash = bcrypt.hashSync(newPassword, 12);
+  }
+
+  updateAdminCredentials.run(targetUsername, targetHash, user.id);
+  res.json({ ok: true, username: targetUsername, message: 'Admin account credentials updated successfully' });
 });
 
 // ── Client management ──────────────────────────────────────────
@@ -569,6 +629,21 @@ function savePortSetting(portNum) {
   }
 }
 
+// ── Admin Server Control: Restart & Stop Endpoints ─────────────
+app.post('/api/admin/restart-server', requireAdmin, (req, res) => {
+  res.json({ ok: true, message: 'Server is restarting...' });
+  setTimeout(() => {
+    if (global.__restartServerApp) global.__restartServerApp();
+  }, 200);
+});
+
+app.post('/api/admin/stop-server', requireAdmin, (req, res) => {
+  res.json({ ok: true, message: 'Server is stopping...' });
+  setTimeout(() => {
+    if (global.__stopServerApp) global.__stopServerApp();
+  }, 200);
+});
+
 // POST /api/admin/network-settings — update saved port setting with validation & live conflict test
 app.post('/api/admin/network-settings', requireAdmin, async (req, res) => {
   const { port, autoPort } = req.body || {};
@@ -796,6 +871,12 @@ app.post('/api/client/alarm/no-response', requireClient, (req, res) => {
 io.on('connection', (socket) => {
   console.log(`[WS] Connected: ${socket.id}`);
 
+  // Immediately send current server readiness state to connecting client
+  socket.emit('server_state', {
+    ready: isServerLoggedIn,
+    message: isServerLoggedIn ? 'Server is active and ready' : 'Server is awaiting administrator login',
+  });
+
   socket.on('join', (data) => {
     const code = (data && (data.hospitalCode || data.hospital_code || ''))
       .toString().trim().toUpperCase();
@@ -811,6 +892,11 @@ io.on('connection', (socket) => {
       socket.join(`hospital_${code}`);
       console.log(`[WS] ${socket.id} joined hospital_${code} (${data.userName || data.user_name || ''})`);
     }
+    // Acknowledge join with server readiness state
+    socket.emit('server_state', {
+      ready: isServerLoggedIn,
+      message: isServerLoggedIn ? 'Server is active and ready' : 'Server is awaiting administrator login',
+    });
   });
 
   socket.on('disconnect', () => {
@@ -868,7 +954,7 @@ process.on('SIGINT',  () => { db.close(); process.exit(0); });
 process.on('SIGTERM', () => { db.close(); process.exit(0); });
 
 // Export the http server and helpers so server-main.js can interact with them.
-module.exports = { server, app, io, testPortAvailability, findAvailablePort, savePortSetting };
+module.exports = { server, app, io, testPortAvailability, findAvailablePort, savePortSetting, setServerLoggedIn, getServerLoggedIn };
 
 // ── Helpers ────────────────────────────────────────────────────
 // Roles: doctor | nurse | staff. Older records used 'other', which now maps to staff.

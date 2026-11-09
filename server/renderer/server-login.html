@@ -139,6 +139,11 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
 
     <button class="btn-login" id="btnLogin">SIGN IN</button>
     <button class="btn-link" id="btnShowReset">Forgot admin password?</button>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding-top:12px; border-top:1px solid #e2e8f0;">
+      <button class="btn-link" id="btnRestartApp" style="color:#475569; font-size:11px; margin:0; padding:0; text-decoration:none; cursor:pointer;">🔄 Restart Server</button>
+      <button class="btn-link" id="btnCloseApp" style="color:#dc2626; font-size:11px; margin:0; padding:0; text-decoration:none; cursor:pointer;">⏻ Close Server</button>
+    </div>
   </div>
 
   <!-- Admin password reset (vendor Reset Code) -->
@@ -149,9 +154,13 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
     <button class="btn-small" id="btnCopyResetRequest" type="button">Copy Request Code</button>
     <label>Reset Code from the vendor</label>
     <textarea id="resetCode" placeholder="Paste the Reset Code here" autocomplete="off" spellcheck="false"></textarea>
-    <label>New admin password</label>
+
+    <label>Admin Username</label>
+    <input type="text" id="resetNewUsername" placeholder="e.g. admin" autocomplete="username">
+
+    <label>New admin password <span class="required-star">*</span></label>
     <input type="password" id="newPassword" placeholder="At least 8 characters" autocomplete="new-password">
-    <button class="btn-login" id="btnResetPassword">RESET PASSWORD</button>
+    <button class="btn-login" id="btnResetPassword">RESET CREDENTIALS</button>
     <button class="btn-link" id="btnBackToLogin">← Back to login</button>
   </div>
 
@@ -378,12 +387,21 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
   }
 
   // ── Admin password reset (vendor Reset Code) ───────────────────
+  // ── Restart & Close Server buttons from login window ─────────────
+  document.getElementById('btnRestartApp').addEventListener('click', () => {
+    sapi.restartServer();
+  });
+  document.getElementById('btnCloseApp').addEventListener('click', () => {
+    sapi.stopServer();
+  });
+
   document.getElementById('btnShowReset').addEventListener('click', async () => {
     clearMessages();
     try {
       const { resp, data } = await api('/api/public/reset-request');
       if (!resp.ok) { showErr(data.error || 'Cannot start reset'); return; }
       document.getElementById('resetRequestCode').textContent = data.requestCode;
+      document.getElementById('resetNewUsername').value = data.currentUsername || 'admin';
       showSection('reset');
     } catch (e) {
       showErr('Cannot connect to server: ' + e.message);
@@ -399,18 +417,28 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
     clearMessages();
     const code = document.getElementById('resetCode').value.trim();
     const newPassword = document.getElementById('newPassword').value;
+    const newUsername = document.getElementById('resetNewUsername').value.trim();
+
     if (code.length < 20) { showErr('Paste the full Reset Code'); return; }
     if (newPassword.length < 8) { showErr('New password must be at least 8 characters'); return; }
 
     const btn = document.getElementById('btnResetPassword');
     btn.disabled = true;
     try {
-      const { resp, data } = await api('/api/public/reset-admin-password', postJson({ code, newPassword }));
+      const payload = { code, newPassword };
+      if (newUsername) payload.newUsername = newUsername;
+
+      const { resp, data } = await api('/api/public/reset-admin-password', postJson(payload));
       if (resp.ok) {
         document.getElementById('resetCode').value = '';
+        document.getElementById('resetNewUsername').value = '';
         document.getElementById('newPassword').value = '';
+        if (data.username) {
+          document.getElementById('username').value = data.username;
+        }
+        document.getElementById('password').value = newPassword;
         showSection('login');
-        showOk(data.message || 'Password reset. Sign in with the new password.');
+        showOk(data.message || 'Credentials reset successfully. Sign in with your new credentials.');
       } else {
         showErr(data.error || 'Reset failed');
       }

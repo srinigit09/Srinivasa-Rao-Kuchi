@@ -85,9 +85,18 @@ app.on('second-instance', (_event, _argv, _cwd, additionalData) => {
     app.quit();
     return;
   }
-  if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
-  else if (loginWindow && !loginWindow.isDestroyed()) { loginWindow.show(); loginWindow.focus(); }
-  else if (app.isReady()) createLoginWindow();
+  const isLoggedIn = serverModule && serverModule.getServerLoggedIn ? serverModule.getServerLoggedIn() : false;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show(); mainWindow.focus();
+  } else if (loginWindow && !loginWindow.isDestroyed()) {
+    loginWindow.show(); loginWindow.focus();
+  } else if (app.isReady()) {
+    if (isLoggedIn) {
+      createMainWindow();
+    } else {
+      createLoginWindow();
+    }
+  }
 });
 
 // When packaged, all server files sit alongside server-main.js in app.asar (__dirname)
@@ -133,9 +142,16 @@ function ensureWindowsFirewallRule() {
   try {
     const { exec } = require('child_process');
     const exe = process.execPath;
+    const port = serverPort || parseInt(process.env.PORT || '5000', 10) || 5000;
     exec(`netsh advfirewall firewall show rule name="Panic Alarm Server"`, (err, stdout) => {
       if (err || !stdout.includes('Panic Alarm Server')) {
         exec(`netsh advfirewall firewall add rule name="Panic Alarm Server" dir=in action=allow program="${exe}" enable=yes profile=any`, () => {});
+        exec(`netsh advfirewall firewall add rule name="Panic Alarm Server Outbound" dir=out action=allow program="${exe}" enable=yes profile=any`, () => {});
+      }
+    });
+    exec(`netsh advfirewall firewall show rule name="Panic Alarm Server Port ${port}"`, (err, stdout) => {
+      if (err || !stdout.includes(`Panic Alarm Server Port ${port}`)) {
+        exec(`netsh advfirewall firewall add rule name="Panic Alarm Server Port ${port}" dir=in action=allow protocol=TCP localport=${port} enable=yes profile=any`, () => {});
       }
     });
   } catch {}
@@ -220,6 +236,18 @@ function resetDatabaseKeepingLicense(dbPath) {
   }
   console.log(`[Server] Fresh install: database reset (kept ${kept.length} license setting(s))`);
 }
+
+// ── Global Server Process Lifecycle Handlers ──────────────────────────────────
+global.__restartServerApp = () => {
+  console.log('[Server] Restarting Panic Alarm Server application...');
+  app.relaunch();
+  app.quit();
+};
+
+global.__stopServerApp = () => {
+  console.log('[Server] Stopping and quitting Panic Alarm Server...');
+  app.quit();
+};
 
 // ── Port Unavailable Conflict Handler (Requirement 6) ────────────────────────
 global.__onServerPortError = (busyPort, err) => {
@@ -429,7 +457,7 @@ function createLoginWindow() {
 }
 
 // ── Create main admin window ──────────────────────────────────────────────────
-function createMainWindow() {
+function createMainWindow(adminToken) {
   if (!app.isReady()) return;
   if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.focus(); return; }
 
@@ -449,7 +477,8 @@ function createMainWindow() {
   });
   mainWindow.setMenu(buildAppMenu());
 
-  const adminUrl = `http://localhost:${serverPort}/admin/`;
+  const adminUrl = `http://localhost:${serverPort}/admin/` +
+    (adminToken ? `#adminToken=${encodeURIComponent(adminToken)}` : '');
   mainWindow.loadURL(adminUrl);
 
   mainWindow.on('closed', () => { mainWindow = null; });
@@ -458,30 +487,73 @@ function createMainWindow() {
   rebuildTrayMenu(true);
 }
 
-// ── App menu (for the main admin window) ─────────────────────────────────────
+// ── App menu (for macOS menu bar & Windows window menu) ───────────────────────
 function buildAppMenu() {
   const ips   = getLocalIPs();
   const ipStr = ips.length ? ips.join(', ') : 'N/A';
+  const isLoggedIn = serverModule && serverModule.getServerLoggedIn ? serverModule.getServerLoggedIn() : false;
+
   return Menu.buildFromTemplate([
+    ...(process.platform === 'darwin' ? [{
+      label: 'Panic Alarm Server',
+      submenu: [
+        { label: 'About Panic Alarm Server', role: 'about' },
+        { type: 'separator' },
+        { label: '🔄 Restart Server', accelerator: 'CmdOrCtrl+Shift+R', click: () => global.__restartServerApp() },
+        { label: '⏻ Close / Stop Server', accelerator: 'CmdOrCtrl+Q', click: () => global.__stopServerApp() },
+        { type: 'separator' },
+        { label: 'Hide Panic Alarm Server', role: 'hide' },
+        { label: 'Hide Others', role: 'hideOthers' },
+        { label: 'Show All', role: 'unhide' },
+      ]
+    }] : []),
     {
       label: 'File',
       submenu: [
-        { label: 'Quit Server', click: () => app.quit() },
+        ...(isLoggedIn ? [
+          { label: '🚪 Sign Out Admin', click: () => {
+              if (serverModule && serverModule.setServerLoggedIn) serverModule.setServerLoggedIn(false);
+              suppressAutoLogin = true;
+              if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+              createLoginWindow();
+              rebuildTrayMenu(true);
+            }
+          },
+          { type: 'separator' },
+        ] : []),
+        { label: '🔄 Restart Server', accelerator: 'CmdOrCtrl+R', click: () => global.__restartServerApp() },
+        { label: '⏻ Close / Stop Server', accelerator: process.platform === 'darwin' ? 'CmdOrCtrl+Q' : 'Alt+F4', click: () => global.__stopServerApp() },
       ],
     },
     {
       label: 'Server',
       submenu: [
-        { label: `Running on port: ${serverPort}`, enabled: false },
-        { label: `Server IP: ${ipStr}`, enabled: false },
+        { label: `Status: ${isLoggedIn ? 'Active (Logged In)' : 'Awaiting Login'}`, enabled: false },
+        { label: `Port: ${serverPort}`, enabled: false },
+        { label: `IP: ${ipStr}`, enabled: false },
         { type: 'separator' },
-        { label: 'Copy Server URL', click: () => {
+        { label: '📋 Copy Server URL', click: () => {
             const url = `http://${ips[0] || 'localhost'}:${serverPort}`;
             require('electron').clipboard.writeText(url);
           }
         },
+        { label: '⚙️ Change Server Port...', click: () => showPortPromptWindow(serverPort) },
       ],
     },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ]
+    }
   ]);
 }
 
@@ -497,10 +569,15 @@ function createTray() {
   }
   rebuildTrayMenu(false);
   tray.on('click', () => {
+    const isLoggedIn = serverModule && serverModule.getServerLoggedIn ? serverModule.getServerLoggedIn() : false;
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show(); mainWindow.focus();
-    } else {
+    } else if (isLoggedIn) {
       createMainWindow();
+    } else if (loginWindow && !loginWindow.isDestroyed()) {
+      loginWindow.show(); loginWindow.focus();
+    } else {
+      createLoginWindow();
     }
   });
 }
@@ -509,21 +586,47 @@ function rebuildTrayMenu(running) {
   if (!tray) return;
   const ips = getLocalIPs();
   const clientUrl = `http://${ips[0] || 'localhost'}:${serverPort}`;
+  const isLoggedIn = serverModule && serverModule.getServerLoggedIn ? serverModule.getServerLoggedIn() : false;
+
   tray.setToolTip(running
-    ? `Panic Alarm Server — ${clientUrl}`
+    ? `Panic Alarm Server — ${isLoggedIn ? 'Active' : 'Awaiting Admin Login'} (Port ${serverPort})`
     : 'Panic Alarm Server — Starting…');
+
   const items = [
-    { label: running ? `🟢 Server Running — Port ${serverPort}` : '⏳ Starting server…', enabled: false },
+    { label: running ? (isLoggedIn ? `🟢 Server Active — Port ${serverPort}` : `🟡 Awaiting Admin Login — Port ${serverPort}`) : '⏳ Starting server…', enabled: false },
     ...(running ? [
       { label: `IP: ${ips.join(', ') || 'N/A'}`, enabled: false },
       { type: 'separator' },
+      { label: '🖥️  Open Admin Panel', click: () => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.show(); mainWindow.focus();
+          } else if (isLoggedIn) {
+            createMainWindow();
+          } else {
+            createLoginWindow();
+          }
+        }
+      },
       { label: `📋 Copy Client URL  (${clientUrl})`, click: () => {
           require('electron').clipboard.writeText(clientUrl);
         }
       },
-    ] : []),
-    { type: 'separator' },
-    { label: 'Quit Server', click: () => app.quit() },
+      ...(isLoggedIn ? [
+        { label: '🚪 Sign Out Admin', click: () => {
+            if (serverModule && serverModule.setServerLoggedIn) serverModule.setServerLoggedIn(false);
+            suppressAutoLogin = true;
+            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+            createLoginWindow();
+            rebuildTrayMenu(true);
+          }
+        }
+      ] : []),
+      { type: 'separator' },
+      { label: '🔄 Restart Server', click: () => global.__restartServerApp() },
+      { label: '⏻ Close / Stop Server', click: () => global.__stopServerApp() },
+    ] : [
+      { label: '⏻ Quit Server', click: () => app.quit() }
+    ]),
   ];
   tray.setContextMenu(Menu.buildFromTemplate(items));
 }
@@ -583,25 +686,33 @@ ipcMain.handle('server-login', async (_, { username, password }) => {
 });
 
 ipcMain.handle('login-success', (_, { token }) => {
+  if (serverModule && serverModule.setServerLoggedIn) {
+    serverModule.setServerLoggedIn(true);
+  }
   // Close login window and open admin panel
   if (loginWindow && !loginWindow.isDestroyed()) loginWindow.close();
-  // Pass admin token to the main window via session storage (injected via executeJavaScript after load)
-  createMainWindow();
-  // Inject the admin token into the admin panel page so it auto-logs in
-  if (mainWindow) {
-    mainWindow.webContents.once('did-finish-load', () => {
-      mainWindow.webContents.executeJavaScript(
-        `localStorage.setItem('adminToken', ${JSON.stringify(token)}); location.reload();`
-      );
-    });
-  }
+  // Token is passed in the URL hash so the admin panel logs in on first load
+  createMainWindow(token);
+  rebuildTrayMenu(true);
 });
 
 ipcMain.handle('admin-logout', () => {
   // Close the admin panel window and reopen the login window, suppressing auto-login
   suppressAutoLogin = true;
+  if (serverModule && serverModule.setServerLoggedIn) {
+    serverModule.setServerLoggedIn(false);
+  }
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
   createLoginWindow();
+  rebuildTrayMenu(true);
+});
+
+ipcMain.handle('restart-server', () => {
+  global.__restartServerApp();
+});
+
+ipcMain.handle('stop-server', () => {
+  global.__stopServerApp();
 });
 
 ipcMain.handle('get-login-prefs', () => {
@@ -689,6 +800,9 @@ app.whenReady().then(async () => {
   ensureWindowsFirewallRule();
   setAutoLaunch(true);
 
+  // Set global application menu for OS menu bar
+  Menu.setApplicationMenu(buildAppMenu());
+
   // Check if Auto Login is enabled (Requirement 5 & 8)
   const prefs = getLoginPrefs();
   if (!suppressAutoLogin && prefs.autoLogin && prefs.username && prefs.password) {
@@ -696,18 +810,20 @@ app.whenReady().then(async () => {
     const result = await attemptAutoLogin(prefs.username, prefs.password);
     if (result.ok && result.token) {
       console.log('[Server] Auto Login successful');
-      createMainWindow();
-      if (mainWindow) {
-        mainWindow.webContents.once('did-finish-load', () => {
-          mainWindow.webContents.executeJavaScript(
-            `localStorage.setItem('adminToken', ${JSON.stringify(result.token)}); location.reload();`
-          );
-        });
+      if (serverModule && serverModule.setServerLoggedIn) {
+        serverModule.setServerLoggedIn(true);
       }
+      createMainWindow(result.token);
+      rebuildTrayMenu(true);
       return;
     } else {
       console.warn('[Server] Auto Login could not complete:', result.error);
     }
+  }
+
+  // If waiting for login, ensure server state is logged out
+  if (serverModule && serverModule.setServerLoggedIn) {
+    serverModule.setServerLoggedIn(false);
   }
 
   // Show login window promptly if auto-login is not active
@@ -724,12 +840,34 @@ if (powerMonitor) {
   });
 }
 
-// Global crash resilience for Always-On operation
+// Global crash resilience & self-healing for Always-On server operation
+let isExplicitQuit = false;
+app.on('before-quit', () => {
+  isExplicitQuit = true;
+});
+
+app.on('render-process-gone', (event, webContents, details) => {
+  console.error('[Server Crash Guard] Renderer process crashed:', details.reason);
+  if (!isExplicitQuit) {
+    if (mainWindow && mainWindow.webContents === webContents) {
+      mainWindow = null;
+      setTimeout(createMainWindow, 1000);
+    } else if (loginWindow && loginWindow.webContents === webContents) {
+      loginWindow = null;
+      setTimeout(createLoginWindow, 1000);
+    }
+  }
+});
+
+app.on('child-process-gone', (event, details) => {
+  console.error('[Server Crash Guard] Child process exited:', details.reason);
+});
+
 process.on('uncaughtException', (err) => {
-  console.error('[Server] Uncaught exception:', err);
+  console.error('[Server Crash Guard] Uncaught exception:', err);
 });
 process.on('unhandledRejection', (reason) => {
-  console.error('[Server] Unhandled rejection:', reason);
+  console.error('[Server Crash Guard] Unhandled rejection:', reason);
 });
 
 app.on('window-all-closed', () => {
@@ -738,9 +876,20 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (!app.isReady()) return;
-  if (loginWindow && !loginWindow.isDestroyed()) { loginWindow.focus(); return; }
-  if (mainWindow && !mainWindow.isDestroyed())   { mainWindow.focus(); return; }
-  createLoginWindow();
+  const isLoggedIn = serverModule && serverModule.getServerLoggedIn ? serverModule.getServerLoggedIn() : false;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show(); mainWindow.focus();
+    return;
+  }
+  if (loginWindow && !loginWindow.isDestroyed()) {
+    loginWindow.show(); loginWindow.focus();
+    return;
+  }
+  if (isLoggedIn) {
+    createMainWindow();
+  } else {
+    createLoginWindow();
+  }
 });
 
 app.on('before-quit', () => {

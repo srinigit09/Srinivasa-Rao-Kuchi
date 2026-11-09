@@ -181,6 +181,8 @@ module.exports = {
   findAdmin:           db.prepare('SELECT * FROM admin_users WHERE username = ?'),
   listAdmins:          db.prepare('SELECT id, username, created_at FROM admin_users'),
   updateAdminPassword: db.prepare('UPDATE admin_users SET password = ? WHERE id = ?'),
+  updateAdminUsername: db.prepare('UPDATE admin_users SET username = ? WHERE id = ?'),
+  updateAdminCredentials: db.prepare('UPDATE admin_users SET username = ?, password = ? WHERE id = ?'),
 
   // Clients
   listClients:         db.prepare('SELECT * FROM clients WHERE active = 1 ORDER BY client_name'),
