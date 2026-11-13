@@ -965,7 +965,7 @@ async function loadDashboard() {
   document.getElementById('stat-clients').textContent = _dashClients.length;
   document.getElementById('stat-users').textContent   = _dashClients.reduce((s,c)=>s+(c.user_count||0),0);
   document.getElementById('stat-alarms').textContent  = _dashLogs.length;
-  document.getElementById('stat-today').textContent   = _dashLogs.filter(l=>new Date(l.triggered_at).toDateString()===today).length;
+  document.getElementById('stat-today').textContent   = _dashLogs.filter(l=>dbDate(l.triggered_at).toDateString()===today).length;
   dashCard('alarms');
 }
 
@@ -986,7 +986,7 @@ function dashCard(view) {
   } else if (view === 'today') {
     document.getElementById('dash-alarms-title').textContent = 'Alarms Today';
     const today = new Date().toDateString();
-    _renderDashAlarms(_dashLogs.filter(l => new Date(l.triggered_at).toDateString() === today));
+    _renderDashAlarms(_dashLogs.filter(l => dbDate(l.triggered_at).toDateString() === today));
   } else if (view === 'clients') {
     _renderDashClients(_dashClients);
   } else if (view === 'users') {
@@ -1005,7 +1005,7 @@ function _renderDashAlarms(logs) {
   tbody.innerHTML = logs.map(l=>`
     <tr data-alarm-id="${esc(l.alarm_id)}">
       <td><input type="checkbox" class="dash-chk" value="${esc(l.alarm_id)}" onchange="updateDashClearBtn()"></td>
-      <td>${new Date(l.triggered_at).toLocaleString()}</td>
+      <td>${dbDate(l.triggered_at).toLocaleString()}</td>
       <td>${esc(l.hospital_code)}</td>
       <td>${esc(l.triggered_by)}</td>
       <td>${esc(l.user_id||'—')}</td>
@@ -1028,7 +1028,7 @@ function _renderDashClients(ca) {
       <td>${esc(c.location||'—')}</td>
       <td>${c.user_count||0}</td>
       <td>${c.user_limit||'—'}</td>
-      <td>${c.created_at ? new Date(c.created_at).toLocaleDateString() : '—'}</td>
+      <td>${c.created_at ? dbDate(c.created_at).toLocaleDateString() : '—'}</td>
     </tr>`).join('');
 }
 
@@ -1147,7 +1147,7 @@ async function loadClients() {
       <td style="font-size:12px;color:#475569">${esc(c.email||'—')}</td>
       <td style="font-size:12px">${emailIcons}</td>
       <td>${c.system_limit}</td>
-      <td>${new Date(c.created_at).toLocaleDateString()}</td>
+      <td>${dbDate(c.created_at).toLocaleDateString()}</td>
       <td class="actions">
         <button class="btn-sm btn-edit" onclick="openEditClient(${c.id})">Edit</button>
         <button class="btn-sm btn-del"  onclick="deleteClient(${c.id},'${esc(c.client_name)}')">Delete</button>
@@ -1221,7 +1221,7 @@ async function loadClientUsers() {
       <td>${esc(roomLabel(u.role, u.room_number))}</td>
       <td>${esc(u.department||'—')}</td>
       <td>${src}</td>
-      <td>${new Date(u.registered_at).toLocaleDateString()}</td>
+      <td>${dbDate(u.registered_at).toLocaleDateString()}</td>
       <td class="actions">
         <button class="btn-sm btn-edit" onclick="openEditUser(${JSON.stringify(u)})">Edit</button>
         <button class="btn-sm btn-del"  onclick="deleteUser(${u.id},'${esc(roleName(u.role))}')">Delete</button>
@@ -1379,7 +1379,7 @@ async function loadDepts() {
     <tr>
       <td>${esc(d.hospital_code)}</td>
       <td>${esc(d.name)}</td>
-      <td>${new Date(d.created_at).toLocaleDateString()}</td>
+      <td>${dbDate(d.created_at).toLocaleDateString()}</td>
       <td class="actions">
         <button class="btn-sm btn-edit" onclick="openEditDept(${d.id},'${esc(d.name)}')">Edit</button>
         <button class="btn-sm btn-del"  onclick="deleteDept(${d.id},'${esc(d.name)}')">Delete</button>
@@ -1452,7 +1452,7 @@ async function loadDeptBlocksList() {
     <tr>
       <td>${esc(d.hospital_code)}</td>
       <td>${esc(d.name)}</td>
-      <td>${new Date(d.created_at).toLocaleDateString()}</td>
+      <td>${dbDate(d.created_at).toLocaleDateString()}</td>
       <td class="actions">
         <button class="btn-sm btn-edit" onclick="openEditDeptBlock(${d.id},'${esc(d.name)}')">Edit</button>
         <button class="btn-sm btn-del"  onclick="deleteDeptBlock(${d.id},'${esc(d.name)}')">Delete</button>
@@ -1532,7 +1532,7 @@ function renderLogsTable(tbodyId, data, mode) {
   tbody.innerHTML = data.map(l => `
     <tr data-alarm-id="${esc(l.alarm_id)}">
       ${mode === 'full' ? `<td><input type="checkbox" class="log-chk" value="${esc(l.alarm_id)}" onchange="updateClearSelectedBtn()"></td>` : ''}
-      <td>${new Date(l.triggered_at).toLocaleString()}</td>
+      <td>${dbDate(l.triggered_at).toLocaleString()}</td>
       ${mode === 'full' ? `<td style="font-family:monospace;font-size:11px">${l.alarm_id.slice(0,8)}</td>` : ''}
       <td>${esc(l.hospital_code)}</td>
       <td>${esc(l.triggered_by)}</td>
@@ -1747,6 +1747,12 @@ function flash(msg, ok) {
 }
 
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+// SQLite stores times as UTC text ("YYYY-MM-DD HH:MM:SS", no zone). new Date() would read that as LOCAL
+// time, shifting every timestamp by the viewer's UTC offset — so mark it as UTC before parsing.
+function dbDate(s) {
+  if (typeof s === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(s)) s = s.replace(' ', 'T') + 'Z';
+  return new Date(s);
+}
 function esc(s) { return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function parseJwt(t) { try { return JSON.parse(atob(t.split('.')[1])); } catch { return null; } }
 </script>
