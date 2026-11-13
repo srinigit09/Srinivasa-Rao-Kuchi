@@ -7,9 +7,7 @@ const { io } = require('socket.io-client');
 
 // ── Notification Helper ───────────────────────────────────────────────────────
 let lastNotificationType = null;
-function notifyClientUser(type, title, message) {
-  if (lastNotificationType === type) return;
-  lastNotificationType = type;
+function showNotification(title, message) {
   try {
     if (Notification.isSupported()) {
       new Notification({
@@ -23,41 +21,148 @@ function notifyClientUser(type, title, message) {
     console.warn('[Notify] Failed to display notification:', e.message);
   }
 }
+function notifyClientUser(type, title, message) {
+  if (lastNotificationType === type) return;
+  lastNotificationType = type;
+  showNotification(title, message);
+}
+
+// ── Server-down reminders (PER OS USER) ───────────────────────────────────────
+// Stored in this OS user's own profile folder (userData), NOT the shared config, so each person
+// who logs in to this PC decides for themselves. Default: ON.
+const REMINDER_INTERVAL_MS = 180 * 1000;   // 3 min: a normal server restart/reconnect finishes before the first repeat
+const USER_PREFS_FILE = path.join(app.getPath('userData'), 'client-prefs.json');
+function getUserPrefs() {
+  try { return { remindersEnabled: true, ...JSON.parse(fs.readFileSync(USER_PREFS_FILE, 'utf8')) }; }
+  catch { return { remindersEnabled: true }; }
+}
+function setRemindersEnabled(enabled) {
+  try {
+    fs.mkdirSync(path.dirname(USER_PREFS_FILE), { recursive: true });
+    fs.writeFileSync(USER_PREFS_FILE, JSON.stringify({ ...getUserPrefs(), remindersEnabled: !!enabled }, null, 2), 'utf8');
+  } catch (e) { console.warn('[Prefs] Could not save user preferences:', e.message); }
+  if (!enabled) stopReminders();
+  else if (reminderMessage) startReminders(reminderTitle, reminderMessage);   // still down → resume
+}
+
+let reminderTimer = null;
+let reminderTitle = '';
+let reminderMessage = '';   // non-empty while the alarm system is unavailable
+function startReminders(title, message) {
+  reminderTitle = title; reminderMessage = message;
+  if (reminderTimer || !getUserPrefs().remindersEnabled) return;   // already running / switched off
+  reminderTimer = setInterval(() => {
+    if (!getUserPrefs().remindersEnabled || !reminderMessage) return stopReminders();
+    if (shell && shell.beep) shell.beep();
+    showNotification(reminderTitle, reminderMessage);
+  }, REMINDER_INTERVAL_MS);
+}
+function stopReminders() {
+  if (reminderTimer) { clearInterval(reminderTimer); reminderTimer = null; }
+}
+function clearReminders() {   // server is back — forget the outage entirely
+  reminderTitle = ''; reminderMessage = '';
+  stopReminders();
+  flushClientEvents();
+}
+
+// ── Outage reports to the server log ──────────────────────────────────────────
+// A down server cannot receive anything, so events are queued here and sent once it is reachable.
+const pendingClientEvents = [];
+let outageSince = null;
+function markOutageStart() {
+  if (!outageSince) outageSince = new Date().toISOString();
+}
+function queueClientEvent(type, detail) {
+  if (pendingClientEvents.length >= 20) pendingClientEvents.shift();
+  pendingClientEvents.push({ type, detail, at: new Date().toISOString() });
+}
+let flushing = false;
+async function flushClientEvents() {
+  const cfg = loadConfig();
+  if (!cfg || !cfg.serverUrl || !cfg.token) return;
+  if (outageSince) {
+    queueClientEvent('server_unreachable');
+    pendingClientEvents[pendingClientEvents.length - 1].at = outageSince;
+    outageSince = null;
+  }
+  if (flushing) return;
+  flushing = true;
+  try {
+    while (pendingClientEvents.length) {
+      const ev = pendingClientEvents[0];
+      const resp = await fetch(`${cfg.serverUrl}/api/client/event`, {
+        method : 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` },
+        body   : JSON.stringify({ type: ev.type, since: ev.at, until: new Date().toISOString(), detail: ev.detail }),
+        signal : AbortSignal.timeout(3000),
+      });
+      if (resp.status === 429) { await new Promise(r => setTimeout(r, 1100)); continue; }   // server flood guard
+      pendingClientEvents.shift();   // sent, or rejected for good (4xx) — don't retry forever
+    }
+  } catch { /* still unreachable — keep the queue, try again at the next recovery */ }
+  flushing = false;
+}
 
 // ── Device-Based Shared Config Directory (Device-wide for all users) ──────────
+// Files/folders created by one OS user must stay writable by every other OS user,
+// otherwise a second user cannot save settings or re-register after the first user logs out.
+function shareDir(dir) {
+  try {
+    if (process.platform === 'win32') {
+      // *S-1-5-32-545 = BUILTIN\Users — Modify, inherited by files/sub-folders created later
+      require('child_process').execFileSync('icacls', [dir, '/grant', '*S-1-5-32-545:(OI)(CI)M'],
+        { timeout: 5000, stdio: 'ignore', windowsHide: true });
+    } else {
+      fs.chmodSync(dir, 0o777);
+    }
+  } catch (e) { console.warn('[Config] Could not open shared folder to all users:', e.message); }
+}
+function shareFile(file) {
+  if (process.platform === 'win32') return;   // Windows: inherited from the folder ACL
+  try { fs.chmodSync(file, 0o666); } catch { /* not the owner — mode was already set by its creator */ }
+}
+function writeShared(file, data) {
+  try {
+    fs.writeFileSync(file, data);
+  } catch (e) {
+    // File created by another OS user with a restrictive mode: the folder is open to everyone,
+    // so replace the file instead of editing it in place.
+    if (e.code !== 'EACCES' && e.code !== 'EPERM') throw e;
+    fs.unlinkSync(file);
+    fs.writeFileSync(file, data);
+  }
+  shareFile(file);
+}
+function ensureSharedDir(sharedDir) {
+  const existed = fs.existsSync(sharedDir);
+  if (!existed) fs.mkdirSync(sharedDir, { recursive: true });
+  // Windows: ACL is set once (installer / first creation). Unix: re-apply every launch to repair old folders.
+  if (!existed || process.platform !== 'win32') shareDir(sharedDir);
+  const testFile = path.join(sharedDir, '.perm_test');
+  fs.writeFileSync(testFile, '1');
+  fs.unlinkSync(testFile);
+  return sharedDir;
+}
+
 function getSharedConfigDir() {
+  let sharedDir;
   if (process.platform === 'win32') {
     // Windows: C:\ProgramData\PanicAlarmClient (accessible to all Windows users on this device)
     const progData = process.env.ProgramData || process.env.ALLUSERSPROFILE || 'C:\\ProgramData';
-    const sharedDir = path.join(progData, 'PanicAlarmClient');
-    try {
-      if (!fs.existsSync(sharedDir)) fs.mkdirSync(sharedDir, { recursive: true });
-      const testFile = path.join(sharedDir, '.perm_test');
-      fs.writeFileSync(testFile, '1');
-      fs.unlinkSync(testFile);
-      return sharedDir;
-    } catch (e) {
-      console.warn('[Config] Shared ProgramData not writable, using userData fallback:', e.message);
-      return app.getPath('userData');
-    }
+    sharedDir = path.join(progData, 'PanicAlarmClient');
   } else if (process.platform === 'darwin') {
     // macOS: /Users/Shared/PanicAlarmClient (accessible to all macOS users without root)
-    const sharedDir = '/Users/Shared/PanicAlarmClient';
-    try {
-      if (!fs.existsSync(sharedDir)) fs.mkdirSync(sharedDir, { recursive: true });
-      return sharedDir;
-    } catch {
-      return app.getPath('userData');
-    }
+    sharedDir = '/Users/Shared/PanicAlarmClient';
   } else {
     // Linux: /var/lib/panic-alarm-client or fallback
-    const sharedDir = '/var/lib/panic-alarm-client';
-    try {
-      if (!fs.existsSync(sharedDir)) fs.mkdirSync(sharedDir, { recursive: true });
-      return sharedDir;
-    } catch {
-      return app.getPath('userData');
-    }
+    sharedDir = '/var/lib/panic-alarm-client';
+  }
+  try {
+    return ensureSharedDir(sharedDir);
+  } catch (e) {
+    console.warn('[Config] Shared folder not writable, using userData fallback:', e.message);
+    return app.getPath('userData');
   }
 }
 
@@ -78,11 +183,13 @@ function initConfigDir() {
       const userConfigFile = path.join(userDir, 'panic-alarm-config.json');
       if (fs.existsSync(userConfigFile) && !fs.existsSync(CONFIG_FILE)) {
         fs.copyFileSync(userConfigFile, CONFIG_FILE);
+        shareFile(CONFIG_FILE);
       }
       const userDeviceId = path.join(userDir, 'device-id');
       const sharedDeviceId = path.join(CONFIG_DIR, 'device-id');
       if (fs.existsSync(userDeviceId) && !fs.existsSync(sharedDeviceId)) {
         fs.copyFileSync(userDeviceId, sharedDeviceId);
+        shareFile(sharedDeviceId);
       }
     }
   } catch (err) {
@@ -96,8 +203,8 @@ function initConfigDir() {
       const bak = JSON.parse(fs.readFileSync(bakFile, 'utf8'));
       if (bak.serverUrl) {
         const hint = JSON.stringify({ serverUrl: bak.serverUrl, hospitalCode: bak.hospitalCode || '' });
-        fs.writeFileSync(LAST_HINT_FILE, hint, 'utf8');
-        fs.writeFileSync(LAST_SERVER_FILE, bak.serverUrl, 'utf8');
+        writeShared(LAST_HINT_FILE, hint);
+        writeShared(LAST_SERVER_FILE, bak.serverUrl);
       }
     } catch { /* no bak — first ever install */ }
   }
@@ -150,7 +257,7 @@ function isFreshInstall() {
 
   // New install-id → fresh install. Save it so subsequent reopens pass through.
   if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  fs.writeFileSync(SEEN_INSTALL_FILE, currentId, 'utf8');
+  writeShared(SEEN_INSTALL_FILE, currentId);
   return true;
 }
 
@@ -168,12 +275,12 @@ function loadConfig() {
 }
 function saveConfig(cfg) {
   if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2));
+  writeShared(CONFIG_FILE, JSON.stringify(cfg, null, 2));
   // Persist server hint so it survives future config wipes
   if (cfg.serverUrl) {
-    fs.writeFileSync(LAST_SERVER_FILE, cfg.serverUrl, 'utf8');
+    writeShared(LAST_SERVER_FILE, cfg.serverUrl);
     const hint = JSON.stringify({ serverUrl: cfg.serverUrl, hospitalCode: cfg.hospitalCode || '' });
-    fs.writeFileSync(LAST_HINT_FILE, hint, 'utf8');
+    writeShared(LAST_HINT_FILE, hint);
   }
 }
 function getLastServerHint() {
@@ -191,7 +298,7 @@ function getOrCreateDeviceId() {
   if (fs.existsSync(f)) return fs.readFileSync(f, 'utf8').trim();
   const id = require('crypto').randomUUID();
   if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  fs.writeFileSync(f, id);
+  writeShared(f, id);
   return id;
 }
 
@@ -311,6 +418,7 @@ function connectSocket(config) {
     console.log('[Socket] Server readiness state:', state);
     isServerReadyState = !!(state && state.ready);
     if (isServerReadyState) {
+      clearReminders();
       rebuildTrayMenu(config, 'connected');
       if (!alarmButton || alarmButton.isDestroyed()) {
         createAlarmButton(config);
@@ -324,10 +432,12 @@ function connectSocket(config) {
       }
       rebuildTrayMenu(config, 'awaiting_login');
       notifyClientUser('awaiting_login', 'Server Awaiting Admin Login', 'Panic Alarm server is running but awaiting administrator sign-in. Alarm button will appear once Admin logs in.');
+      startReminders('Panic Alarm NOT available', 'The Panic Alarm server is awaiting administrator sign-in. Alarms cannot be sent or received until it is ready.');
     }
   });
 
   socket.on('disconnect', (reason) => {
+    markOutageStart();
     console.log(`[Socket] Disconnected from server (${reason}) — retrying automatically in background...`);
     wasConnected = false;
     isServerReadyState = false;
@@ -335,14 +445,17 @@ function connectSocket(config) {
     if (alarmButton && !alarmButton.isDestroyed()) alarmButton.close();
     if (shell && shell.beep) shell.beep();
     notifyClientUser('disconnected', 'Panic Alarm Server Unavailable', `Cannot connect to Panic Alarm Server at ${config.serverUrl}. Reconnecting automatically...`);
+    startReminders('Panic Alarm NOT available', `Cannot reach the Panic Alarm Server at ${config.serverUrl}. Alarms cannot be sent or received. Still retrying...`);
   });
 
   socket.on('connect_error', (err) => {
+    markOutageStart();
     console.log('[Socket] Connection attempt error:', err.message, '— will keep retrying...');
     isServerReadyState = false;
     rebuildTrayMenu(config, 'disconnected');
     if (alarmButton && !alarmButton.isDestroyed()) alarmButton.close();
     notifyClientUser('disconnected', 'Panic Alarm Server Unavailable', `Panic Alarm Server at ${config.serverUrl} is currently unreachable. Reconnecting automatically in background...`);
+    startReminders('Panic Alarm NOT available', `Cannot reach the Panic Alarm Server at ${config.serverUrl}. Alarms cannot be sent or received. Still retrying...`);
   });
 
   // ── This is the key event — show popup on every registered PC ────────────────
@@ -512,6 +625,33 @@ function createTray(config) {
   });
 }
 
+// Emergency system: closing must be deliberate, so quitting from the tray asks first.
+// Windows watchdog (watchdog.vbs) restarts the app after a crash but must NOT after a deliberate quit.
+const STOP_FLAG = process.platform === 'win32' && process.env.LOCALAPPDATA
+  ? path.join(process.env.LOCALAPPDATA, 'PanicAlarm', 'client-stopped.flag') : null;
+function setStopFlag(on) {
+  if (!STOP_FLAG) return;
+  try {
+    if (on) { fs.mkdirSync(path.dirname(STOP_FLAG), { recursive: true }); fs.writeFileSync(STOP_FLAG, new Date().toISOString()); }
+    else if (fs.existsSync(STOP_FLAG)) fs.unlinkSync(STOP_FLAG);
+  } catch { /* best effort */ }
+}
+setStopFlag(false);   // every normal start clears a previous deliberate-quit marker
+
+function quitWithConfirm() {
+  const choice = dialog.showMessageBoxSync({
+    type: 'warning',
+    title: 'Panic Alarm',
+    message: 'Quit Panic Alarm?',
+    detail: 'While Panic Alarm is closed you cannot send or receive emergency alarms on this computer.',
+    buttons: ['Keep Running', 'Quit'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  });
+  if (choice === 1) { setStopFlag(true); app.quit(); }
+}
+
 function rebuildTrayMenu(config, state) {
   if (!tray) return;
   const isConnected = state === 'connected' || state === true;
@@ -547,7 +687,13 @@ function rebuildTrayMenu(config, state) {
     },
     { type: 'separator' },
     { label: '🔄 Reconnect Now', click: () => { connectSocket(loadConfig()); } },
-    { label: 'Quit Panic Alarm', click: () => app.quit() },
+    {
+      label: 'Server-down reminders (this user)',
+      type: 'checkbox',
+      checked: getUserPrefs().remindersEnabled,
+      click: (item) => { setRemindersEnabled(item.checked); },
+    },
+    { label: 'Quit Panic Alarm', click: quitWithConfirm },
   ] : [
     { label: '🚨 Panic Alarm — Click to Setup', enabled: false },
     { type: 'separator' },
@@ -558,7 +704,7 @@ function rebuildTrayMenu(config, state) {
       }
     },
     { type: 'separator' },
-    { label: 'Quit', click: () => app.quit() },
+    { label: 'Quit', click: quitWithConfirm },
   ];
   tray.setContextMenu(Menu.buildFromTemplate(items));
   tray.setToolTip(config
@@ -607,6 +753,7 @@ ipcMain.handle('dismiss-alert', () => {
 
 // Alarm transmission failure alert
 ipcMain.on('alarm-delivery-failed', () => {
+  queueClientEvent('alarm_delivery_failed', 'Panic button press could not reach the server');
   if (shell && shell.beep) shell.beep();
   notifyClientUser(
     'alarm_failed',
@@ -722,6 +869,7 @@ function startReconnectWatchdog(config) {
         if (data && data.serverReady && !isServerReadyState) {
           console.log('[Watchdog] Server ready detected via health probe — autostarting alarm button');
           isServerReadyState = true;
+          clearReminders();
           rebuildTrayMenu(currentConfig, 'connected');
           if (!alarmButton || alarmButton.isDestroyed()) {
             createAlarmButton(currentConfig);

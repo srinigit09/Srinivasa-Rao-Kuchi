@@ -18,6 +18,9 @@
   },
   "build": {
     "afterPack": "./afterPack.js",
+    "extraResources": [
+      { "from": "watchdog.vbs", "to": "watchdog.vbs" }
+    ],
     "appId": "com.hospital.panicalarmclient",
     "productName": "PanicAlarmClient",
     "copyright": "Hospital Panic Alarm System",

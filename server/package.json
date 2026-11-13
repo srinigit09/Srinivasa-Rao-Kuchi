@@ -26,6 +26,9 @@
   },
   "build": {
     "afterPack": "./afterPack.js",
+    "extraResources": [
+      { "from": "watchdog.vbs", "to": "watchdog.vbs" }
+    ],
     "appId": "com.hospital.panicalarm.server",
     "productName": "PanicAlarmServer",
     "copyright": "Hospital Panic Alarm System",
@@ -38,6 +41,7 @@
       "server.js",
       "db.js",
       "auth.js",
+      "event-log.js",
       "license.js",
       "license-codec.js",
       "license-keys.js",

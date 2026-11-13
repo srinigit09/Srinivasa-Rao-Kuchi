@@ -51,7 +51,49 @@ try {
 }
 
 // ── Paths ─────────────────────────────────────────────────────────────────────
+// USER_DATA is per OS user (login prefs live here — a saved password must never be shared).
+// SHARED_DATA is per computer: database, license, JWT secret, port and install marker live there so
+// the server behaves identically whichever OS user is logged in (and survives user switches).
 const USER_DATA = app.getPath('userData');
+
+function getSharedDataDir() {
+  let dir;
+  if (process.platform === 'win32') {
+    dir = path.join(process.env.ProgramData || process.env.ALLUSERSPROFILE || 'C:\\ProgramData', 'PanicAlarmServer');
+  } else if (process.platform === 'darwin') {
+    dir = '/Users/Shared/PanicAlarmServer';
+  } else {
+    dir = '/var/lib/panic-alarm-server';
+  }
+  try {
+    const existed = fs.existsSync(dir);
+    if (!existed) fs.mkdirSync(dir, { recursive: true });
+    // Open the folder to every OS user on every launch (repairs folders made by older builds)
+    try {
+      if (process.platform === 'win32') {
+        // *S-1-5-32-545 = BUILTIN\Users — Modify, inherited by files created later
+        if (!existed) require('child_process').execFileSync('icacls', [dir, '/grant', '*S-1-5-32-545:(OI)(CI)M'],
+          { timeout: 5000, stdio: 'ignore', windowsHide: true });
+      } else {
+        fs.chmodSync(dir, 0o777);
+      }
+    } catch (e) { console.warn('[Server] Could not open shared data folder to all users:', e.message); }
+    const probe = path.join(dir, '.perm_test');
+    fs.writeFileSync(probe, '1');
+    fs.unlinkSync(probe);
+    return dir;
+  } catch (e) {
+    console.warn('[Server] Shared data folder not writable, using per-user folder:', e.message);
+    return USER_DATA;
+  }
+}
+const SHARED_DATA = getSharedDataDir();
+// Event log lives next to the shared database so every OS user's server writes to one history
+if (!process.env.LOG_DIR) process.env.LOG_DIR = path.join(SHARED_DATA, 'logs');
+const eventLog = require('./event-log');
+eventLog.info('app_launched', { pid: process.pid, osUser: os.userInfo().username, version: app.getVersion() });
+// Files created by this process (SQLite database, -wal, -shm) must stay writable by other OS users
+if (process.platform !== 'win32') process.umask(0o000);
 
 // ── Single instance — a newer installed build replaces an old one still running in the tray ──
 function getBuildStamp() {
@@ -178,12 +220,12 @@ function isFreshInstall() {
     const currentId = MY_BUILD_STAMP;
     if (!currentId) return false;                          // dev mode → never reset
 
-    const seenFile = path.join(USER_DATA, 'seen-install-id');
+    const seenFile = path.join(SHARED_DATA, 'seen-install-id');
     let seenId = null;
     try { seenId = fs.readFileSync(seenFile, 'utf8').trim(); } catch { /* first launch */ }
     if (seenId === currentId) return false;
 
-    if (!fs.existsSync(USER_DATA)) fs.mkdirSync(USER_DATA, { recursive: true });
+    if (!fs.existsSync(SHARED_DATA)) fs.mkdirSync(SHARED_DATA, { recursive: true });
     fs.writeFileSync(seenFile, currentId, 'utf8');
     return true;
   } catch (e) {
@@ -244,18 +286,87 @@ global.__restartServerApp = () => {
   app.quit();
 };
 
+// Emergency system: stopping must be deliberate. Menu/tray stop actions ask first.
+function confirmStop(what) {
+  const choice = dialog.showMessageBoxSync({
+    type: 'warning',
+    title: 'Panic Alarm Server',
+    message: `Stop the ${what}?`,
+    detail: 'While the server is stopped, NO panic alarms can be sent or received by any client. Only stop it if you really mean to.',
+    buttons: ['Keep Running', 'Stop Server'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  });
+  return choice === 1;
+}
+const stopWithConfirm = () => { if (confirmStop('Panic Alarm Server')) global.__stopServerApp(); };
+
+// Windows watchdog (watchdog.vbs) restarts the server after a crash but must NOT after a deliberate stop.
+const STOP_FLAG = process.platform === 'win32' && process.env.LOCALAPPDATA
+  ? path.join(process.env.LOCALAPPDATA, 'PanicAlarm', 'server-stopped.flag') : null;
+function setStopFlag(on) {
+  if (!STOP_FLAG) return;
+  try {
+    if (on) { fs.mkdirSync(path.dirname(STOP_FLAG), { recursive: true }); fs.writeFileSync(STOP_FLAG, new Date().toISOString()); }
+    else if (fs.existsSync(STOP_FLAG)) fs.unlinkSync(STOP_FLAG);
+  } catch { /* best effort */ }
+}
+setStopFlag(false);   // every normal start clears a previous deliberate-stop marker
+
 global.__stopServerApp = () => {
   console.log('[Server] Stopping and quitting Panic Alarm Server...');
+  eventLog.info('server_stop_requested');
+  setStopFlag(true);
   app.quit();
 };
 
 // ── Port Unavailable Conflict Handler (Requirement 6) ────────────────────────
+// Is the busy port held by another Panic Alarm Server? (e.g. the same server already running in
+// another OS user's session after a fast user switch) — resolves true only for our own /health reply.
+function isPanicAlarmServerOn(port) {
+  return new Promise((resolve) => {
+    const req = http.get({ hostname: '127.0.0.1', port, path: '/health', timeout: 1500 }, (res) => {
+      let body = '';
+      res.on('data', c => { body += c; });
+      res.on('end', () => {
+        try { const j = JSON.parse(body); resolve(j.status === 'ok' && 'serverReady' in j); } catch { resolve(false); }
+      });
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+  });
+}
+
+// Standby: another session already serves this computer. Stay quiet, and take over automatically
+// the moment that session ends and the port frees up.
+let standbyMode = false;
+let portBusy = false;   // set synchronously when listen() fails with EADDRINUSE
+function enterStandby(busyPort) {
+  if (standbyMode) return;
+  standbyMode = true;
+  console.log(`[Server] Port ${busyPort} is served by another user session — standing by to take over`);
+  rebuildTrayMenu(false);
+  const timer = setInterval(async () => {
+    if (await isPanicAlarmServerOn(busyPort)) return;
+    clearInterval(timer);
+    console.log('[Server] Other session ended — taking over the server');
+    app.relaunch();
+    app.quit();
+  }, 5000);
+}
+
 global.__onServerPortError = (busyPort, err) => {
   console.error(`[Server] Port ${busyPort} unavailable callback triggered:`, err.message);
-  if (!app.isReady()) {
-    app.whenReady().then(() => promptPortUnavailable(busyPort));
-  } else {
+  portBusy = true;
+  const handle = async () => {
+    if (await isPanicAlarmServerOn(busyPort)) return enterStandby(busyPort);
     promptPortUnavailable(busyPort);
+  };
+  if (!app.isReady()) {
+    app.whenReady().then(handle);
+  } else {
+    handle();
   }
 };
 
@@ -295,6 +406,7 @@ function promptPortUnavailable(busyPort) {
     app.relaunch();
     app.quit();
   } else {
+    setStopFlag(true);   // user chose "Quit Server" — don't let the watchdog re-prompt every minute
     app.quit();
   }
 }
@@ -378,9 +490,20 @@ function startEmbeddedServer() {
 
     // Database path: check if user provided DB_PATH, otherwise fall back to AppData folder
     if (!process.env.DB_PATH) {
-      const dbDir = path.join(USER_DATA, 'data');
+      const dbDir = path.join(SHARED_DATA, 'data');
       if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
       process.env.DB_PATH = path.join(dbDir, 'panic_alarm.db');
+
+      // One-time migration: builds before the shared folder kept the database under the OS user's profile
+      const legacyDb = path.join(USER_DATA, 'data', 'panic_alarm.db');
+      if (!fs.existsSync(process.env.DB_PATH) && fs.existsSync(legacyDb)) {
+        try {
+          for (const suffix of ['', '-wal', '-shm']) {
+            if (fs.existsSync(legacyDb + suffix)) fs.copyFileSync(legacyDb + suffix, process.env.DB_PATH + suffix);
+          }
+          console.log('[Server] Migrated existing database to the shared data folder');
+        } catch (e) { console.error('[Server] Database migration failed:', e.message); }
+      }
     }
 
     if (isFreshInstall()) {
@@ -438,7 +561,7 @@ function getLocalIPs() {
 
 // ── Create login window ───────────────────────────────────────────────────────
 function createLoginWindow() {
-  if (!app.isReady()) return;
+  if (!app.isReady() || standbyMode) return;
   if (loginWindow && !loginWindow.isDestroyed()) { loginWindow.focus(); return; }
 
   loginWindow = new BrowserWindow({
@@ -458,7 +581,7 @@ function createLoginWindow() {
 
 // ── Create main admin window ──────────────────────────────────────────────────
 function createMainWindow(adminToken) {
-  if (!app.isReady()) return;
+  if (!app.isReady() || standbyMode) return;
   if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.focus(); return; }
 
   const { width, height } = require('electron').screen.getPrimaryDisplay().workAreaSize;
@@ -500,7 +623,7 @@ function buildAppMenu() {
         { label: 'About Panic Alarm Server', role: 'about' },
         { type: 'separator' },
         { label: '🔄 Restart Server', accelerator: 'CmdOrCtrl+Shift+R', click: () => global.__restartServerApp() },
-        { label: '⏻ Close / Stop Server', accelerator: 'CmdOrCtrl+Q', click: () => global.__stopServerApp() },
+        { label: '⏻ Close / Stop Server', click: stopWithConfirm },
         { type: 'separator' },
         { label: 'Hide Panic Alarm Server', role: 'hide' },
         { label: 'Hide Others', role: 'hideOthers' },
@@ -522,7 +645,7 @@ function buildAppMenu() {
           { type: 'separator' },
         ] : []),
         { label: '🔄 Restart Server', accelerator: 'CmdOrCtrl+R', click: () => global.__restartServerApp() },
-        { label: '⏻ Close / Stop Server', accelerator: process.platform === 'darwin' ? 'CmdOrCtrl+Q' : 'Alt+F4', click: () => global.__stopServerApp() },
+        { label: '⏻ Close / Stop Server', click: stopWithConfirm },
       ],
     },
     {
@@ -590,10 +713,10 @@ function rebuildTrayMenu(running) {
 
   tray.setToolTip(running
     ? `Panic Alarm Server — ${isLoggedIn ? 'Active' : 'Awaiting Admin Login'} (Port ${serverPort})`
-    : 'Panic Alarm Server — Starting…');
+    : (standbyMode ? 'Panic Alarm Server — Standby (running in another user session)' : 'Panic Alarm Server — Starting…'));
 
   const items = [
-    { label: running ? (isLoggedIn ? `🟢 Server Active — Port ${serverPort}` : `🟡 Awaiting Admin Login — Port ${serverPort}`) : '⏳ Starting server…', enabled: false },
+    { label: running ? (isLoggedIn ? `🟢 Server Active — Port ${serverPort}` : `🟡 Awaiting Admin Login — Port ${serverPort}`) : (standbyMode ? '⏸ Standby — server is running in another user session' : '⏳ Starting server…'), enabled: false },
     ...(running ? [
       { label: `IP: ${ips.join(', ') || 'N/A'}`, enabled: false },
       { type: 'separator' },
@@ -623,9 +746,9 @@ function rebuildTrayMenu(running) {
       ] : []),
       { type: 'separator' },
       { label: '🔄 Restart Server', click: () => global.__restartServerApp() },
-      { label: '⏻ Close / Stop Server', click: () => global.__stopServerApp() },
+      { label: '⏻ Close / Stop Server', click: stopWithConfirm },
     ] : [
-      { label: '⏻ Quit Server', click: () => app.quit() }
+      { label: '⏻ Quit Server', click: stopWithConfirm }
     ]),
   ];
   tray.setContextMenu(Menu.buildFromTemplate(items));
@@ -803,6 +926,18 @@ app.whenReady().then(async () => {
   // Set global application menu for OS menu bar
   Menu.setApplicationMenu(buildAppMenu());
 
+  // Wait for the port to bind (or fail). If another user session already owns the port,
+  // do not show a login window here — that session serves the computer; this one stands by.
+  if (httpServerInstance && !httpServerInstance.listening) {
+    await new Promise((resolve) => {
+      const t = setTimeout(resolve, 3000);
+      const done = () => { clearTimeout(t); resolve(); };
+      httpServerInstance.once('listening', done);
+      httpServerInstance.once('error', done);
+    });
+  }
+  if (portBusy) return;
+
   // Check if Auto Login is enabled (Requirement 5 & 8)
   const prefs = getLoginPrefs();
   if (!suppressAutoLogin && prefs.autoLogin && prefs.username && prefs.password) {
@@ -848,6 +983,7 @@ app.on('before-quit', () => {
 
 app.on('render-process-gone', (event, webContents, details) => {
   console.error('[Server Crash Guard] Renderer process crashed:', details.reason);
+  eventLog.error('renderer_crashed', { reason: details.reason });
   if (!isExplicitQuit) {
     if (mainWindow && mainWindow.webContents === webContents) {
       mainWindow = null;
@@ -861,13 +997,16 @@ app.on('render-process-gone', (event, webContents, details) => {
 
 app.on('child-process-gone', (event, details) => {
   console.error('[Server Crash Guard] Child process exited:', details.reason);
+  eventLog.error('child_process_gone', { reason: details.reason, type: details.type });
 });
 
 process.on('uncaughtException', (err) => {
   console.error('[Server Crash Guard] Uncaught exception:', err);
+  eventLog.error('uncaught_exception', { message: err && err.message });
 });
 process.on('unhandledRejection', (reason) => {
   console.error('[Server Crash Guard] Unhandled rejection:', reason);
+  eventLog.error('unhandled_rejection', { message: reason && reason.message ? reason.message : String(reason) });
 });
 
 app.on('window-all-closed', () => {
@@ -894,4 +1033,5 @@ app.on('activate', () => {
 
 app.on('before-quit', () => {
   console.log('[Server] Shutting down…');
+  eventLog.info('server_stopping', { explicit: isExplicitQuit });
 });

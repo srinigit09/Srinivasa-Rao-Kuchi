@@ -36,6 +36,7 @@ const { v4: uuidv4 } = require('uuid');
 const os          = require('os');
 const path        = require('path');
 const fs          = require('fs');
+const eventLog = require('./event-log');
 const { createLicense } = require('./license');
 const { requireAdmin, requireClient, adminLogin, signClientToken, signAdminToken, DEFAULT_ADMIN_PASSWORD } = require('./auth');
 const {
@@ -90,6 +91,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 let isServerLoggedIn = false;
 
 function setServerLoggedIn(loggedIn) {
+  if (isServerLoggedIn !== !!loggedIn) eventLog.info(loggedIn ? 'server_ready' : 'server_awaiting_admin_login');
   isServerLoggedIn = !!loggedIn;
   console.log(`[Server] Server ready state changed: ready = ${isServerLoggedIn}`);
   io.emit('server_state', {
@@ -259,7 +261,11 @@ app.post('/api/admin/login', (req, res) => {
   if (!username || !password)
     return res.status(400).json({ error: 'Username and password required' });
   const result = adminLogin(username, password);
-  if (!result) return res.status(401).json({ error: 'Invalid credentials' });
+  if (!result) {
+    eventLog.warn('admin_login_failed', { ip: req.ip });   // never log the attempted username/password
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+  eventLog.info('admin_login_ok', { ip: req.ip });
   res.json(result);
 });
 
@@ -770,6 +776,28 @@ app.put('/api/client/me', requireClient, (req, res) => {
   res.json({ message: 'Updated', token: newToken });
 });
 
+// POST /api/client/event — clients report outages they experienced (sent after they reconnect,
+// because a down server cannot receive anything). Allowlisted types only; fields are length-limited.
+const CLIENT_EVENT_TYPES = new Set(['server_unreachable', 'alarm_delivery_failed', 'client_started']);
+const lastClientEvent = new Map();   // deviceId -> timestamp, simple flood guard
+app.post('/api/client/event', requireClient, (req, res) => {
+  const { type, since, until, detail } = req.body || {};
+  if (!CLIENT_EVENT_TYPES.has(type)) return res.status(400).json({ error: 'Unknown event type' });
+  const u = req.clientUser;
+  const key = u.deviceId || u.user_name;
+  const now = Date.now();
+  if (now - (lastClientEvent.get(key) || 0) < 1000) return res.status(429).json({ error: 'Too many events' });
+  lastClientEvent.set(key, now);
+  if (lastClientEvent.size > 1000) {
+    for (const [k, t] of lastClientEvent) if (now - t > 60 * 1000) lastClientEvent.delete(k);
+  }
+  eventLog.warn(`client_${type}`, {
+    hospital: u.hospital_code, deviceId: u.deviceId, user: u.user_name,
+    since, until, detail,
+  });
+  res.json({ ok: true });
+});
+
 // POST /api/client/alarm/trigger
 const lastAlarmByDevice = new Map();   // deviceId -> timestamp of last accepted alarm
 const ALARM_LOCK_MS = 20 * 1000;
@@ -870,6 +898,7 @@ app.post('/api/client/alarm/no-response', requireClient, (req, res) => {
 // ── Socket.IO ──────────────────────────────────────────────────
 io.on('connection', (socket) => {
   console.log(`[WS] Connected: ${socket.id}`);
+  eventLog.info('socket_connected', { socketId: socket.id, ip: socket.handshake && socket.handshake.address });
 
   // Immediately send current server readiness state to connecting client
   socket.emit('server_state', {
@@ -899,8 +928,9 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', (reason) => {
     console.log(`[WS] Disconnected: ${socket.id}`);
+    eventLog.info('socket_disconnected', { socketId: socket.id, deviceId: socket.data && socket.data.deviceId, reason });
   });
 });
 
@@ -913,6 +943,7 @@ app.use((err, req, res, next) => {
 // ── Start ──────────────────────────────────────────────────────
 // Handle port binding errors (e.g. EADDRINUSE)
 server.on('error', (err) => {
+  eventLog.error('server_listen_error', { code: err.code, port: PORT });
   if (err.code === 'EADDRINUSE') {
     console.error(`[Server] Port ${PORT} is already in use by another application!`);
     if (typeof global.__onServerPortError === 'function') {
@@ -926,6 +957,7 @@ server.on('error', (err) => {
 server.listen(PORT, HOST, () => {
   const bound = server.address();
   const actualPort = bound ? bound.port : PORT;
+  eventLog.info('server_started', { port: actualPort, host: HOST, pid: process.pid });
   // Write the actual port back to the environment and database so it is retained on all restarts
   process.env.PORT = String(actualPort);
   try {
@@ -950,8 +982,8 @@ server.listen(PORT, HOST, () => {
   console.log('');
 });
 
-process.on('SIGINT',  () => { db.close(); process.exit(0); });
-process.on('SIGTERM', () => { db.close(); process.exit(0); });
+process.on('SIGINT',  () => { eventLog.info('server_stopped', { signal: 'SIGINT' });  db.close(); process.exit(0); });
+process.on('SIGTERM', () => { eventLog.info('server_stopped', { signal: 'SIGTERM' }); db.close(); process.exit(0); });
 
 // Export the http server and helpers so server-main.js can interact with them.
 module.exports = { server, app, io, testPortAvailability, findAvailablePort, savePortSetting, setServerLoggedIn, getServerLoggedIn };
