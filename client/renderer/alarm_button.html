@@ -41,7 +41,7 @@ html, body {
 
 .btn-label, .btn-sublabel { display: none; }
 
-/* Result text ("SENT OK" / "NOT SENT!") is shown on the button for 2 seconds only, then hidden again */
+/* Result text ("SENT OK" / "NOT SENT!") is shown on the button for 1-2 seconds only, then hidden again */
 .btn-alert.status .btn-label, .btn-alert.status .btn-sublabel {
   display: block; color: #fff; font-weight: 800; line-height: 1.1; text-align: center;
   text-shadow: 0 0 3px #000, 0 0 3px #000;
@@ -167,7 +167,7 @@ html, body {
     if (!armed) { arm(); } else { disarm(); fireAlarm(); }
   }
 
-  // ── Result text on the button: "NOT SENT!" 2 s, "SENT OK" 2 s ────
+  // ── Result text on the button: "NOT SENT!" 2 s, "SENT OK" 1 s ────
   let statusTimer = null;
   let statusKind  = null;   // 'fail' | 'ok' | null — which result text is currently on the button
   function clearStatus() {
@@ -269,7 +269,7 @@ html, body {
     }
 
     // Success: Change to solid RED for next 20 seconds
-    showStatus('SENT', 'OK', 'ok', 2000);
+    showStatus('SENT', 'OK', 'ok', 1000);
     isSolid = true;
     applyColour(0); // Index 0 is Red [220, 38, 38]
     if (sentSolidTimer) clearTimeout(sentSolidTimer);
