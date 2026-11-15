@@ -97,60 +97,74 @@ db.exec(`
   );
 `);
 
-// ── Migrate existing DBs: add columns if missing ───────────────
-// clients table — email fields + location
-const clCols = db.pragma('table_info(clients)').map(c => c.name);
-if (!clCols.includes('email')) {
-  db.exec(`ALTER TABLE clients ADD COLUMN email TEXT;`);
-  console.log('[DB] Migrated: added email column to clients');
-}
-if (!clCols.includes('email_logs')) {
-  db.exec(`ALTER TABLE clients ADD COLUMN email_logs INTEGER NOT NULL DEFAULT 0;`);
-  console.log('[DB] Migrated: added email_logs column to clients');
-}
-if (!clCols.includes('email_reports')) {
-  db.exec(`ALTER TABLE clients ADD COLUMN email_reports INTEGER NOT NULL DEFAULT 0;`);
-  console.log('[DB] Migrated: added email_reports column to clients');
-}
-if (!clCols.includes('location')) {
-  db.exec(`ALTER TABLE clients ADD COLUMN location TEXT;`);
-  console.log('[DB] Migrated: added location column to clients');
-}
+// ── Versioned migrations (see db-migrate.js) ──────────────────────────────────
+// Add future schema changes as ONE new entry at the END of this list (never edit or reorder old ones).
+// Each runs once, inside a transaction, after an automatic safety copy of the database.
+// Prefer additive changes: CREATE TABLE IF NOT EXISTS / ALTER TABLE ... ADD COLUMN.
+const { runMigrations } = require('./db-migrate');
+const MIGRATIONS = [
+  {
+    version: 1,
+    name: 'baseline: columns added by earlier releases (idempotent for databases from any older version)',
+    up(db) {
+  // clients table — email fields + location
+  const clCols = db.pragma('table_info(clients)').map(c => c.name);
+  if (!clCols.includes('email')) {
+    db.exec(`ALTER TABLE clients ADD COLUMN email TEXT;`);
+    console.log('[DB] Migrated: added email column to clients');
+  }
+  if (!clCols.includes('email_logs')) {
+    db.exec(`ALTER TABLE clients ADD COLUMN email_logs INTEGER NOT NULL DEFAULT 0;`);
+    console.log('[DB] Migrated: added email_logs column to clients');
+  }
+  if (!clCols.includes('email_reports')) {
+    db.exec(`ALTER TABLE clients ADD COLUMN email_reports INTEGER NOT NULL DEFAULT 0;`);
+    console.log('[DB] Migrated: added email_reports column to clients');
+  }
+  if (!clCols.includes('location')) {
+    db.exec(`ALTER TABLE clients ADD COLUMN location TEXT;`);
+    console.log('[DB] Migrated: added location column to clients');
+  }
 
-// client_users table
-const cuCols = db.pragma('table_info(client_users)').map(c => c.name);
-if (!cuCols.includes('user_id')) {
-  db.exec(`ALTER TABLE client_users ADD COLUMN user_id TEXT;`);
-  console.log('[DB] Migrated: added user_id column to client_users');
-}
-if (!cuCols.includes('source')) {
-  db.exec(`ALTER TABLE client_users ADD COLUMN source TEXT NOT NULL DEFAULT 'client';`);
-  console.log('[DB] Migrated: added source column to client_users');
-}
-if (!cuCols.includes('department')) {
-  db.exec(`ALTER TABLE client_users ADD COLUMN department TEXT;`);
-  console.log('[DB] Migrated: added department column to client_users');
-}
-const alCols = db.pragma('table_info(alarm_log)').map(c => c.name);
-if (!alCols.includes('user_id')) {
-  db.exec(`ALTER TABLE alarm_log ADD COLUMN user_id TEXT;`);
-  console.log('[DB] Migrated: added user_id column to alarm_log');
-}
-if (!alCols.includes('no_response')) {
-  db.exec(`ALTER TABLE alarm_log ADD COLUMN no_response INTEGER NOT NULL DEFAULT 0;`);
-  console.log('[DB] Migrated: added no_response column to alarm_log');
-}
-if (!alCols.includes('delivered_count')) {
-  // How many other stations confirmed they displayed the alarm (NULL = old record / unknown, 0 = nobody)
-  db.exec(`ALTER TABLE alarm_log ADD COLUMN delivered_count INTEGER;`);
-  console.log('[DB] Migrated: added delivered_count column to alarm_log');
-}
-// departments table — type column
-const dpCols = db.pragma('table_info(departments)').map(c => c.name);
-if (!dpCols.includes('type')) {
-  db.exec(`ALTER TABLE departments ADD COLUMN type TEXT NOT NULL DEFAULT 'location';`);
-  console.log('[DB] Migrated: added type column to departments');
-}
+  // client_users table
+  const cuCols = db.pragma('table_info(client_users)').map(c => c.name);
+  if (!cuCols.includes('user_id')) {
+    db.exec(`ALTER TABLE client_users ADD COLUMN user_id TEXT;`);
+    console.log('[DB] Migrated: added user_id column to client_users');
+  }
+  if (!cuCols.includes('source')) {
+    db.exec(`ALTER TABLE client_users ADD COLUMN source TEXT NOT NULL DEFAULT 'client';`);
+    console.log('[DB] Migrated: added source column to client_users');
+  }
+  if (!cuCols.includes('department')) {
+    db.exec(`ALTER TABLE client_users ADD COLUMN department TEXT;`);
+    console.log('[DB] Migrated: added department column to client_users');
+  }
+  const alCols = db.pragma('table_info(alarm_log)').map(c => c.name);
+  if (!alCols.includes('user_id')) {
+    db.exec(`ALTER TABLE alarm_log ADD COLUMN user_id TEXT;`);
+    console.log('[DB] Migrated: added user_id column to alarm_log');
+  }
+  if (!alCols.includes('no_response')) {
+    db.exec(`ALTER TABLE alarm_log ADD COLUMN no_response INTEGER NOT NULL DEFAULT 0;`);
+    console.log('[DB] Migrated: added no_response column to alarm_log');
+  }
+  if (!alCols.includes('delivered_count')) {
+    // How many other stations confirmed they displayed the alarm (NULL = old record / unknown, 0 = nobody)
+    db.exec(`ALTER TABLE alarm_log ADD COLUMN delivered_count INTEGER;`);
+    console.log('[DB] Migrated: added delivered_count column to alarm_log');
+  }
+  // departments table — type column
+  const dpCols = db.pragma('table_info(departments)').map(c => c.name);
+  if (!dpCols.includes('type')) {
+    db.exec(`ALTER TABLE departments ADD COLUMN type TEXT NOT NULL DEFAULT 'location';`);
+    console.log('[DB] Migrated: added type column to departments');
+  }
+    },
+  },
+];
+const migrationResult = runMigrations(db, path.resolve(DB_PATH), MIGRATIONS);
+if (migrationResult.backup) console.log(`[DB] Upgraded schema v${migrationResult.from} -> v${migrationResult.to}; safety copy: ${migrationResult.backup}`);
 
 // ── One-time cleanup: remove soft-deleted clients so hospital_code UNIQUE is freed ──
 const ghostClients = db.prepare('DELETE FROM clients WHERE active = 0').run();

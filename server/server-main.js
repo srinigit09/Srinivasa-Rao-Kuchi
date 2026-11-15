@@ -547,6 +547,22 @@ function startEmbeddedServer() {
     }
   } catch (e) {
     console.error('[Server] Failed to start embedded server:', e.message);
+    eventLog.error('server_start_failed', { code: e.code || 'ERR', message: e.message });
+    // Database upgrade problems must never be silent: the data is untouched (see db-migrate.js), so say so and stop.
+    if (e.code === 'DB_TOO_NEW' || e.code === 'DB_MIGRATION_FAILED' || e.code === 'DB_BACKUP_FAILED') {
+      const show = () => {
+        dialog.showMessageBoxSync({
+          type: 'error',
+          title: 'Panic Alarm Server — Database upgrade',
+          message: 'The server could not start because the database could not be upgraded safely.',
+          detail: e.message + '\n\nNo data was lost or changed. Contact support before reinstalling.',
+          buttons: ['Close'], noLink: true,
+        });
+        setStopFlag(true);   // do not let the watchdog restart-loop on this error
+        app.exit(1);
+      };
+      if (app.isReady()) show(); else app.whenReady().then(show);
+    }
   }
 }
 

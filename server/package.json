@@ -40,6 +40,7 @@
       "server-preload.js",
       "server.js",
       "db.js",
+      "db-migrate.js",
       "auth.js",
       "event-log.js",
       "license.js",
