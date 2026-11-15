@@ -38,15 +38,16 @@
   SetRegView 64
   DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "PanicAlarmServer"
 
-  ; A real uninstall (NOT an upgrade, which passes --updated) removes ALL data — database, license,
-  ; port, logs, install marker (shared folder) and every Windows user's own settings — so a later
-  ; install is a clean first install. Restore a database from your own backup if you need it.
+  ; Real uninstall (an upgrade passes --updated and never gets here): ALWAYS ask whether to also delete
+  ; the data. YES = clean start for a later install; NO = keep it for a future installation.
   ${ifNot} ${isUpdated}
+    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Also delete ALL Panic Alarm Server data on this computer?$\n$\nYES = remove everything (clean start; restore from a backup later if needed).$\nNO = keep the data for a future installation." IDNO keepData
     DetailPrint "Removing all Panic Alarm Server data..."
     ReadEnvStr $0 ProgramData
     ${If} $0 != ""
       RMDir /r "$0\PanicAlarmServer"
     ${EndIf}
     nsExec::Exec `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-ChildItem -LiteralPath (Join-Path $$env:SystemDrive 'Users') -Directory -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item -LiteralPath (Join-Path $$_.FullName 'AppData\Roaming\panic-alarm-server'),(Join-Path $$_.FullName 'AppData\Local\PanicAlarm\server-stopped.flag') -Recurse -Force -ErrorAction SilentlyContinue }"`
+  keepData:
   ${endIf}
 !macroend
