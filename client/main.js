@@ -36,6 +36,27 @@ function getUserPrefs() {
   try { return { remindersEnabled: true, ...JSON.parse(fs.readFileSync(USER_PREFS_FILE, 'utf8')) }; }
   catch { return { remindersEnabled: true }; }
 }
+// ── Alarm-button colour / solid (PER OS USER, same file) ─────────────────────
+// Every OS user keeps their own choice until they change it; a user with no choice yet gets green.
+function saveUserPrefs(patch) {
+  try {
+    fs.mkdirSync(path.dirname(USER_PREFS_FILE), { recursive: true });
+    fs.writeFileSync(USER_PREFS_FILE, JSON.stringify({ ...getUserPrefs(), ...patch }, null, 2), 'utf8');
+  } catch (e) { console.warn('[Prefs] Could not save user preferences:', e.message); }
+}
+function userButtonPrefs() {
+  const p = getUserPrefs();
+  const idx = Number.isInteger(p.alertButtonColour) && p.alertButtonColour >= 0 && p.alertButtonColour <= 6 ? p.alertButtonColour : 3;
+  return { alertButtonColour: idx, alertButtonSolid: p.alertButtonSolid === true };
+}
+// Config as the button/settings should see it: shared settings + THIS user's button look.
+function withUserButtonPrefs(config) { return config ? { ...config, ...userButtonPrefs() } : config; }
+// Never let one user's look leak into the shared (all-users) config file.
+function withoutButtonPrefs(config) {
+  if (!config) return config;
+  const { alertButtonColour, alertButtonSolid, ...rest } = config;
+  return rest;
+}
 function setRemindersEnabled(enabled) {
   try {
     fs.mkdirSync(path.dirname(USER_PREFS_FILE), { recursive: true });
@@ -536,7 +557,7 @@ function createAlarmButton(config) {
   alarmButton.setMenu(null);
   alarmButton.loadFile(path.join(__dirname, 'renderer', 'alarm_button.html'));
   alarmButton.webContents.once('did-finish-load', () => {
-    alarmButton.webContents.send('client-config', config);
+    alarmButton.webContents.send('client-config', withUserButtonPrefs(config));
   });
   alarmButton.on('closed', () => {
     alarmButton = null;
@@ -731,7 +752,7 @@ function rebuildTrayMenu(config, state) {
 // ═══════════════════════════════════════════════════════════════════════════════
 //  IPC HANDLERS
 // ═══════════════════════════════════════════════════════════════════════════════
-ipcMain.handle('get-config',           () => loadConfig());
+ipcMain.handle('get-config',           () => withUserButtonPrefs(loadConfig()));
 ipcMain.handle('get-current-alarm',    () => activeAlarmData);
 // Alert popup reports its content height so the window can fit it exactly
 ipcMain.on('resize-alert', (_e, h) => {
@@ -751,13 +772,14 @@ ipcMain.handle('setup-complete', (_, config) => {
 
 // Called by settings.html after saving changes
 ipcMain.handle('settings-updated', (_, newConfig) => {
+  newConfig = withoutButtonPrefs(newConfig);
   saveConfig(newConfig);
   rebuildTrayMenu(newConfig, socket?.connected || false);
   // Reconnect socket with new token
   connectSocket(newConfig);
   // Update alarm button if open
   if (alarmButton && !alarmButton.isDestroyed()) {
-    alarmButton.webContents.send('client-config', newConfig);
+    alarmButton.webContents.send('client-config', withUserButtonPrefs(newConfig));
   }
   if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.close();
 });
@@ -795,9 +817,7 @@ const COLOUR_LABELS = [
 // Right-click on alarm button → colour picker + solid toggle + Quit
 ipcMain.on('show-colour-menu', () => {
   if (!alarmButton || alarmButton.isDestroyed()) return;
-  const config  = loadConfig();
-  const current = config?.alertButtonColour ?? 3;
-  const solid   = config?.alertButtonSolid  ?? false;
+  const { alertButtonColour: current, alertButtonSolid: solid } = userButtonPrefs();
   const menu = Menu.buildFromTemplate([
     {
       label: '🎨  Change Colour',
@@ -832,18 +852,13 @@ ipcMain.on('show-colour-menu', () => {
 
 // Persist colour selection from renderer
 ipcMain.handle('set-alert-colour', (_, idx) => {
-  const config = loadConfig();
-  if (!config) return;
-  config.alertButtonColour = idx;
-  saveConfig(config);
+  if (!Number.isInteger(idx) || idx < 0 || idx > 6) return;
+  saveUserPrefs({ alertButtonColour: idx });   // this OS user only
 });
 
 // Persist solid toggle from renderer
 ipcMain.handle('set-alert-solid', (_, solid) => {
-  const config = loadConfig();
-  if (!config) return;
-  config.alertButtonSolid = solid;
-  saveConfig(config);
+  saveUserPrefs({ alertButtonSolid: solid === true });   // this OS user only
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
