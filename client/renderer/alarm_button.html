@@ -41,14 +41,14 @@ html, body {
 
 .btn-label, .btn-sublabel { display: none; }
 
-/* Result text ("SENT OK" / "NOT SENT!") is shown on the button for 5 seconds only, then hidden again */
+/* Result text ("SENT OK" / "NOT SENT!") is shown on the button for 2 seconds only, then hidden again */
 .btn-alert.status .btn-label, .btn-alert.status .btn-sublabel {
   display: block; color: #fff; font-weight: 800; line-height: 1.1; text-align: center;
   text-shadow: 0 0 3px #000, 0 0 3px #000;
 }
 .btn-alert.status .btn-label    { font-size: 17px; }
 .btn-alert.status .btn-sublabel { font-size: 14px; }
-/* "TAP AGAIN!" text: visible for 1 second after the first tap (the button keeps its colour; stays armed for 3 s) */
+/* "TAP AGAIN!" text: appears 0.8 s after the first tap and stays 1 s (the button keeps its colour; stays armed for 3 s) */
 .btn-alert.armed.show-tap .btn-label, .btn-alert.armed.show-tap .btn-sublabel {
   display: block; color: #fff; font-weight: 800; line-height: 1.1; text-align: center;
   text-shadow: 0 0 3px #000, 0 0 3px #000;
@@ -167,7 +167,7 @@ html, body {
     if (!armed) { arm(); } else { disarm(); fireAlarm(); }
   }
 
-  // ── Result text on the button: "NOT SENT!" 5 s, "SENT OK" 2 s ────
+  // ── Result text on the button: "NOT SENT!" 2 s, "SENT OK" 2 s ────
   let statusTimer = null;
   let statusKind  = null;   // 'fail' | 'ok' | null — which result text is currently on the button
   function clearStatus() {
@@ -186,16 +186,22 @@ html, body {
     statusTimer = setTimeout(clearStatus, ms);
   }
 
-  let tapTextTimer = null;
+  // "TAP AGAIN!" appears 0.8 s AFTER the first tap (so a quick double-click never sees it flash),
+  // stays 1 s, while the button remains armed for 3 s in total.
+  const TAP_TEXT_DELAY_MS = 800;
+  let tapTextTimer = null, tapTextHideTimer = null;
   function arm() {
     clearStatus();
     armed = true;
-    document.getElementById('btnAlert').classList.add('armed', 'show-tap');
+    document.getElementById('btnAlert').classList.add('armed');
     document.getElementById('btnLabel').textContent = 'TAP';
     document.getElementById('btnSub').textContent   = 'AGAIN!';
     tapTextTimer = setTimeout(() => {
-      document.getElementById('btnAlert').classList.remove('show-tap');
-    }, 1000);
+      document.getElementById('btnAlert').classList.add('show-tap');
+      tapTextHideTimer = setTimeout(() => {
+        document.getElementById('btnAlert').classList.remove('show-tap');
+      }, 1000);
+    }, TAP_TEXT_DELAY_MS);
     armTimer = setTimeout(() => {
       disarm();
     }, 3000);
@@ -205,6 +211,7 @@ html, body {
     armed = false;
     clearTimeout(armTimer); armTimer = null;
     clearTimeout(tapTextTimer); tapTextTimer = null;
+    clearTimeout(tapTextHideTimer); tapTextHideTimer = null;
     document.getElementById('btnAlert').classList.remove('armed', 'show-tap');
     document.getElementById('btnLabel').textContent = 'PANIC';
     document.getElementById('btnSub').textContent   = 'ALARM';
@@ -254,7 +261,7 @@ html, body {
     // nothing the person next to the user could notice. Only a short text on the button, and the
     // button is free to be pressed again immediately.
     if (!sent || notDelivered) {
-      showStatus('NOT', 'SENT!', 'fail', 5000);   // a click during these 5 s clears it and arms a resend
+      showStatus('NOT', 'SENT!', 'fail', 2000);   // a click during these 2 s clears it and resends at once
       if (!sent && api.notifyAlarmFailure) api.notifyAlarmFailure();
       if (sent && notDelivered && api.notifyAlarmNotDelivered) api.notifyAlarmNotDelivered();
       isFiring = false;
