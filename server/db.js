@@ -140,6 +140,11 @@ if (!alCols.includes('no_response')) {
   db.exec(`ALTER TABLE alarm_log ADD COLUMN no_response INTEGER NOT NULL DEFAULT 0;`);
   console.log('[DB] Migrated: added no_response column to alarm_log');
 }
+if (!alCols.includes('delivered_count')) {
+  // How many other stations confirmed they displayed the alarm (NULL = old record / unknown, 0 = nobody)
+  db.exec(`ALTER TABLE alarm_log ADD COLUMN delivered_count INTEGER;`);
+  console.log('[DB] Migrated: added delivered_count column to alarm_log');
+}
 // departments table — type column
 const dpCols = db.pragma('table_info(departments)').map(c => c.name);
 if (!dpCols.includes('type')) {
@@ -225,6 +230,9 @@ module.exports = {
   `),
   markNoResponse:      db.prepare(`
     UPDATE alarm_log SET no_response=1 WHERE alarm_id=? AND acknowledged=0
+  `),
+  setAlarmDelivered:   db.prepare(`
+    UPDATE alarm_log SET delivered_count=? WHERE alarm_id=?
   `),
   // Any alarm still unresolved after the cut-off is a "No Response"
   settleStaleAlarms:   db.prepare(`

@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAlertButtonColour: (idx)   => ipcRenderer.invoke('set-alert-colour', idx),
   setAlertSolid       : (solid) => ipcRenderer.invoke('set-alert-solid', solid),
   notifyAlarmFailure  : ()      => ipcRenderer.send('alarm-delivery-failed'),
+  notifyAlarmNotDelivered: ()   => ipcRenderer.send('alarm-not-delivered'),
   onClientConfig  : (cb)  => ipcRenderer.on('client-config',      (_, d) => cb(d)),
   onNewAlarm      : (cb)  => ipcRenderer.on('new-alarm',           (_, d) => cb(d)),
   onAlarmAcked    : (cb)  => ipcRenderer.on('alarm-acked',         (_, d) => cb(d)),

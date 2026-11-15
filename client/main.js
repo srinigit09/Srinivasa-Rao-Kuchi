@@ -411,6 +411,7 @@ function connectSocket(config) {
       hospitalCode: (config.hospitalCode || '').toUpperCase(),
       userName    : config.user_name || config.role,
       deviceId    : config.deviceId,
+      ackCapable  : true,   // this client confirms every alarm it displays (lets the server report real delivery)
     });
   });
 
@@ -459,17 +460,24 @@ function connectSocket(config) {
   });
 
   // ── This is the key event — show popup on every registered PC ────────────────
-  socket.on('panic_alarm', (alarmData) => {
+  socket.on('panic_alarm', (alarmData, ack) => {
+    const reply = (ok) => { if (typeof ack === 'function') { try { ack({ ok }); } catch { /* socket gone */ } } };
     // The sender never gets a popup for its own alarm. All OS users on one PC share the same device
     // id but each runs its own client/connection, so the server's "skip the sender" only covers one
     // of them — ignore alarms that came from this device here.
     const myDeviceId = (loadConfig() || config).deviceId;
     if (alarmData.deviceId && myDeviceId && alarmData.deviceId === myDeviceId) {
       console.log('[Alarm] Ignoring alarm triggered from this device');
-      return;
+      return reply(false);
     }
     console.log('[Alarm] Received:', alarmData.triggeredBy, alarmData.locationLabel || alarmData.roomNumber);
-    showAlertPopup(alarmData);
+    try {
+      showAlertPopup(alarmData);
+      reply(true);    // confirm to the server ONLY after the popup was really shown
+    } catch (e) {
+      console.error('[Alarm] Could not display alarm popup:', e.message);
+      reply(false);
+    }
   });
 
   socket.on('alarm_acknowledged', ({ alarmId, ackBy }) => {
@@ -757,6 +765,22 @@ ipcMain.handle('settings-updated', (_, newConfig) => {
 // Alert popup dismiss (called from alert_popup.html)
 ipcMain.handle('dismiss-alert', () => {
   if (alertPopup && !alertPopup.isDestroyed()) alertPopup.close();
+});
+
+// The server accepted the press but NO other station received it — the sender must not feel safe.
+ipcMain.on('alarm-not-delivered', () => {
+  queueClientEvent('alarm_not_delivered', 'Server reached, but no other station confirmed receiving the alarm');
+  for (let i = 0; i < 3; i++) setTimeout(() => { if (shell && shell.beep) shell.beep(); }, i * 600);
+  notifyClientUser('alarm_not_delivered', '🚨 ALARM NOT DELIVERED!', 'Nobody received your panic alarm. Call for help another way (phone / shout) and press the button again.');
+  lastNotificationType = null;   // let the next failure notify again
+  dialog.showMessageBox({
+    type: 'error',
+    title: 'PANIC ALARM NOT DELIVERED',
+    message: 'NOBODY RECEIVED YOUR ALARM',
+    detail: 'No other station is online to receive it. Get help another way NOW (phone / call out), then press the Panic button again.',
+    buttons: ['OK'],
+    noLink: true,
+  });
 });
 
 // Alarm transmission failure alert

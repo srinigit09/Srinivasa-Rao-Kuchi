@@ -182,6 +182,7 @@ html, body {
     let attempts = 0;
     const maxAttempts = 10; // Continuous retry attempts
 
+    let notDelivered = false;   // server got the press but NO other station received it
     while (!sent && attempts < maxAttempts) {
       attempts++;
       try {
@@ -189,11 +190,13 @@ html, body {
           method : 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.token}` },
           body   : JSON.stringify({ retry: attempts }),
-          signal : AbortSignal.timeout(2500),
+          signal : AbortSignal.timeout(6000),   // server may wait ~2 s for stations to confirm
         });
         if (resp.ok) {
           const body = await resp.json().catch(() => ({}));
           sent = !body.ignored; // server ignores alarms inside its 20 s lock
+          // delivered === 0 means nobody received it. (Older servers send no count — treated as sent.)
+          if (sent && body.delivered === 0) notDelivered = true;
           if (sent) break;
         }
       } catch (err) {
@@ -212,6 +215,20 @@ html, body {
       document.getElementById('btnLabel').textContent = 'FAILED';
       document.getElementById('btnSub').textContent   = 'RETRY';
       if (api.notifyAlarmFailure) api.notifyAlarmFailure();
+      setTimeout(() => {
+        document.getElementById('btnLabel').textContent = 'PANIC';
+        document.getElementById('btnSub').textContent   = 'ALARM';
+        isFiring = false;
+      }, 3500);
+      return;
+    }
+
+    if (notDelivered) {
+      // Reached the server, but no station received it. Do NOT turn red / show "sent" — the user
+      // must not believe help is coming. Stay unlocked so the button can be pressed again at once.
+      document.getElementById('btnLabel').textContent = 'NOT';
+      document.getElementById('btnSub').textContent   = 'SENT!';
+      if (api.notifyAlarmNotDelivered) api.notifyAlarmNotDelivered();
       setTimeout(() => {
         document.getElementById('btnLabel').textContent = 'PANIC';
         document.getElementById('btnSub').textContent   = 'ALARM';

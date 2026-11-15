@@ -46,7 +46,7 @@ const {
   listClientUsers, findClientUser, findClientUserById, findClientUserByUserId,
   createClientUser, createClientUserAdmin, updateClientUser,
   updateClientUserToken, deleteClientUser,
-  insertLog, acknowledgeAlarm, markNoResponse, settleStaleAlarms, listLogs, listLogsByHospital, listLogsByDate,
+  insertLog, acknowledgeAlarm, markNoResponse, setAlarmDelivered, settleStaleAlarms, listLogs, listLogsByHospital, listLogsByDate,
   deleteLogById, deleteAllLogs,
   getSetting, setSetting,
   listLocations, listLocationsByHospital,
@@ -801,8 +801,9 @@ app.post('/api/client/event', requireClient, (req, res) => {
 // POST /api/client/alarm/trigger
 const lastAlarmByDevice = new Map();   // deviceId -> timestamp of last accepted alarm
 const ALARM_LOCK_MS = 20 * 1000;
+const ALARM_ACK_TIMEOUT_MS = 2000;   // how long to wait for stations to confirm they displayed the alarm (must stay below the button's request timeout)
 
-app.post('/api/client/alarm/trigger', requireClient, (req, res) => {
+app.post('/api/client/alarm/trigger', requireClient, async (req, res) => {
   const u = req.clientUser;
 
   // Server-side lock: one alarm per device per 20 s (matches the solid button on the client)
@@ -830,10 +831,6 @@ app.post('/api/client/alarm/trigger', requireClient, (req, res) => {
   const hCode = (u.hospital_code || '').toString().trim().toUpperCase();
   const roomName = `hospital_${hCode}`;
 
-  // Broadcast to all OTHER clients in the same hospital — exclude the triggering socket
-  const triggeringSocket = [...io.sockets.sockets.values()]
-    .find(s => s.data && s.data.deviceId === u.deviceId);
-
   const alarmPayload = {
     alarmId,
     hospitalCode : hCode,
@@ -849,14 +846,7 @@ app.post('/api/client/alarm/trigger', requireClient, (req, res) => {
     triggeredAt  : new Date().toISOString(),
   };
 
-  if (triggeringSocket) {
-    // Broadcast to everyone in the room EXCEPT the triggering socket
-    triggeringSocket.to(roomName).emit('panic_alarm', alarmPayload);
-  } else {
-    // Fallback: broadcast to all (triggering socket not found)
-    io.to(roomName).emit('panic_alarm', alarmPayload);
-  }
-  // Also push to admin panel room
+  // Also push to admin panel room (the admin panel is not a station — it does not count as delivery)
   io.to('admin').emit('panic_alarm', alarmPayload);
 
   // Popup auto-closes after 20 s. If no OK / No-Response arrives by then
@@ -865,8 +855,42 @@ app.post('/api/client/alarm/trigger', requireClient, (req, res) => {
     try { markNoResponse.run(alarmId); } catch (e) { console.error('[ALARM] settle failed', e.message); }
   }, ALARM_SETTLE_MS);
 
-  console.log(`[ALARM] ${new Date().toISOString()} | ${hCode} | ${title} | ${location}`);
-  res.json({ alarmId, message: 'Alarm sent' });
+  // ── Deliver to the OTHER stations of this hospital and find out who really received it ──
+  // The sender's own PC is excluded (all OS users on one PC share a device id). "Delivered" means a
+  // station CONFIRMED it displayed the alarm — a press the server merely accepted is not delivery.
+  let recipients = [];
+  try {
+    recipients = (await io.in(roomName).fetchSockets())
+      .filter(s => !(u.deviceId && s.data && s.data.deviceId === u.deviceId));
+  } catch (e) { console.error('[ALARM] could not list recipients', e.message); }
+
+  const capable = recipients.filter(s => s.data && s.data.ackCapable);
+  const legacy  = recipients.filter(s => !(s.data && s.data.ackCapable));   // older clients: cannot confirm
+
+  if (legacy.length) io.to(legacy.map(s => s.id)).emit('panic_alarm', alarmPayload);
+  const confirmed = capable.length === 0 ? 0 : await new Promise((resolve) => {
+    io.to(capable.map(s => s.id)).timeout(ALARM_ACK_TIMEOUT_MS).emit('panic_alarm', alarmPayload, (_err, responses) => {
+      // _err is set when some stations did not answer in time; responses holds those that did
+      resolve((responses || []).filter(r => r && r.ok).length);
+    });
+  });
+
+  // Connected older clients cannot confirm, so they are counted as reached (best available knowledge)
+  const delivered = confirmed + legacy.length;
+  try { setAlarmDelivered.run(delivered, alarmId); } catch (e) { console.error('[ALARM] could not save delivery', e.message); }
+
+  if (delivered === 0) {
+    // Nobody received it: do not let the sender believe help is coming, and let them press again at once
+    lastAlarmByDevice.delete(lockKey);
+    try { markNoResponse.run(alarmId); } catch { /* best effort */ }
+    eventLog.error('alarm_not_delivered', { alarmId, hospital: hCode, deviceId: u.deviceId, connectedStations: recipients.length });
+    console.warn(`[ALARM] NOT DELIVERED ${alarmId} | ${hCode} | ${location} | stations online: ${recipients.length}`);
+    return res.json({ alarmId, delivered: 0, message: 'No other station received the alarm' });
+  }
+
+  eventLog.info('alarm_delivered', { alarmId, hospital: hCode, deviceId: u.deviceId, delivered });
+  console.log(`[ALARM] ${new Date().toISOString()} | ${hCode} | ${title} | ${location} | delivered to ${delivered}`);
+  res.json({ alarmId, delivered, message: 'Alarm sent' });
 });
 
 // POST /api/client/alarm/acknowledge
@@ -911,6 +935,8 @@ io.on('connection', (socket) => {
       .toString().trim().toUpperCase();
     // Store deviceId on socket for alarm exclusion
     if (data && data.deviceId) socket.data.deviceId = data.deviceId;
+    // Newer clients confirm each alarm they display; older ones cannot
+    socket.data.ackCapable = !!(data && data.ackCapable);
     // Admin panel joins the special 'admin' room for server-push updates
     if (data && data.isAdmin) {
       socket.join('admin');
