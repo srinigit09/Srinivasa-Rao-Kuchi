@@ -504,7 +504,11 @@ function connectSocket(config) {
     console.log('[Alarm] Received:', alarmData.triggeredBy, alarmData.locationLabel || alarmData.roomNumber);
     try {
       showAlertPopup(alarmData);
-      reply(true);    // confirm to the server ONLY after the popup was really shown
+      // Confirm to the server ONLY if a person can really see the popup: not while this OS user's session
+      // is in the background (another user switched in) or locked. Otherwise the sender would be told
+      // "SENT OK" for an alarm nobody can see. The popup is still shown, for when the user returns.
+      if (sessionHidden) console.log('[Alarm] This OS session is not on screen — NOT confirming delivery');
+      reply(!sessionHidden);
     } catch (e) {
       console.error('[Alarm] Could not display alarm popup:', e.message);
       reply(false);
@@ -1023,6 +1027,15 @@ function watchForRegistrationByAnotherUser() {
     createTray(cfg);
     launchAfterSetup(cfg);
   }, 3000);
+}
+
+// Is this OS user's desktop currently out of sight? (fast user switching to another user, or screen locked)
+let sessionHidden = false;
+if (powerMonitor) {
+  powerMonitor.on('lock-screen',   () => { sessionHidden = true;  console.log('[Session] locked / switched away'); });
+  powerMonitor.on('unlock-screen', () => { sessionHidden = false; console.log('[Session] unlocked / back on screen'); });
+  powerMonitor.on('user-did-resign-active',  () => { sessionHidden = true;  });   // macOS fast user switching
+  powerMonitor.on('user-did-become-active',  () => { sessionHidden = false; });
 }
 
 // Always On: Reconnect on system wake / unlock
