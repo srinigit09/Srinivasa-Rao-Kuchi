@@ -15,6 +15,10 @@
   SetRegView 64
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "PanicAlarmClient" '"$INSTDIR\PanicAlarmClient.exe"'
 
+  ; Second, independent all-users autostart: a shortcut in the all-users Startup folder runs at every
+  ; user's logon. If both fire, the app's single-instance lock quits the duplicate.
+  CreateShortCut "$SMSTARTUP\Panic Alarm Client.lnk" "$INSTDIR\PanicAlarmClient.exe"
+
   ; Watchdog: every minute, for whichever user is logged in, restart PanicAlarmClient if it is not running
   ; (crash / killed). Not restarted after a deliberate, confirmed Quit.
   nsExec::Exec 'schtasks /Create /TN "PanicAlarmClientWatchdog" /TR "wscript.exe //B //Nologo \"$INSTDIR\resources\watchdog.vbs\"" /SC MINUTE /MO 1 /RU "BUILTIN\Users" /IT /RL LIMITED /F'
@@ -23,6 +27,8 @@
 ; Runs early in the uninstaller: remove the watchdog and autostart FIRST so nothing can restart the
 ; client, then stop every running copy (all logged-in Windows users) before the files are deleted.
 !macro customUnInit
+  SetShellVarContext all
+  Delete "$SMSTARTUP\Panic Alarm Client.lnk"
   nsExec::Exec 'schtasks /Delete /TN "PanicAlarmClientWatchdog" /F'
   SetRegView 64
   DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "PanicAlarmClient"

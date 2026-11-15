@@ -948,9 +948,23 @@ function launchAfterSetup(config) {
   startReconnectWatchdog(config);
 }
 
+// Startup trace (shared folder): one line per launch, so "the client did not start for user X" can be diagnosed.
+// Holds no secrets — only time, OS user name, process id and what the start did.
+function startupTrace(what) {
+  try {
+    const f = path.join(CONFIG_DIR, 'client-startup.log');
+    let old = '';
+    try { old = fs.readFileSync(f, 'utf8'); } catch { /* first line */ }
+    const lines = (old + `${new Date().toISOString()} user=${require('os').userInfo().username} pid=${process.pid} ${what}\n`).split('\n');
+    writeShared(f, lines.slice(-200).join('\n'));
+  } catch { /* diagnostics must never stop the app */ }
+}
+if (!gotLock) startupTrace('exit: another copy is already running for this user');
+
 app.whenReady().then(() => {
   if (!gotLock) return;   // duplicate instance is quitting — must not touch config or create a tray
   initConfigDir();
+  startupTrace(`started (configured=${!!(loadConfig() && loadConfig().token)})`);
   hideDock();
   ensureWindowsFirewallRule();
 
