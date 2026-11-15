@@ -161,7 +161,7 @@ html, body {
     if (!armed) { arm(); } else { disarm(); fireAlarm(); }
   }
 
-  // ── Result text on the button: shown for 5 seconds only ──────────
+  // ── Result text on the button: "NOT SENT!" 5 s, "SENT OK" 2 s ────
   let statusTimer = null;
   function clearStatus() {
     if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
@@ -169,12 +169,12 @@ html, body {
     document.getElementById('btnLabel').textContent = 'PANIC';
     document.getElementById('btnSub').textContent   = 'ALARM';
   }
-  function showStatus(line1, line2, kind) {
+  function showStatus(line1, line2, kind, ms) {
     clearStatus();
     document.getElementById('btnLabel').textContent = line1;
     document.getElementById('btnSub').textContent   = line2;
     document.getElementById('btnAlert').classList.add('status', 'status-' + kind);
-    statusTimer = setTimeout(clearStatus, 5000);
+    statusTimer = setTimeout(clearStatus, ms);
   }
 
   function arm() {
@@ -240,7 +240,7 @@ html, body {
     // nothing the person next to the user could notice. Only a short text on the button, and the
     // button is free to be pressed again immediately.
     if (!sent || notDelivered) {
-      showStatus('NOT', 'SENT!', 'fail');
+      showStatus('NOT', 'SENT!', 'fail', 5000);   // a click during these 5 s clears it and arms a resend
       if (!sent && api.notifyAlarmFailure) api.notifyAlarmFailure();
       if (sent && notDelivered && api.notifyAlarmNotDelivered) api.notifyAlarmNotDelivered();
       isFiring = false;
@@ -248,7 +248,7 @@ html, body {
     }
 
     // Success: Change to solid RED for next 20 seconds
-    showStatus('SENT', 'OK', 'ok');
+    showStatus('SENT', 'OK', 'ok', 2000);
     isSolid = true;
     applyColour(0); // Index 0 is Red [220, 38, 38]
     if (sentSolidTimer) clearTimeout(sentSolidTimer);
