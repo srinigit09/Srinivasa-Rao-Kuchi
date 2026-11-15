@@ -52,6 +52,14 @@ html, body {
 .btn-alert.status .btn-label    { font-size: 17px; }
 .btn-alert.status .btn-sublabel { font-size: 14px; }
 .btn-alert.status-fail { background: rgba(31,41,55,0.95) !important; }   /* dark = NOT sent (red = sent) */
+
+/* "TAP AGAIN!" text: visible for 1 second after the first tap (the button stays yellow for 3 s) */
+.btn-alert.armed.show-tap .btn-label, .btn-alert.armed.show-tap .btn-sublabel {
+  display: block; color: #fff; font-weight: 800; line-height: 1.1; text-align: center;
+  text-shadow: 0 0 3px #000, 0 0 3px #000;
+}
+.btn-alert.armed.show-tap .btn-label    { font-size: 17px; }
+.btn-alert.armed.show-tap .btn-sublabel { font-size: 14px; }
 </style>
 </head>
 <body>
@@ -183,12 +191,16 @@ html, body {
     statusTimer = setTimeout(clearStatus, ms);
   }
 
+  let tapTextTimer = null;
   function arm() {
     clearStatus();
     armed = true;
-    document.getElementById('btnAlert').classList.add('armed');
+    document.getElementById('btnAlert').classList.add('armed', 'show-tap');
     document.getElementById('btnLabel').textContent = 'TAP';
     document.getElementById('btnSub').textContent   = 'AGAIN!';
+    tapTextTimer = setTimeout(() => {
+      document.getElementById('btnAlert').classList.remove('show-tap');
+    }, 1000);
     armTimer = setTimeout(() => {
       disarm();
     }, 3000);
@@ -197,7 +209,8 @@ html, body {
   function disarm() {
     armed = false;
     clearTimeout(armTimer); armTimer = null;
-    document.getElementById('btnAlert').classList.remove('armed');
+    clearTimeout(tapTextTimer); tapTextTimer = null;
+    document.getElementById('btnAlert').classList.remove('armed', 'show-tap');
     document.getElementById('btnLabel').textContent = 'PANIC';
     document.getElementById('btnSub').textContent   = 'ALARM';
   }
