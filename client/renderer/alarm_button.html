@@ -158,13 +158,18 @@ html, body {
   // ── Click: arm → confirm → fire ──────────────────────────────────
   function handleClick() {
     if (isFiring || sentSolidTimer) return;   // solid after a send = locked, no new alarm
+    // While "NOT SENT!" is showing, one click = clear it and resend immediately (no "TAP AGAIN!").
+    // It reappears only if this resend fails too.
+    if (statusKind === 'fail') { clearStatus(); fireAlarm(); return; }
     if (!armed) { arm(); } else { disarm(); fireAlarm(); }
   }
 
   // ── Result text on the button: "NOT SENT!" 5 s, "SENT OK" 2 s ────
   let statusTimer = null;
+  let statusKind  = null;   // 'fail' | 'ok' | null — which result text is currently on the button
   function clearStatus() {
     if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
+    statusKind = null;
     document.getElementById('btnAlert').classList.remove('status', 'status-fail', 'status-ok');
     document.getElementById('btnLabel').textContent = 'PANIC';
     document.getElementById('btnSub').textContent   = 'ALARM';
@@ -174,6 +179,7 @@ html, body {
     document.getElementById('btnLabel').textContent = line1;
     document.getElementById('btnSub').textContent   = line2;
     document.getElementById('btnAlert').classList.add('status', 'status-' + kind);
+    statusKind = kind;
     statusTimer = setTimeout(clearStatus, ms);
   }
 
