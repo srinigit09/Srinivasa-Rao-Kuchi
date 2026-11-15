@@ -767,31 +767,16 @@ ipcMain.handle('dismiss-alert', () => {
   if (alertPopup && !alertPopup.isDestroyed()) alertPopup.close();
 });
 
-// The server accepted the press but NO other station received it — the sender must not feel safe.
+// The server accepted the press but NO other station received it. Deliberately SILENT here: no beep,
+// no popup, no notification — the person in danger may have someone dangerous next to them. The user
+// is told only by the short "NOT SENT!" text on the alarm button. The event is queued for the server log.
 ipcMain.on('alarm-not-delivered', () => {
   queueClientEvent('alarm_not_delivered', 'Server reached, but no other station confirmed receiving the alarm');
-  for (let i = 0; i < 3; i++) setTimeout(() => { if (shell && shell.beep) shell.beep(); }, i * 600);
-  notifyClientUser('alarm_not_delivered', '🚨 ALARM NOT DELIVERED!', 'Nobody received your panic alarm. Call for help another way (phone / shout) and press the button again.');
-  lastNotificationType = null;   // let the next failure notify again
-  dialog.showMessageBox({
-    type: 'error',
-    title: 'PANIC ALARM NOT DELIVERED',
-    message: 'NOBODY RECEIVED YOUR ALARM',
-    detail: 'No other station is online to receive it. Get help another way NOW (phone / call out), then press the Panic button again.',
-    buttons: ['OK'],
-    noLink: true,
-  });
 });
 
-// Alarm transmission failure alert
+// Alarm transmission failure (server unreachable) — equally silent; see above.
 ipcMain.on('alarm-delivery-failed', () => {
   queueClientEvent('alarm_delivery_failed', 'Panic button press could not reach the server');
-  if (shell && shell.beep) shell.beep();
-  notifyClientUser(
-    'alarm_failed',
-    '🚨 CRITICAL: Panic Alarm Transmission Failed!',
-    'The panic alarm could not reach the server. Please check your network connection immediately!'
-  );
 });
 
 // Drag the frameless alarm button
