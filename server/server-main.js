@@ -209,12 +209,8 @@ function setAutoLaunch(enabled) {
 
 // ── New-install handling ──────────────────────────────────────────────────────
 // afterPack.js stamps a new UUID into resources/install-id for every build; the file
-// is also re-created each time the installer runs. If the stamp differs from the one
-// seen on the previous launch, this is a new installation. When an old database exists
-// the user chooses: keep it (upgrade) or start fresh. Starting fresh first backs the old
-// database up, then creates a new one that carries over only the license (key validation).
-const KEEP_SETTINGS = ['license_code', 'license_nonce', 'reset_nonce', 'machine_fallback_id'];
-
+// is also re-created each time the installer runs. A changed stamp means "installed again":
+// existing data is always kept (upgrade). Only the uninstaller removes data.
 function isFreshInstall() {
   try {
     const currentId = MY_BUILD_STAMP;
@@ -232,51 +228,6 @@ function isFreshInstall() {
     console.error('[Server] Fresh-install check failed:', e.message);
     return false;
   }
-}
-
-function chooseKeepOrFresh() {
-  const { dialog } = require('electron');
-  const choice = dialog.showMessageBoxSync({
-    type: 'question',
-    title: 'Panic Alarm Server — Existing data found',
-    message: 'Existing server data was found from a previous installation.',
-    detail: 'Keep data (upgrade): hospitals, users, alarm logs and settings are kept, and registered clients keep working.\n\n' +
-            'Start fresh: all data is cleared (only the license activation is kept). The old database is saved as a backup file first, and clients must register again.',
-    buttons: ['Keep data (upgrade)', 'Start fresh'],
-    defaultId: 0,
-    cancelId: 0,
-    noLink: true,
-  });
-  return choice === 1 ? 'fresh' : 'keep';
-}
-
-function resetDatabaseKeepingLicense(dbPath) {
-  const Database = require('better-sqlite3');
-  const kept = [];
-  if (fs.existsSync(dbPath)) {
-    try {
-      const old = new Database(dbPath, { readonly: true, fileMustExist: true });
-      for (const k of KEEP_SETTINGS) {
-        const r = old.prepare('SELECT value FROM settings WHERE key=?').get(k);
-        if (r) kept.push([k, r.value]);
-      }
-      old.close();
-    } catch (e) { console.warn('[Server] Could not read license settings from old DB:', e.message); }
-  }
-  // Back up (rename together so the files stay consistent) instead of deleting
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  for (const suffix of ['', '-wal', '-shm', '-journal']) {
-    try { fs.renameSync(dbPath + suffix, `${dbPath}.backup-${stamp}${suffix}`); } catch { /* not present */ }
-  }
-  console.log(`[Server] Old database backed up as ${dbPath}.backup-${stamp}`);
-  if (kept.length) {
-    const fresh = new Database(dbPath);
-    fresh.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
-    const ins = fresh.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
-    for (const [k, v] of kept) ins.run(k, v);
-    fresh.close();
-  }
-  console.log(`[Server] Fresh install: database reset (kept ${kept.length} license setting(s))`);
 }
 
 // ── Global Server Process Lifecycle Handlers ──────────────────────────────────
@@ -506,15 +457,10 @@ function startEmbeddedServer() {
       }
     }
 
-    if (isFreshInstall()) {
-      const dbFile = path.resolve(process.env.DB_PATH);
-      // First ever install (no DB yet) → nothing to ask. Otherwise let the user decide.
-      if (fs.existsSync(dbFile) && chooseKeepOrFresh() === 'fresh') {
-        resetDatabaseKeepingLicense(dbFile);
-      } else {
-        console.log('[Server] New install: keeping existing data');
-      }
-    }
+    // Re-installing / upgrading over an existing install KEEPS all data (hospitals, users, alarm logs,
+    // license, registered clients); db.js migrates the schema. A clean start comes from uninstalling
+    // first: the uninstaller removes all data (restore a backup afterwards if needed).
+    if (isFreshInstall()) console.log('[Server] New install detected: keeping existing data');
 
     const serverRoot = getServerRoot();
     const serverJs   = path.join(serverRoot, 'server.js');
@@ -980,6 +926,18 @@ let isExplicitQuit = false;
 app.on('before-quit', () => {
   isExplicitQuit = true;
 });
+
+// The application was uninstalled / deleted while still running (e.g. dragged to the Trash on macOS):
+// stop completely and stop starting at login. Packaged builds only.
+if (app.isPackaged) {
+  setInterval(() => {
+    if (isExplicitQuit || fs.existsSync(process.execPath)) return;
+    console.log('[Server] Application files were removed — exiting');
+    try { app.setLoginItemSettings({ openAtLogin: false }); } catch {}
+    isExplicitQuit = true;
+    app.exit(0);
+  }, 5000).unref();
+}
 
 app.on('render-process-gone', (event, webContents, details) => {
   console.error('[Server Crash Guard] Renderer process crashed:', details.reason);

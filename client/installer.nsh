@@ -37,4 +37,16 @@
   nsExec::Exec 'netsh advfirewall firewall delete rule name="Panic Alarm Client Outbound"'
   SetRegView 64
   DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "PanicAlarmClient"
+
+  ; A real uninstall (NOT an upgrade, which passes --updated) removes ALL data so a later install is a clean
+  ; first install: registration, device id and saved server address (shared folder), plus every Windows
+  ; user's own settings (button colour, reminder switch, caches) and their "stopped" marker.
+  ${ifNot} ${isUpdated}
+    DetailPrint "Removing all Panic Alarm Client data..."
+    ReadEnvStr $0 ProgramData
+    ${If} $0 != ""
+      RMDir /r "$0\PanicAlarmClient"
+    ${EndIf}
+    nsExec::Exec `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-ChildItem -LiteralPath (Join-Path $$env:SystemDrive 'Users') -Directory -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item -LiteralPath (Join-Path $$_.FullName 'AppData\Roaming\panic-alarm-client'),(Join-Path $$_.FullName 'AppData\Local\PanicAlarm\client-stopped.flag') -Recurse -Force -ErrorAction SilentlyContinue }"`
+  ${endIf}
 !macroend

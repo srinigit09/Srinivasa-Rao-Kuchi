@@ -20,11 +20,33 @@
   nsExec::Exec 'schtasks /Create /TN "PanicAlarmServerWatchdog" /TR "wscript.exe //B //Nologo \"$INSTDIR\resources\watchdog.vbs\"" /SC MINUTE /MO 1 /RU "BUILTIN\Users" /IT /RL LIMITED /F'
 !macroend
 
+; Runs early in the uninstaller: remove the watchdog and autostart FIRST so nothing can restart the
+; server, then stop every running copy (all logged-in Windows users) before the files are deleted.
+!macro customUnInit
+  nsExec::Exec 'schtasks /Delete /TN "PanicAlarmServerWatchdog" /F'
+  SetRegView 64
+  DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "PanicAlarmServer"
+  nsExec::Exec 'taskkill /F /IM "PanicAlarmServer.exe"'
+!macroend
+
 !macro customUnInstall
   nsExec::Exec 'schtasks /Delete /TN "PanicAlarmServerWatchdog" /F'
+  nsExec::Exec 'taskkill /F /IM "PanicAlarmServer.exe"'
   DetailPrint "Removing Windows Firewall rules for Panic Alarm Server..."
   nsExec::Exec 'netsh advfirewall firewall delete rule name="Panic Alarm Server"'
   nsExec::Exec 'netsh advfirewall firewall delete rule name="Panic Alarm Server Port"'
   SetRegView 64
   DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "PanicAlarmServer"
+
+  ; A real uninstall (NOT an upgrade, which passes --updated) removes ALL data — database, license,
+  ; port, logs, install marker (shared folder) and every Windows user's own settings — so a later
+  ; install is a clean first install. Restore a database from your own backup if you need it.
+  ${ifNot} ${isUpdated}
+    DetailPrint "Removing all Panic Alarm Server data..."
+    ReadEnvStr $0 ProgramData
+    ${If} $0 != ""
+      RMDir /r "$0\PanicAlarmServer"
+    ${EndIf}
+    nsExec::Exec `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-ChildItem -LiteralPath (Join-Path $$env:SystemDrive 'Users') -Directory -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item -LiteralPath (Join-Path $$_.FullName 'AppData\Roaming\panic-alarm-server'),(Join-Path $$_.FullName 'AppData\Local\PanicAlarm\server-stopped.flag') -Recurse -Force -ErrorAction SilentlyContinue }"`
+  ${endIf}
 !macroend

@@ -282,14 +282,6 @@ function isFreshInstall() {
   return true;
 }
 
-/** Fresh install = full reset: registration, saved server address, device identity. */
-function wipeConfigForFreshInstall() {
-  for (const f of [CONFIG_FILE, CONFIG_FILE + '.bak', LAST_SERVER_FILE, LAST_HINT_FILE,
-                   path.join(CONFIG_DIR, 'device-id')]) {
-    try { fs.unlinkSync(f); } catch { /* already gone */ }
-  }
-}
-
 function loadConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); }
   catch { return null; }
@@ -954,10 +946,10 @@ app.whenReady().then(() => {
   hideDock();
   ensureWindowsFirewallRule();
 
-  // Detect reinstall: if resources/install-id changed since last launch, wipe config
-  if (isFreshInstall()) {
-    wipeConfigForFreshInstall();
-  }
+  // Re-installing / upgrading over an existing install KEEPS the registration, device id and server
+  // address — the client just keeps working. A clean start comes from uninstalling first: the
+  // uninstaller removes all of this data.
+  isFreshInstall();   // records the new install stamp
 
   const config = loadConfig();
   if (config && config.token) {
