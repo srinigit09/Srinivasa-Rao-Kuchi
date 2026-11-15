@@ -884,6 +884,16 @@ function startReconnectWatchdog(config) {
   if (reconnectWatchdogTimer) clearInterval(reconnectWatchdogTimer);
   reconnectWatchdogTimer = setInterval(async () => {
     if (isQuitting) return;
+
+    // The app was uninstalled / deleted while still running (e.g. dragged to the Trash on macOS):
+    // stop completely — no more tray icon, button, reminders or notifications — and stop starting at login.
+    if (app.isPackaged && !fs.existsSync(process.execPath)) {
+      console.log('[App] Application files were removed — exiting');
+      try { app.setLoginItemSettings({ openAtLogin: false }); } catch {}
+      isQuitting = true;
+      app.quit();
+      return;
+    }
     const currentConfig = loadConfig() || config;
     if (!currentConfig || !currentConfig.token || !currentConfig.serverUrl) return;
 

@@ -20,8 +20,18 @@
   nsExec::Exec 'schtasks /Create /TN "PanicAlarmClientWatchdog" /TR "wscript.exe //B //Nologo \"$INSTDIR\resources\watchdog.vbs\"" /SC MINUTE /MO 1 /RU "BUILTIN\Users" /IT /RL LIMITED /F'
 !macroend
 
+; Runs early in the uninstaller: remove the watchdog and autostart FIRST so nothing can restart the
+; client, then stop every running copy (all logged-in Windows users) before the files are deleted.
+!macro customUnInit
+  nsExec::Exec 'schtasks /Delete /TN "PanicAlarmClientWatchdog" /F'
+  SetRegView 64
+  DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "PanicAlarmClient"
+  nsExec::Exec 'taskkill /F /IM "PanicAlarmClient.exe"'
+!macroend
+
 !macro customUnInstall
   nsExec::Exec 'schtasks /Delete /TN "PanicAlarmClientWatchdog" /F'
+  nsExec::Exec 'taskkill /F /IM "PanicAlarmClient.exe"'
   DetailPrint "Removing Windows Firewall rules for Panic Alarm Client..."
   nsExec::Exec 'netsh advfirewall firewall delete rule name="Panic Alarm Client"'
   nsExec::Exec 'netsh advfirewall firewall delete rule name="Panic Alarm Client Outbound"'
