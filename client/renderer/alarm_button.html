@@ -34,11 +34,8 @@ html, body {
 }
 .btn-alert:active { cursor: grabbing; transform: scale(0.95); }
 
-/* Armed state */
+/* Armed state — NO colour change (the button turns red only after a successful send) */
 .btn-alert.armed {
-  background: rgba(255,200,0,0.35);
-  border: 1.5px solid #000000;
-  box-shadow: 0 0 0 1px #000000;
   transform: scale(1.04);
 }
 
@@ -51,9 +48,7 @@ html, body {
 }
 .btn-alert.status .btn-label    { font-size: 17px; }
 .btn-alert.status .btn-sublabel { font-size: 14px; }
-.btn-alert.status-fail { background: rgba(31,41,55,0.95) !important; }   /* dark = NOT sent (red = sent) */
-
-/* "TAP AGAIN!" text: visible for 1 second after the first tap (the button stays yellow for 3 s) */
+/* "TAP AGAIN!" text: visible for 1 second after the first tap (the button keeps its colour; stays armed for 3 s) */
 .btn-alert.armed.show-tap .btn-label, .btn-alert.armed.show-tap .btn-sublabel {
   display: block; color: #fff; font-weight: 800; line-height: 1.1; text-align: center;
   text-shadow: 0 0 3px #000, 0 0 3px #000;
