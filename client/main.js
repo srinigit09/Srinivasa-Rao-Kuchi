@@ -460,6 +460,14 @@ function connectSocket(config) {
 
   // ── This is the key event — show popup on every registered PC ────────────────
   socket.on('panic_alarm', (alarmData) => {
+    // The sender never gets a popup for its own alarm. All OS users on one PC share the same device
+    // id but each runs its own client/connection, so the server's "skip the sender" only covers one
+    // of them — ignore alarms that came from this device here.
+    const myDeviceId = (loadConfig() || config).deviceId;
+    if (alarmData.deviceId && myDeviceId && alarmData.deviceId === myDeviceId) {
+      console.log('[Alarm] Ignoring alarm triggered from this device');
+      return;
+    }
     console.log('[Alarm] Received:', alarmData.triggeredBy, alarmData.locationLabel || alarmData.roomNumber);
     showAlertPopup(alarmData);
   });
