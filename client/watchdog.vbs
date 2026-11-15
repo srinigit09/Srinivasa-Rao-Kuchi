@@ -5,14 +5,14 @@ Option Explicit
 Const EXE_NAME  = "PanicAlarmClient.exe"
 Const FLAG_NAME = "client-stopped.flag"
 
-Dim sh, fso, flag, exePath, wmi, procs, p, owner, domain, me
+Dim sh, fso, flag, exePath, wmi, procs, p, owner, domain, curUser
 Set sh  = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 
 flag = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\PanicAlarm\" & FLAG_NAME
 If fso.FileExists(flag) Then WScript.Quit 0
 
-me = LCase(sh.ExpandEnvironmentStrings("%USERNAME%"))
+curUser = LCase(sh.ExpandEnvironmentStrings("%USERNAME%"))
 On Error Resume Next
 Set wmi   = GetObject("winmgmts:\\.\root\cimv2")
 Set procs = wmi.ExecQuery("Select * From Win32_Process Where Name = '" & EXE_NAME & "'")
@@ -20,7 +20,7 @@ If Err.Number = 0 Then
   For Each p In procs
     owner = "" : domain = ""
     p.GetOwner owner, domain
-    If LCase(owner) = me Then WScript.Quit 0
+    If LCase(owner) = curUser Then WScript.Quit 0
   Next
 End If
 On Error GoTo 0

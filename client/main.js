@@ -160,7 +160,7 @@ function ensureSharedDir(sharedDir) {
   if (!existed) fs.mkdirSync(sharedDir, { recursive: true });
   // Windows: ACL is set once (installer / first creation). Unix: re-apply every launch to repair old folders.
   if (!existed || process.platform !== 'win32') shareDir(sharedDir);
-  const testFile = path.join(sharedDir, '.perm_test');
+  const testFile = path.join(sharedDir, `.perm_test_${process.pid}`);   // unique: another user's client may test at the same time
   fs.writeFileSync(testFile, '1');
   fs.unlinkSync(testFile);
   return sharedDir;
@@ -182,6 +182,14 @@ function getSharedConfigDir() {
   try {
     return ensureSharedDir(sharedDir);
   } catch (e) {
+    // The folder may have been created by the first OS user with an ACL that only lets that user write.
+    // The registration inside it is still READABLE by everyone: keep using it. Falling back to the private
+    // userData folder would hide the registration and show this user the registration form.
+    try {
+      fs.accessSync(path.join(sharedDir, 'panic-alarm-config.json'), fs.constants.R_OK);
+      console.warn('[Config] Shared folder is read-only for this user, using it read-only:', e.message);
+      return sharedDir;
+    } catch { /* no readable registration there */ }
     console.warn('[Config] Shared folder not writable, using userData fallback:', e.message);
     return app.getPath('userData');
   }
@@ -277,8 +285,10 @@ function isFreshInstall() {
   if (seenId === currentId) return false;  // same install — just a reopen
 
   // New install-id → fresh install. Save it so subsequent reopens pass through.
-  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  writeShared(SEEN_INSTALL_FILE, currentId);
+  try {
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    writeShared(SEEN_INSTALL_FILE, currentId);
+  } catch (e) { console.warn('[Config] Could not record install id:', e.message); }
   return true;
 }
 
@@ -992,8 +1002,28 @@ app.whenReady().then(() => {
     // Fresh install or no config — show registration form
     createTray(null);
     createSetupWindow();
+    watchForRegistrationByAnotherUser();
   }
 });
+
+// The registration is shared by every OS user on this PC. If this copy is waiting at the registration form
+// and another OS user registers (or this user registers and the file appears), pick it up automatically:
+// close the form and start running with the Alarm button — no second registration.
+let registrationWatchTimer = null;
+function watchForRegistrationByAnotherUser() {
+  if (registrationWatchTimer) return;
+  registrationWatchTimer = setInterval(() => {
+    if (isQuitting) { clearInterval(registrationWatchTimer); registrationWatchTimer = null; return; }
+    const cfg = loadConfig();
+    if (!cfg || !cfg.token) return;
+    clearInterval(registrationWatchTimer); registrationWatchTimer = null;
+    if (socket) return;   // this copy already started itself (setup-complete)
+    console.log('[App] Registration found (done by another user) — starting');
+    if (setupWindow && !setupWindow.isDestroyed()) setupWindow.close();
+    createTray(cfg);
+    launchAfterSetup(cfg);
+  }, 3000);
+}
 
 // Always On: Reconnect on system wake / unlock
 if (powerMonitor) {
