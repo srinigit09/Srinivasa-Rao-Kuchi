@@ -6,8 +6,10 @@
   "scripts": {
     "start": "node server.js",
     "start-desktop": "electron .",
-    "build-win": "electron-builder --win --x64",
-    "build-mac": "electron-builder --mac --arm64 && bash fix-mac-dmg.sh",
+    "build-win": "node obfuscate-build.js electron-builder --win --x64",
+    "build-win-plain": "electron-builder --win --x64",
+    "build-mac": "node obfuscate-build.js electron-builder --mac --arm64 && bash fix-mac-dmg.sh",
+    "build-mac-plain": "electron-builder --mac --arm64 && bash fix-mac-dmg.sh",
     "build-linux": "electron-builder --linux"
   },
   "dependencies": {
@@ -22,12 +24,16 @@
   },
   "devDependencies": {
     "electron": "30.5.1",
-    "electron-builder": "26.15.3"
+    "electron-builder": "26.15.3",
+    "javascript-obfuscator": "^5.10.1"
   },
   "build": {
     "afterPack": "./afterPack.js",
     "extraResources": [
-      { "from": "watchdog.vbs", "to": "watchdog.vbs" }
+      {
+        "from": "watchdog.vbs",
+        "to": "watchdog.vbs"
+      }
     ],
     "appId": "com.hospital.panicalarm.server",
     "productName": "PanicAlarmServer",
@@ -50,7 +56,15 @@
       "renderer/**/*",
       "public/**/*",
       "assets/**/*",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "!node_modules/better-sqlite3/{deps,src}/**",
+      "!node_modules/better-sqlite3/build/Release/{obj,.deps}/**",
+      "!node_modules/better-sqlite3/build/Release/test_extension.node",
+      "!node_modules/**/*.{md,markdown,map,ts}",
+      "!node_modules/**/{test,tests,docs,example,examples}/**"
+    ],
+    "electronLanguages": [
+      "en-US"
     ],
     "win": {
       "target": [
@@ -77,10 +91,22 @@
     },
     "dmg": {
       "internetEnabled": false,
-      "window": { "width": 540, "height": 380 },
+      "window": {
+        "width": 540,
+        "height": 380
+      },
       "contents": [
-        { "x": 150, "y": 185, "type": "file" },
-        { "x": 390, "y": 185, "type": "link", "path": "/Applications" }
+        {
+          "x": 150,
+          "y": 185,
+          "type": "file"
+        },
+        {
+          "x": 390,
+          "y": 185,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     },
     "mac": {

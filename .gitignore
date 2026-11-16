@@ -48,3 +48,6 @@ client/dist/win-unpacked/
 server/dist/mac/
 server/dist/mac-arm64/
 server/dist/win-unpacked/
+
+# Obfuscation build backup (restored automatically)
+.src-backup/
