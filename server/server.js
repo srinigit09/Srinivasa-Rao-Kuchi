@@ -37,6 +37,8 @@ const os          = require('os');
 const path        = require('path');
 const fs          = require('fs');
 const eventLog = require('./event-log');
+const mailer   = require('./mailer');
+const { queryLogRows, toCsv, buildAlarmEmail } = require('./alarm-logs');
 const { createLicense } = require('./license');
 const { requireAdmin, requireClient, adminLogin, signClientToken, signAdminToken, DEFAULT_ADMIN_PASSWORD } = require('./auth');
 const {
@@ -46,7 +48,9 @@ const {
   listClientUsers, findClientUser, findClientUserById, findClientUserByUserId,
   createClientUser, createClientUserAdmin, updateClientUser,
   updateClientUserToken, deleteClientUser,
-  insertLog, acknowledgeAlarm, markNoResponse, setAlarmDelivered, settleStaleAlarms, listLogs, listLogsByHospital, listLogsByDate,
+  insertLog, findAlarm, insertRecipient, ackRecipient, ackRecipientDevice, noRespRecipient, noRespRecipientDevice,
+  notDeliveredRecipient, settleRecipients, settleStaleRecipients,
+  acknowledgeAlarm, markNoResponse, setAlarmDelivered, settleStaleAlarms,
   deleteLogById, deleteAllLogs,
   getSetting, setSetting,
   listLocations, listLocationsByHospital,
@@ -57,8 +61,9 @@ const {
 const ALARM_SETTLE_MS = 20 * 1000;   // popup auto-close time
 // On startup, settle alarms left unresolved by a previous run/restart
 settleStaleAlarms.run('-20 seconds');
+settleStaleRecipients.run('-20 seconds');
 setInterval(() => {
-  try { settleStaleAlarms.run('-20 seconds'); } catch { /* ignore */ }
+  try { settleStaleAlarms.run('-20 seconds'); settleStaleRecipients.run('-20 seconds'); } catch { /* ignore */ }
 }, 10 * 1000).unref();
 
 const app    = express();
@@ -523,11 +528,53 @@ app.delete('/api/admin/dept-blocks/:id', requireAdmin, (req, res) => {
 
 // ── Logs ───────────────────────────────────────────────────────
 
+// One row per RECEIVING station per alarm (see alarm-logs.js). Filters: hospital_code, from, to (ISO times).
 app.get('/api/admin/logs', requireAdmin, (req, res) => {
-  const { from, to, hospital_code } = req.query;
-  if (from && to) return res.json(listLogsByDate.all(from, to));
-  if (hospital_code) return res.json(listLogsByHospital.all(hospital_code));
-  res.json(listLogs.all());
+  const r = queryLogRows({ hospital: req.query.hospital_code, from: req.query.from, to: req.query.to, limit: 500 });
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json(r.rows);
+});
+
+// Browser time-zone offset in minutes west of UTC (JS getTimezoneOffset), used to print local times in exports
+function parseTzOffset(v) {
+  const n = parseInt(v, 10);
+  return Number.isInteger(n) && n >= -840 && n <= 840 ? n : 0;
+}
+const exportStamp = () => new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
+
+// GET /api/admin/logs/export — CSV download of the same rows
+app.get('/api/admin/logs/export', requireAdmin, (req, res) => {
+  const r = queryLogRows({ hospital: req.query.hospital_code, from: req.query.from, to: req.query.to, limit: 5000 });
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="alarm-logs-${exportStamp()}.csv"`);
+  res.send(toCsv(r.rows, parseTzOffset(req.query.tz)));
+});
+
+// GET /api/admin/smtp-status — whether e-mail is set up (never returns the password)
+app.get('/api/admin/smtp-status', requireAdmin, (req, res) => res.json(mailer.publicStatus()));
+
+// POST /api/admin/logs/email { emails, hospital_code, from, to, tz } — the CSV is sent as an attachment (SMTP)
+app.post('/api/admin/logs/email', requireAdmin, async (req, res) => {
+  const b = req.body || {};
+  const to = mailer.parseRecipients(b.emails);
+  if (!to.length) return res.status(400).json({ error: `Enter 1 to ${mailer.MAX_RECIPIENTS} valid e-mail addresses` });
+  if (!mailer.isConfigured()) return res.status(503).json({ error: 'E-mail (SMTP) is not configured on this server. See server.env.' });
+  const r = queryLogRows({ hospital: b.hospital_code, from: b.from, to: b.to, limit: 5000 });
+  if (r.error) return res.status(400).json({ error: r.error });
+  try {
+    await mailer.sendMail({
+      to: to.join(','),
+      subject: 'Panic Alarm - alarm logs',
+      text: `Alarm logs attached (${r.rows.length} row${r.rows.length === 1 ? '' : 's'}).`,
+      attachments: [{ filename: `alarm-logs-${exportStamp()}.csv`, content: toCsv(r.rows, parseTzOffset(b.tz)), contentType: 'text/csv; charset=utf-8' }],
+    });
+    eventLog.info('log_export_emailed', { recipients: to.length, rows: r.rows.length });
+    res.json({ message: `Logs sent to ${to.length} recipient${to.length === 1 ? '' : 's'}` });
+  } catch (e) {
+    eventLog.error('log_export_email_failed', { code: e.code || e.responseCode || 'ERR' });
+    res.status(502).json({ error: 'Could not send the e-mail. Check the SMTP settings in server.env.' });
+  }
 });
 
 app.delete('/api/admin/logs', requireAdmin, (req, res) => {
@@ -803,6 +850,46 @@ const lastAlarmByDevice = new Map();   // deviceId -> timestamp of last accepted
 const ALARM_LOCK_MS = 20 * 1000;
 const ALARM_ACK_TIMEOUT_MS = 2000;   // how long to wait for stations to confirm they displayed the alarm (must stay below the button's request timeout)
 
+// OS user name reported by a client (informational only): printable, no control characters, at most 40 chars
+function cleanOsUser(v) {
+  return String(v ?? '').replace(/[\u0000-\u001f\u007f<>"'`]/g, '').trim().slice(0, 40);
+}
+
+// Tell the admin panel an alarm's rows changed (live refresh of Logs / Dashboard)
+function emitAlarmUpdated(alarmId) {
+  try { io.to('admin').emit('alarm_updated', { alarmId }); } catch { /* best effort */ }
+}
+
+// Every alarm is e-mailed to the hospital's contact address (SMTP). Never blocks or fails the alarm itself.
+async function emailAlarm(alarmId) {
+  if (!mailer.isConfigured()) return;
+  try {
+    const mail = buildAlarmEmail(alarmId);
+    if (!mail) return;
+    const to = new Set(mailer.parseRecipients(mail.hospital && mail.hospital.email));
+    for (const e of mailer.parseRecipients(process.env.ALARM_EMAIL_TO)) to.add(e);
+    if (!to.size) return;
+    await mailer.sendMail({ to: [...to].join(','), subject: mail.subject, text: mail.text, html: mail.html });
+    eventLog.info('alarm_email_sent', { alarmId, recipients: to.size });
+  } catch (e) {
+    eventLog.error('alarm_email_failed', { alarmId, code: e.code || e.responseCode || 'ERR' });
+  }
+}
+
+// Who and where a receiving station is. Role and room come from the server's own registration record for
+// that device (never from what the connection claims); only the OS user name is reported by the client.
+function stationOf(socketData) {
+  const deviceId = String((socketData && socketData.deviceId) || '');
+  const reg = deviceId ? findClientUser.get(deviceId) : null;
+  const role = normalizeRole(reg && reg.role);
+  return {
+    deviceId,
+    osUser: cleanOsUser(socketData && socketData.osUser),
+    title : reg ? roleTitle(role) : 'Station',
+    room  : reg ? roomLabel(role, reg.room_number) : '',
+  };
+}
+
 app.post('/api/client/alarm/trigger', requireClient, async (req, res) => {
   const u = req.clientUser;
 
@@ -825,8 +912,9 @@ app.post('/api/client/alarm/trigger', requireClient, async (req, res) => {
   const location = roomLabel(role, u.room_number);
   const message  = `🚨 PANIC ALARM — ${title} (${location}) needs IMMEDIATE HELP!`;
   const severity = 'PANIC';
+  const senderOsUser = cleanOsUser(req.body && req.body.osUser);
 
-  insertLog.run(alarmId, u.hospital_code, title, userId, location, u.system_number || '', u.deviceId, severity, message);
+  insertLog.run(alarmId, u.hospital_code, title, userId, location, u.system_number || '', u.deviceId, severity, message, senderOsUser);
 
   const hCode = (u.hospital_code || '').toString().trim().toUpperCase();
   const roomName = `hospital_${hCode}`;
@@ -835,6 +923,7 @@ app.post('/api/client/alarm/trigger', requireClient, async (req, res) => {
     alarmId,
     hospitalCode : hCode,
     triggeredBy  : title,
+    senderOsUser,
     role,
     userId       : userId,
     roomNumber   : u.room_number,
@@ -852,7 +941,8 @@ app.post('/api/client/alarm/trigger', requireClient, async (req, res) => {
   // Popup auto-closes after 20 s. If no OK / No-Response arrives by then
   // (e.g. nobody online, popup crashed) settle the alarm so it never stays "Active".
   setTimeout(() => {
-    try { markNoResponse.run(alarmId); } catch (e) { console.error('[ALARM] settle failed', e.message); }
+    try { markNoResponse.run(alarmId); settleRecipients.run(alarmId); emitAlarmUpdated(alarmId); }
+    catch (e) { console.error('[ALARM] settle failed', e.message); }
   }, ALARM_SETTLE_MS);
 
   // ── Deliver to the OTHER stations of this hospital and find out who really received it ──
@@ -864,20 +954,50 @@ app.post('/api/client/alarm/trigger', requireClient, async (req, res) => {
       .filter(s => !(u.deviceId && s.data && s.data.deviceId === u.deviceId));
   } catch (e) { console.error('[ALARM] could not list recipients', e.message); }
 
+  // One record per receiving station (device + OS user), saved BEFORE the alarm goes out so that an
+  // early OK always finds its row. Every record starts as "delivered" and is downgraded below if the
+  // station did not confirm.
+  const stations = new Map();   // socket id -> station
+  const saveStations = db.transaction((list) => {
+    for (const s of list) {
+      const st = stationOf(s.data);
+      stations.set(s.id, st);
+      insertRecipient.run(alarmId, hCode, st.deviceId, st.osUser, st.title, st.room, 'delivered');
+    }
+  });
+  try { saveStations(recipients); } catch (e) { console.error('[ALARM] could not save recipients', e.message); }
+
   const capable = recipients.filter(s => s.data && s.data.ackCapable);
   const legacy  = recipients.filter(s => !(s.data && s.data.ackCapable));   // older clients: cannot confirm
 
   if (legacy.length) io.to(legacy.map(s => s.id)).emit('panic_alarm', alarmPayload);
-  const confirmed = capable.length === 0 ? 0 : await new Promise((resolve) => {
-    io.to(capable.map(s => s.id)).timeout(ALARM_ACK_TIMEOUT_MS).emit('panic_alarm', alarmPayload, (_err, responses) => {
-      // _err is set when some stations did not answer in time; responses holds those that did
-      resolve((responses || []).filter(r => r && r.ok).length);
-    });
-  });
+
+  // Which stations confirmed: socket.io's combined answer does not say who gave it, so every capable
+  // socket is asked on its own and the result is matched to its station.
+  const confirmedIds = new Set();
+  if (capable.length) {
+    await Promise.all(capable.map(s => new Promise((resolve) => {
+      io.to(s.id).timeout(ALARM_ACK_TIMEOUT_MS).emit('panic_alarm', alarmPayload, (err, responses) => {
+        if (!err && (responses || []).some(r => r && r.ok)) confirmedIds.add(s.id);
+        resolve();
+      });
+    })));
+  }
+
+  // Stations that did not confirm are "Not Delivered" (an already-acknowledged station is left alone)
+  try {
+    for (const s of capable) {
+      if (confirmedIds.has(s.id)) continue;
+      const st = stations.get(s.id);
+      if (st) notDeliveredRecipient.run(alarmId, st.deviceId, st.osUser);
+    }
+  } catch (e) { console.error('[ALARM] could not save delivery results', e.message); }
 
   // Connected older clients cannot confirm, so they are counted as reached (best available knowledge)
-  const delivered = confirmed + legacy.length;
+  const delivered = confirmedIds.size + legacy.length;
   try { setAlarmDelivered.run(delivered, alarmId); } catch (e) { console.error('[ALARM] could not save delivery', e.message); }
+  emitAlarmUpdated(alarmId);
+  emailAlarm(alarmId);   // every alarm, whatever its outcome; runs in the background
 
   if (delivered === 0) {
     // Nobody received it: do not let the sender believe help is coming, and let them press again at once
@@ -893,19 +1013,34 @@ app.post('/api/client/alarm/trigger', requireClient, async (req, res) => {
   res.json({ alarmId, delivered, message: 'Alarm sent' });
 });
 
+// A station may only report on alarms of its own hospital
+function ownAlarm(u, alarmId) {
+  const a = findAlarm.get(String(alarmId));
+  return !!a && String(a.hospital_code || '').toUpperCase() === String(u.hospital_code || '').trim().toUpperCase();
+}
+
 // POST /api/client/alarm/acknowledge
 app.post('/api/client/alarm/acknowledge', requireClient, (req, res) => {
   const { alarmId } = req.body || {};
   if (!alarmId) return res.status(400).json({ error: 'alarmId required' });
   const u = req.clientUser;
+  if (!ownAlarm(u, alarmId)) return res.status(404).json({ error: 'Alarm not found' });
   const hCode = (u.hospital_code || '').toString().trim().toUpperCase();
-  acknowledgeAlarm.run(u.user_name, alarmId);
-  io.to(`hospital_${hCode}`).emit('alarm_acknowledged', {
-    alarmId, ackBy: u.user_name, ackAt: new Date().toISOString(),
-  });
-  io.to('admin').emit('alarm_acknowledged', {
-    alarmId, ackBy: u.user_name, ackAt: new Date().toISOString(),
-  });
+  const osUser = cleanOsUser(req.body && req.body.osUser);
+  const role = normalizeRole(u.role);
+  const ackRoom = roomLabel(role, u.room_number);   // "Acked By" = the ROOM of the station that pressed OK
+
+  // Mark this station's row; a client that sends no OS user is matched on its device alone
+  let changed = osUser ? ackRecipient.run(alarmId, u.deviceId || '', osUser).changes : 0;
+  if (!changed) changed = ackRecipientDevice.run(alarmId, u.deviceId || '').changes;
+  if (!changed) {   // not recorded as a recipient (e.g. connected a moment too late) — still keep the acknowledgement
+    insertRecipient.run(alarmId, hCode, u.deviceId || '', osUser, roleTitle(role), ackRoom, 'acked');
+  }
+  acknowledgeAlarm.run(ackRoom, alarmId);
+  emitAlarmUpdated(alarmId);
+  const ackedAt = new Date().toISOString();
+  io.to(`hospital_${hCode}`).emit('alarm_acknowledged', { alarmId, ackBy: ackRoom, ackAt: ackedAt });
+  io.to('admin').emit('alarm_acknowledged', { alarmId, ackBy: ackRoom, ackAt: ackedAt });
   res.json({ message: 'Acknowledged' });
 });
 
@@ -914,7 +1049,14 @@ app.post('/api/client/alarm/no-response', requireClient, (req, res) => {
   const { alarmId } = req.body || {};
   if (!alarmId) return res.status(400).json({ error: 'alarmId required' });
   const u = req.clientUser;
+  if (!ownAlarm(u, alarmId)) return res.status(404).json({ error: 'Alarm not found' });
+  const osUser = cleanOsUser(req.body && req.body.osUser);
+  // This station did not answer. The alarm as a whole only becomes "No Response" if nobody acknowledged it
+  // (markNoResponse never touches an acknowledged alarm).
+  const changed = osUser ? noRespRecipient.run(alarmId, u.deviceId || '', osUser).changes : 0;
+  if (!changed) noRespRecipientDevice.run(alarmId, u.deviceId || '');
   markNoResponse.run(alarmId);
+  emitAlarmUpdated(alarmId);
   console.log(`[NO-RESPONSE] ${new Date().toISOString()} | Alarm ${alarmId} | Device ${u.deviceId || u.user_name}`);
   res.json({ message: 'No-response recorded' });
 });
@@ -935,6 +1077,8 @@ io.on('connection', (socket) => {
       .toString().trim().toUpperCase();
     // Store deviceId on socket for alarm exclusion
     if (data && data.deviceId) socket.data.deviceId = data.deviceId;
+    // OS user signed in on that PC (informational: shown in the logs as Doctor(srini))
+    socket.data.osUser = cleanOsUser(data && data.osUser);
     // Newer clients confirm each alarm they display; older ones cannot
     socket.data.ackCapable = !!(data && data.ackCapable);
     // Admin panel joins the special 'admin' room for server-push updates

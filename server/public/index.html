@@ -92,6 +92,22 @@ body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; background
 }
 .btn-logout:hover { background: #dc2626; border-color: #dc2626; color: #fff; }
 
+/* Server control (Restart / Close) */
+.srv-ctl { margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
+.srv-ctl-label { font-size: 10px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 8px; }
+.srv-ctl-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn-ctl {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 8px 6px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;
+  background: #fff; border: 1.5px solid #cbd5e1; color: #334155; transition: all .15s;
+}
+.btn-ctl .ico { font-size: 13px; line-height: 1; }
+.btn-ctl:hover { background: #f1f5f9; border-color: #94a3b8; }
+.btn-ctl.restart:hover { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; }
+.btn-ctl.stop { color: #b91c1c; border-color: #fecaca; background: #fff; }
+.btn-ctl.stop:hover { background: #dc2626; border-color: #dc2626; color: #fff; }
+.btn-ctl:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+
 /* Main content */
 .main-area { margin-left: 230px; padding: 28px 32px; min-height: 100vh; }
 .page-title { font-size: 22px; font-weight: 800; color: #1e293b; margin-bottom: 4px; }
@@ -305,13 +321,16 @@ tr:hover td { background: #f8fafc; }
       <button class="btn-logout" id="btnLogout">
         <span>⏻</span> Sign Out
       </button>
-      <div style="display:flex; gap:6px; margin-top:8px;">
-        <button class="btn-logout" id="btnRestartServer" style="background:#334155; flex:1; font-size:11px; padding:6px 8px; justify-content:center;" title="Restart Panic Alarm Server Application">
-          <span>🔄</span> Restart
-        </button>
-        <button class="btn-logout" id="btnCloseServer" style="background:#7f1d1d; flex:1; font-size:11px; padding:6px 8px; justify-content:center;" title="Close and Exit Server Application">
-          <span>⏻</span> Close
-        </button>
+      <div class="srv-ctl">
+        <div class="srv-ctl-label">Server</div>
+        <div class="srv-ctl-row">
+          <button class="btn-ctl restart" id="btnRestartServer" title="Restart Panic Alarm Server Application">
+            <span class="ico">🔄</span> Restart
+          </button>
+          <button class="btn-ctl stop" id="btnCloseServer" title="Close and Exit Server Application">
+            <span class="ico">⏻</span> Close
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -344,9 +363,9 @@ tr:hover td { background: #f8fafc; }
           <table>
             <thead><tr>
               <th style="width:36px"><input type="checkbox" id="selectAllDash" title="Select all"></th>
-              <th>Time</th><th>Hospital</th><th>User</th><th>User ID</th><th>Room</th><th>Status</th>
+              <th>Time</th><th>Hospital</th><th>Sent By</th><th>Alarm Sent Room</th><th>Received By</th><th>Received Room</th><th>Acked By</th><th>Status</th>
             </tr></thead>
-            <tbody id="recentAlarms"><tr class="empty-row"><td colspan="7">No alarms yet</td></tr></tbody>
+            <tbody id="recentAlarms"><tr class="empty-row"><td colspan="9">No alarms yet</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -576,15 +595,19 @@ tr:hover td { background: #f8fafc; }
             <div class="fg"><label>Hospital Code</label><input type="text" id="rHospital" placeholder="Leave blank for all"></div>
             <div class="fg"><label>From</label><input type="datetime-local" id="rFrom"></div>
             <div class="fg"><label>To</label><input type="datetime-local" id="rTo"></div>
-            <div class="fg" style="display:flex;align-items:flex-end"><button class="btn btn-primary" id="btnReport">Generate</button></div>
+            <div class="fg" style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary" id="btnReport">Generate</button>
+              <button class="btn btn-secondary" id="btnReportDownload" title="Download the report as a CSV file">⬇ Download</button>
+              <button class="btn btn-secondary" id="btnReportEmail" title="E-mail the report as a CSV attachment">✉ Email</button>
+            </div>
           </div>
         </div>
       </div>
       <div class="section">
         <div class="section-body" style="padding:0">
           <table>
-            <thead><tr><th>Time</th><th>Hospital</th><th>User</th><th>User ID</th><th>Room</th><th>System</th><th>Status</th></tr></thead>
-            <tbody id="reportBody"><tr class="empty-row"><td colspan="7">Run report to see data</td></tr></tbody>
+            <thead><tr><th>Time</th><th>Hospital</th><th>Sent By</th><th>Alarm Sent Room</th><th>System</th><th>Received By</th><th>Received Room</th><th>Acked By</th><th>Status</th></tr></thead>
+            <tbody id="reportBody"><tr class="empty-row"><td colspan="9">Run report to see data</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -594,7 +617,9 @@ tr:hover td { background: #f8fafc; }
     <div class="tab-content" id="page-logs">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
         <div class="page-title" style="margin-bottom:0">Alarm Logs</div>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+          <button class="btn btn-secondary btn-sm" id="btnLogsDownload" style="padding:6px 14px;font-size:12px" title="Download all logs as a CSV file">⬇ Download</button>
+          <button class="btn btn-secondary btn-sm" id="btnLogsEmail" style="padding:6px 14px;font-size:12px" title="E-mail all logs as a CSV attachment">✉ Email</button>
           <button class="btn btn-secondary btn-sm" id="btnClearSelected" style="padding:6px 14px;font-size:12px" disabled>🗑 Clear Selected</button>
           <button class="btn btn-del btn-sm" id="btnClearAll" style="padding:6px 14px;font-size:12px">🗑 Clear All Logs</button>
         </div>
@@ -606,7 +631,7 @@ tr:hover td { background: #f8fafc; }
             <thead>
               <tr>
                 <th style="width:36px"><input type="checkbox" id="selectAllLogs" title="Select all"></th>
-                <th>Time</th><th>Alarm ID</th><th>Hospital</th><th>User</th><th>User ID</th><th>Room</th><th>Message</th><th>Acked By</th><th>Status</th>
+                <th>Time</th><th>Alarm ID</th><th>Hospital</th><th>Sent By</th><th>Alarm Sent Room</th><th>Received By</th><th>Received Room</th><th>Acked By</th><th>Status</th>
               </tr>
             </thead>
             <tbody id="logsBody"><tr class="empty-row"><td colspan="10">Loading…</td></tr></tbody>
@@ -724,6 +749,21 @@ tr:hover td { background: #f8fafc; }
 </div><!-- /app -->
 
 <!-- ── Edit Client Modal ── -->
+<div class="modal-bg" id="emailLogsModal">
+  <div class="modal">
+    <div class="modal-title">E-mail alarm logs</div>
+    <div class="fg">
+      <label>Send to (up to 5 e-mail addresses, comma separated)</label>
+      <input type="text" id="emailLogsTo" placeholder="name@hospital.org, other@hospital.org" autocomplete="off">
+    </div>
+    <p class="pw-hint" id="emailLogsNote" style="margin-top:10px"></p>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" id="btnEmailLogsCancel">Cancel</button>
+      <button class="btn btn-primary" id="btnEmailLogsSend">Send</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="editClientModal">
   <div class="modal">
     <div class="modal-title">Edit Client</div>
@@ -897,6 +937,16 @@ function connectAdminSocket() {
     adminSocket.on('connect', () => {
       adminSocket.emit('join', { isAdmin: true });
     });
+    // An alarm was sent / delivered / acknowledged: refresh the open alarm view (grouped, so bursts cost one reload)
+    let alarmRefreshTimer = null;
+    adminSocket.on('alarm_updated', () => {
+      clearTimeout(alarmRefreshTimer);
+      alarmRefreshTimer = setTimeout(() => {
+        const active = (id) => { const e = document.getElementById(id); return e && e.classList.contains('active'); };
+        if (active('page-logs')) loadLogs();
+        else if (active('page-dashboard')) loadDashboard();
+      }, 400);
+    });
     adminSocket.on('user_registered', ({ hospitalCode, clientId }) => {
       // Refresh whichever view is currently active
       const dash   = document.getElementById('page-dashboard');
@@ -965,8 +1015,8 @@ async function loadDashboard() {
   const today = new Date().toDateString();
   document.getElementById('stat-clients').textContent = _dashClients.length;
   document.getElementById('stat-users').textContent   = _dashClients.reduce((s,c)=>s+(c.user_count||0),0);
-  document.getElementById('stat-alarms').textContent  = _dashLogs.length;
-  document.getElementById('stat-today').textContent   = _dashLogs.filter(l=>dbDate(l.triggered_at).toDateString()===today).length;
+  document.getElementById('stat-alarms').textContent  = countAlarms(_dashLogs);
+  document.getElementById('stat-today').textContent   = countAlarms(_dashLogs.filter(l=>dbDate(l.triggered_at).toDateString()===today));
   dashCard('alarms');
 }
 
@@ -999,20 +1049,11 @@ function _renderDashAlarms(logs) {
   const tbody = document.getElementById('recentAlarms');
   document.getElementById('selectAllDash').checked = false;
   if (!logs.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No alarms yet</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="9">No alarms yet</td></tr>';
     updateDashClearBtn();
     return;
   }
-  tbody.innerHTML = logs.map(l=>`
-    <tr data-alarm-id="${esc(l.alarm_id)}">
-      <td><input type="checkbox" class="dash-chk" value="${esc(l.alarm_id)}" onchange="updateDashClearBtn()"></td>
-      <td>${dbDate(l.triggered_at).toLocaleString()}</td>
-      <td>${esc(l.hospital_code)}</td>
-      <td>${esc(l.triggered_by)}</td>
-      <td>${esc(l.user_id||'—')}</td>
-      <td>${esc(l.room_number)}</td>
-      <td>${alarmStatusBadge(l)}</td>
-    </tr>`).join('');
+  tbody.innerHTML = alarmRowsHtml(logs, 'dash');
   updateDashClearBtn();
 }
 
@@ -1500,19 +1541,55 @@ async function deleteDeptBlock(id, name) {
 }
 
 // ── Reports ────────────────────────────────────────────────────
+// Filter from the Reports form. datetime-local gives LOCAL time; the server stores UTC, so convert.
+function reportFilter() {
+  const f = {};
+  const hosp = document.getElementById('rHospital').value.trim();
+  const toIso = (v) => { if (!v) return ''; const d = new Date(v); return isNaN(d) ? '' : d.toISOString(); };
+  if (hosp) f.hospital_code = hosp;
+  const from = toIso(document.getElementById('rFrom').value);
+  const to   = toIso(document.getElementById('rTo').value);
+  if (from) f.from = from;
+  if (to)   f.to   = to;
+  return f;
+}
+
 function initReport() {
   document.getElementById('btnReport').addEventListener('click', async () => {
-    const hosp = document.getElementById('rHospital').value.trim();
-    const from = document.getElementById('rFrom').value;
-    const to   = document.getElementById('rTo').value;
-    let url = '/api/admin/logs';
-    const p = new URLSearchParams();
-    if (hosp) p.set('hospital_code', hosp);
-    if (from) p.set('from', from);
-    if (to)   p.set('to', to);
-    if ([...p].length) url += '?' + p.toString();
+    const p = new URLSearchParams(reportFilter());
+    const url = '/api/admin/logs' + ([...p].length ? '?' + p.toString() : '');
     renderLogsTable('reportBody', await api('GET', url), 'report');
   });
+  document.getElementById('btnReportDownload').addEventListener('click', () => downloadLogsCsv(reportFilter()));
+  document.getElementById('btnReportEmail').addEventListener('click', () => openEmailLogs(reportFilter()));
+}
+
+// ── Export: download / e-mail ──────────────────────────────────
+async function downloadLogsCsv(filter) {
+  const p = new URLSearchParams({ ...filter, tz: String(new Date().getTimezoneOffset()) });
+  try {
+    const r = await fetch('/api/admin/logs/export?' + p.toString(), { headers: { 'Authorization': `Bearer ${token}` } });
+    if (r.status === 401) { logout(); return; }
+    if (!r.ok) { const j = await r.json().catch(() => ({})); flash(j.error || 'Download failed', false); return; }
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = ((r.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/) || [])[1] || 'alarm-logs.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    flash('✅ Logs downloaded', true);
+  } catch { flash('Download failed', false); }
+}
+
+let _emailLogsFilter = {};
+async function openEmailLogs(filter) {
+  _emailLogsFilter = filter || {};
+  const note = document.getElementById('emailLogsNote');
+  note.textContent = 'The logs are sent as a CSV attachment.';
+  const st = await api('GET', '/api/admin/smtp-status');
+  if (st && st.configured === false) note.textContent = 'E-mail (SMTP) is not configured on this server yet. Ask your administrator to set the SMTP properties in server.env, then restart the server.';
+  document.getElementById('emailLogsModal').classList.add('open');
+  document.getElementById('emailLogsTo').focus();
 }
 
 // ── Logs ───────────────────────────────────────────────────────
@@ -1522,28 +1599,53 @@ async function loadLogs() {
   updateClearSelectedBtn();
 }
 
+function countAlarms(rows) { return new Set(rows.map(r => r.alarm_id)).size; }
+
+// Receiving-station result of one row
+function statusBadge(r) {
+  switch (r.status) {
+    case 'acked':         return '<span class="badge badge-active">✔ Acked</span>';
+    case 'not_delivered': return '<span class="badge badge-undelivered">⚠ Not Delivered</span>';
+    case 'no_response':   return '<span class="badge badge-no-resp">⏱ No Response</span>';
+    default:              return '<span class="badge badge-alarm">🔴 Delivered</span>';
+  }
+}
+
+// The API returns one row per receiving station. Rows of one alarm are shown together: the alarm's own
+// columns (time, sender, room …) span all of its station rows.
+// mode: 'dash' | 'full' (Alarm Logs page) | 'report'
+function alarmRowsHtml(rows, mode) {
+  const groups = new Map();
+  for (const r of rows) { if (!groups.has(r.alarm_id)) groups.set(r.alarm_id, []); groups.get(r.alarm_id).push(r); }
+  const chk = mode === 'dash' ? ['dash-chk', 'updateDashClearBtn()'] : ['log-chk', 'updateClearSelectedBtn()'];
+  let html = '';
+  for (const g of groups.values()) {
+    const f = g[0], span = g.length > 1 ? ` rowspan="${g.length}"` : '';
+    g.forEach((r, i) => {
+      let tds = '';
+      if (i === 0) {
+        if (mode !== 'report') tds += `<td${span}><input type="checkbox" class="${chk[0]}" value="${esc(f.alarm_id)}" onchange="${chk[1]}"></td>`;
+        tds += `<td${span}>${dbDate(f.triggered_at).toLocaleString()}</td>`;
+        if (mode === 'full') tds += `<td${span} style="font-family:monospace;font-size:11px">${esc(f.alarm_id.slice(0,8))}</td>`;
+        tds += `<td${span}>${esc(f.hospital_code)}</td><td${span}>${esc(f.sent_by)}</td><td${span}>${esc(f.sent_room)}</td>`;
+        if (mode === 'report') tds += `<td${span}>${esc(f.system_number || '—')}</td>`;
+      }
+      tds += `<td>${esc(r.received_by)}</td><td>${esc(r.received_room)}</td><td>${esc(r.acked_by)}</td><td>${statusBadge(r)}</td>`;
+      html += `<tr data-alarm-id="${esc(f.alarm_id)}">${tds}</tr>`;
+    });
+  }
+  return html;
+}
+
 function renderLogsTable(tbodyId, data, mode) {
   const tbody = document.getElementById(tbodyId);
-  const cols = mode === 'full' ? 10 : 7;
+  const cols = mode === 'full' ? 10 : 9;
   if (!Array.isArray(data) || !data.length) {
     tbody.innerHTML = `<tr class="empty-row"><td colspan="${cols}">No records found</td></tr>`;
     if (mode === 'full') document.getElementById('selectAllLogs').checked = false;
     return;
   }
-  tbody.innerHTML = data.map(l => `
-    <tr data-alarm-id="${esc(l.alarm_id)}">
-      ${mode === 'full' ? `<td><input type="checkbox" class="log-chk" value="${esc(l.alarm_id)}" onchange="updateClearSelectedBtn()"></td>` : ''}
-      <td>${dbDate(l.triggered_at).toLocaleString()}</td>
-      ${mode === 'full' ? `<td style="font-family:monospace;font-size:11px">${l.alarm_id.slice(0,8)}</td>` : ''}
-      <td>${esc(l.hospital_code)}</td>
-      <td>${esc(l.triggered_by)}</td>
-      <td>${esc(l.user_id||'—')}</td>
-      <td>${esc(l.room_number)}</td>
-      ${mode === 'report' ? `<td>${esc(l.system_number||'—')}</td>` : ''}
-      ${mode === 'full' ? `<td style="max-width:200px;overflow:hidden;white-space:nowrap" title="${esc(l.message)}">${esc(l.message)}</td>` : ''}
-      ${mode === 'full' ? `<td>${esc(l.ack_by||'—')}</td>` : ''}
-      <td>${alarmStatusBadge(l)}</td>
-    </tr>`).join('');
+  tbody.innerHTML = alarmRowsHtml(data, mode);
 }
 
 function updateClearSelectedBtn() {
@@ -1553,6 +1655,20 @@ function updateClearSelectedBtn() {
 }
 
 function initLogsClear() {
+  document.getElementById('btnLogsDownload').addEventListener('click', () => downloadLogsCsv({}));
+  document.getElementById('btnLogsEmail').addEventListener('click', () => openEmailLogs({}));
+  document.getElementById('btnEmailLogsCancel').addEventListener('click', () => closeModal('emailLogsModal'));
+  document.getElementById('btnEmailLogsSend').addEventListener('click', async () => {
+    const emails = document.getElementById('emailLogsTo').value.trim();
+    if (!emails) { flash('Enter at least one e-mail address', false); return; }
+    const btn = document.getElementById('btnEmailLogsSend');
+    btn.disabled = true; btn.textContent = 'Sending…';
+    const r = await api('POST', '/api/admin/logs/email', { ..._emailLogsFilter, emails, tz: new Date().getTimezoneOffset() });
+    btn.disabled = false; btn.textContent = 'Send';
+    if (r.error) { flash(r.error, false); return; }
+    closeModal('emailLogsModal');
+    flash('✅ ' + r.message, true);
+  });
   document.getElementById('selectAllLogs').addEventListener('change', function() {
     document.querySelectorAll('.log-chk').forEach(c => c.checked = this.checked);
     updateClearSelectedBtn();
@@ -1721,13 +1837,6 @@ function roleBadge(role) {
   if (r === 'doctor') return '<span class="badge badge-doctor">👨‍⚕️ Doctor</span>';
   if (r === 'nurse')  return '<span class="badge badge-nurse">🩺 Nurse</span>';
   return '<span class="badge badge-staff">👤 Staff</span>';
-}
-
-function alarmStatusBadge(l) {
-  if (l.acknowledged) return '<span class="badge badge-active">✔ Acked</span>';
-  if (l.delivered_count === 0) return '<span class="badge badge-undelivered">⚠ Not Delivered</span>';
-  if (l.no_response)  return '<span class="badge badge-no-resp">⏱ No Response</span>';
-  return '<span class="badge badge-alarm">🔴 Active</span>';
 }
 
 async function api(method, path, body, withAuth = true) {

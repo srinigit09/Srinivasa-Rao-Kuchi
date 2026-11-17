@@ -50,7 +50,11 @@ function userButtonPrefs() {
   return { alertButtonColour: idx, alertButtonSolid: p.alertButtonSolid === true };
 }
 // Config as the button/settings should see it: shared settings + THIS user's button look.
-function withUserButtonPrefs(config) { return config ? { ...config, ...userButtonPrefs() } : config; }
+function withUserButtonPrefs(config) { return config ? { ...config, ...userButtonPrefs(), osUser: osUserName() } : config; }
+// Windows/macOS user signed in on THIS PC, sent to the server so the logs read e.g. Doctor(srini)
+function osUserName() {
+  try { return String(require('os').userInfo().username || '').slice(0, 40); } catch { return ''; }
+}
 // Never let one user's look leak into the shared (all-users) config file.
 function withoutButtonPrefs(config) {
   if (!config) return config;
@@ -442,6 +446,7 @@ function connectSocket(config) {
       hospitalCode: (config.hospitalCode || '').toUpperCase(),
       userName    : config.user_name || config.role,
       deviceId    : config.deviceId,
+      osUser      : osUserName(),
       ackCapable  : true,   // this client confirms every alarm it displays (lets the server report real delivery)
     });
   });

@@ -162,6 +162,33 @@ const MIGRATIONS = [
   }
     },
   },
+  {
+    version: 2,
+    name: 'per-station alarm delivery records (alarm_recipient) and sender OS user in alarm_log',
+    up(db) {
+      const alCols = db.pragma('table_info(alarm_log)').map(c => c.name);
+      if (!alCols.includes('sender_os_user')) {
+        // Windows/macOS user that was signed in on the sending PC (shown as Doctor(srini))
+        db.exec(`ALTER TABLE alarm_log ADD COLUMN sender_os_user TEXT;`);
+      }
+      // One row per receiving station per alarm. status: delivered | not_delivered | acked | no_response
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS alarm_recipient (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          alarm_id      TEXT    NOT NULL REFERENCES alarm_log(alarm_id) ON DELETE CASCADE,
+          hospital_code TEXT    NOT NULL,
+          device_id     TEXT    NOT NULL,
+          os_user       TEXT    NOT NULL DEFAULT '',
+          user_title    TEXT    NOT NULL DEFAULT '',
+          room_label    TEXT    NOT NULL DEFAULT '',
+          status        TEXT    NOT NULL DEFAULT 'delivered',
+          ack_at        DATETIME,
+          UNIQUE (alarm_id, device_id, os_user)
+        );
+        CREATE INDEX IF NOT EXISTS idx_alarm_recipient_alarm ON alarm_recipient(alarm_id);
+      `);
+    },
+  },
 ];
 const migrationResult = runMigrations(db, path.resolve(DB_PATH), MIGRATIONS);
 if (migrationResult.backup) console.log(`[DB] Upgraded schema v${migrationResult.from} -> v${migrationResult.to}; safety copy: ${migrationResult.backup}`);
@@ -236,11 +263,47 @@ module.exports = {
 
   // Alarm log
   insertLog:           db.prepare(`
-    INSERT INTO alarm_log (alarm_id, hospital_code, triggered_by, user_id, room_number, system_number, device_id, severity, message)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO alarm_log (alarm_id, hospital_code, triggered_by, user_id, room_number, system_number, device_id, severity, message, sender_os_user)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `),
+  findAlarm:           db.prepare('SELECT alarm_id, hospital_code FROM alarm_log WHERE alarm_id = ?'),
+  // One row per receiving station per alarm, written BEFORE the alarm is sent so an early OK always finds it.
+  insertRecipient:     db.prepare(`
+    INSERT INTO alarm_recipient (alarm_id, hospital_code, device_id, os_user, user_title, room_label, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(alarm_id, device_id, os_user) DO NOTHING
+  `),
+  ackRecipient:        db.prepare(`
+    UPDATE alarm_recipient SET status='acked', ack_at=datetime('now')
+    WHERE alarm_id=? AND device_id=? AND os_user=?
+  `),
+  // Fallbacks for clients that do not report the OS user: match on the device alone
+  ackRecipientDevice:  db.prepare(`
+    UPDATE alarm_recipient SET status='acked', ack_at=datetime('now')
+    WHERE alarm_id=? AND device_id=?
+  `),
+  noRespRecipientDevice: db.prepare(`
+    UPDATE alarm_recipient SET status='no_response'
+    WHERE alarm_id=? AND device_id=? AND status='delivered'
+  `),
+  noRespRecipient:     db.prepare(`
+    UPDATE alarm_recipient SET status='no_response'
+    WHERE alarm_id=? AND device_id=? AND os_user=? AND status='delivered'
+  `),
+  notDeliveredRecipient: db.prepare(`
+    UPDATE alarm_recipient SET status='not_delivered'
+    WHERE alarm_id=? AND device_id=? AND os_user=? AND status='delivered'
+  `),
+  settleRecipients:    db.prepare(`
+    UPDATE alarm_recipient SET status='no_response' WHERE alarm_id=? AND status='delivered'
+  `),
+  settleStaleRecipients: db.prepare(`
+    UPDATE alarm_recipient SET status='no_response'
+    WHERE status='delivered'
+      AND alarm_id IN (SELECT alarm_id FROM alarm_log WHERE triggered_at <= datetime('now', ?))
   `),
   acknowledgeAlarm:    db.prepare(`
-    UPDATE alarm_log SET acknowledged=1, ack_by=?, ack_at=datetime('now'), no_response=0 WHERE alarm_id=?
+    UPDATE alarm_log SET acknowledged=1, ack_by=COALESCE(ack_by, ?), ack_at=COALESCE(ack_at, datetime('now')), no_response=0 WHERE alarm_id=?
   `),
   markNoResponse:      db.prepare(`
     UPDATE alarm_log SET no_response=1 WHERE alarm_id=? AND acknowledged=0
@@ -254,9 +317,6 @@ module.exports = {
     WHERE acknowledged=0 AND no_response=0
       AND triggered_at <= datetime('now', ?)
   `),
-  listLogs:            db.prepare('SELECT * FROM alarm_log ORDER BY triggered_at DESC LIMIT 500'),
-  listLogsByHospital:  db.prepare('SELECT * FROM alarm_log WHERE hospital_code=? ORDER BY triggered_at DESC LIMIT 200'),
-  listLogsByDate:      db.prepare('SELECT * FROM alarm_log WHERE triggered_at BETWEEN ? AND ? ORDER BY triggered_at DESC'),
   deleteLogById:       db.prepare('DELETE FROM alarm_log WHERE alarm_id = ?'),
   deleteAllLogs:       db.prepare('DELETE FROM alarm_log'),
 

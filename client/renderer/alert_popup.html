@@ -26,6 +26,8 @@ html, body { width: 580px; overflow: hidden; background: #1a0000; font-family: -
 .user-name { color: #fff; }
 .sep { color: rgba(255,255,255,0.5); }
 .room-detail { color: #ffcc00; }
+/* Full alarm message: small, below the main line */
+.msg { margin-top: 10px; font-size: 13px; font-weight: 500; line-height: 1.4; text-align: center; color: rgba(255,255,255,0.7); word-break: break-word; }
 .btn-row { margin-top: 20px; display: flex; gap: 12px; align-items: center; }
 /* OK button — records acknowledgement and closes */
 .btn-ok {
@@ -56,6 +58,7 @@ html, body { width: 580px; overflow: hidden; background: #1a0000; font-family: -
       <span class="sep"> - </span>
       <span class="room-detail" id="roomDetail"></span>
     </div>
+    <div class="msg" id="alarmMsg"></div>
     <div class="btn-row">
       <button class="btn-ok" id="btnOk">OK</button>
     </div>
@@ -107,7 +110,7 @@ html, body { width: 580px; overflow: hidden; background: #1a0000; font-family: -
       fetch(`${config.serverUrl}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.token}` },
-        body: JSON.stringify({ alarmId }),
+        body: JSON.stringify({ alarmId, osUser: (config && config.osUser) || '' }),
       }).catch(() => { /* best effort */ })
     ));
   }
@@ -121,6 +124,8 @@ html, body { width: 580px; overflow: hidden; background: #1a0000; font-family: -
     document.getElementById('userName').textContent   = data.triggeredBy || '—';
     // locationLabel already carries the field name, e.g. "Consulting Room: 12" or "Reception Area"
     document.getElementById('roomDetail').textContent = data.locationLabel || data.roomNumber || '—';
+    // The full alarm message, in smaller letters than the main line (textContent: never interpreted as HTML)
+    document.getElementById('alarmMsg').textContent = data.message || '';
     fitWindow();
     startCountdown();
   }

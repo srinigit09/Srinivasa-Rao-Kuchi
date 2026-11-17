@@ -236,7 +236,7 @@ html, body {
         const resp = await fetch(`${config.serverUrl}/api/client/alarm/trigger`, {
           method : 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.token}` },
-          body   : JSON.stringify({ retry: attempts }),
+          body   : JSON.stringify({ retry: attempts, osUser: config.osUser || '' }),
           signal : AbortSignal.timeout(6000),   // server may wait ~2 s for stations to confirm
         });
         if (resp.ok) {
