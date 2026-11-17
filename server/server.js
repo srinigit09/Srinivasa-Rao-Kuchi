@@ -330,14 +330,22 @@ app.get('/api/admin/clients', requireAdmin, (req, res) => {
   res.json(result);
 });
 
+// System Limit = max number of client PCs; whole number 1..10000, else 0 (invalid)
+function parseLimit(v) {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1 && n <= 10000 ? n : 0;
+}
+
 // POST /api/admin/clients  { client_name, hospital_code, system_limit, email, email_logs, email_reports, location }
 app.post('/api/admin/clients', requireAdmin, (req, res) => {
   const { client_name, hospital_code, system_limit = 100, email = null, email_logs = 0, email_reports = 0, location = null } = req.body || {};
   if (!client_name || !hospital_code)
     return res.status(400).json({ error: 'client_name and hospital_code required' });
+  const limit = parseLimit(system_limit);
+  if (!limit) return res.status(400).json({ error: 'System Limit must be a whole number from 1 to 10000' });
   try {
     const r = createClient.run(
-      client_name.trim(), hospital_code.trim().toUpperCase(), parseInt(system_limit),
+      client_name.trim(), hospital_code.trim().toUpperCase(), limit,
       email || null, email_logs ? 1 : 0, email_reports ? 1 : 0, location || null
     );
     res.status(201).json({ id: r.lastInsertRowid, message: 'Client created' });
@@ -353,10 +361,12 @@ app.put('/api/admin/clients/:id', requireAdmin, (req, res) => {
   const { client_name, hospital_code, system_limit, email, email_logs, email_reports, location } = req.body || {};
   const c = findClientById.get(req.params.id);
   if (!c) return res.status(404).json({ error: 'Client not found' });
+  const limit = system_limit === undefined || system_limit === '' ? c.system_limit : parseLimit(system_limit);
+  if (!limit) return res.status(400).json({ error: 'System Limit must be a whole number from 1 to 10000' });
   updateClient.run(
     client_name  || c.client_name,
     (hospital_code || c.hospital_code).toUpperCase(),
-    parseInt(system_limit || c.system_limit),
+    limit,
     email         !== undefined ? email         : c.email,
     email_logs    !== undefined ? (email_logs ? 1 : 0)   : c.email_logs,
     email_reports !== undefined ? (email_reports ? 1 : 0): c.email_reports,
@@ -395,6 +405,8 @@ app.post('/api/admin/clients/:id/users', requireAdmin, (req, res) => {
   const normalizedRole = normalizeRole(role);
   const room = checkRoom(normalizedRole, room_number);
   if (room.error) return res.status(400).json({ error: room.error });
+  if (countClientUsers.get(client.id).cnt >= client.system_limit)
+    return res.status(403).json({ error: `Maximum client limit reached (${client.system_limit}). Increase the System Limit of this clinic to add more.` });
   const uid  = String(user_id ?? '').trim();
   const name = String(user_name ?? '').trim() || roleTitle(normalizedRole);
   if (uid && findClientUserByUserId.get(uid, client.hospital_code))
@@ -744,6 +756,8 @@ app.post('/api/admin/network-settings', requireAdmin, async (req, res) => {
 //  CLIENT API  (called from Electron desktop app)
 // ══════════════════════════════════════════════════════════════
 
+const CLIENT_LIMIT_MSG = 'Unable to connect. Maximum client connection limit reached. Please contact your software provider for assistance.';
+
 // POST /api/client/register  — called once at first-run wizard
 app.post('/api/client/register', (req, res) => {
   const {
@@ -764,12 +778,15 @@ app.post('/api/client/register', (req, res) => {
   const client = findClientByCode.get(code);
   if (!client) return res.status(404).json({ error: 'Clinic code not recognised. Contact your administrator.' });
 
-  // Check system limit
+  // System limit (Add Client > System Limit): a NEW device, or one an admin deactivated, needs a free slot.
+  // Devices that are already active can always re-register (restart, role/room change).
   const { cnt } = countClientUsers.get(client.id);
   const existingDevice = findClientUser.get(device_id);
 
-  if (!existingDevice && cnt >= client.system_limit)
-    return res.status(403).json({ error: `System limit reached (${client.system_limit}). Contact administrator.` });
+  if ((!existingDevice || !existingDevice.active) && cnt >= client.system_limit) {
+    eventLog.warn('client_limit_reached', { hospital: code, limit: client.system_limit });
+    return res.status(403).json({ error: CLIENT_LIMIT_MSG });
+  }
 
   const token = signClientToken({
     deviceId: device_id, hospital_code: code, user_id: uid,
