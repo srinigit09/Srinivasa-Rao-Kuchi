@@ -31,7 +31,7 @@ function normTime(v, endOfDay) {
 }
 
 /**
- * @param {{hospital?:string, from?:string, to?:string, limit?:number}} f
+ * @param {{hospital?:string, from?:string, to?:string, view?:'dash'|'logs', limit?:number}} f   (view: leave out the rows cleared from that page; none = everything, as Reports)
  * @returns {{error:string}|{rows:object[]}}
  */
 function queryLogRows(f = {}) {
@@ -39,6 +39,8 @@ function queryLogRows(f = {}) {
   if (from === undefined || to === undefined) return { error: 'Invalid date' };
   const where = [], args = [];
   if (f.hospital) { where.push('UPPER(hospital_code) = ?'); args.push(String(f.hospital).trim().toUpperCase()); }
+  if (f.view === 'dash') where.push('hide_dash = 0');
+  if (f.view === 'logs') where.push('hide_logs = 0');
   if (from) { where.push('triggered_at >= ?'); args.push(from); }
   if (to)   { where.push('triggered_at <= ?'); args.push(to); }
   const limit = Math.min(Math.max(parseInt(f.limit, 10) || 500, 1), 5000);
@@ -47,7 +49,9 @@ function queryLogRows(f = {}) {
       SELECT * FROM alarm_log ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY triggered_at DESC, id DESC LIMIT ${limit}
     )
-    SELECT a.alarm_id, a.hospital_code, a.triggered_at, a.triggered_by, a.sender_os_user,
+    SELECT a.alarm_id, a.hospital_code,
+           (SELECT c.client_name FROM clients c WHERE UPPER(c.hospital_code) = UPPER(a.hospital_code) LIMIT 1) AS hospital_name,
+           a.triggered_at, a.triggered_by, a.sender_os_user,
            a.room_number AS sent_room, a.system_number, a.acknowledged, a.ack_by, a.no_response, a.delivered_count,
            r.os_user, r.user_title, r.room_label, r.status, r.ack_at
     FROM a LEFT JOIN alarm_recipient r ON r.alarm_id = a.alarm_id
@@ -76,6 +80,7 @@ function queryLogRows(f = {}) {
     return {
       alarm_id      : r.alarm_id,
       hospital_code : r.hospital_code,
+      hospital_name : r.hospital_name || r.hospital_code,   // shown instead of the code
       triggered_at  : r.triggered_at,
       sent_by       : who(r.triggered_by, r.sender_os_user),   // "User" column, e.g. Doctor(srini)
       sent_room     : r.sent_room || '—',                      // "Alarm Sent By" column: the room the alarm came from
@@ -110,11 +115,11 @@ function tzLabel(tzOffsetMin) {
 }
 
 function toCsv(rows, tzOffsetMin = 0) {
-  const head = ['Time (' + tzLabel(tzOffsetMin) + ')', 'Alarm ID', 'Clinic', 'User', 'Alarm Sent By', 'System',
+  const head = ['Time (' + tzLabel(tzOffsetMin) + ')', 'Alarm ID', 'Clinic Name', 'Clinic Code', 'User', 'Alarm Sent By', 'System',
                 'Acked By', 'Status', 'Station Responses'];
   const lines = [head.map(csvCell).join(',')];
   for (const r of rows) {
-    lines.push([fmtLocal(r.triggered_at, tzOffsetMin), r.alarm_id, r.hospital_code, r.sent_by, r.sent_room, r.system_number,
+    lines.push([fmtLocal(r.triggered_at, tzOffsetMin), r.alarm_id, r.hospital_name, r.hospital_code, r.sent_by, r.sent_room, r.system_number,
                 r.acked_by, r.status_label,
                 r.stations.map(x => `${x.who} [${x.room}]: ${x.status_label}`).join('; ')].map(csvCell).join(','));
   }

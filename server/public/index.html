@@ -603,10 +603,10 @@ tr:hover td { background: #f8fafc; }
         <div class="section-hdr"><h3>Filter</h3></div>
         <div class="section-body">
           <div class="form-grid">
-            <div class="fg"><label>Clinic Code</label><input type="text" id="rHospital" placeholder="Leave blank for all"></div>
-            <div class="fg"><label>From</label><input type="datetime-local" id="rFrom"></div>
-            <div class="fg"><label>To</label><input type="datetime-local" id="rTo"></div>
-            <div class="fg" style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap">
+            <div class="fg"><label>Clinic Name</label><select id="rHospital"><option value="">All clinics</option></select></div>
+            <div class="fg"><label>From</label><input type="date" id="rFrom"></div>
+            <div class="fg"><label>To</label><input type="date" id="rTo"></div>
+            <div class="fg" style="grid-column:1/-1;display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap">
               <button class="btn btn-primary" id="btnReport">Generate</button>
               <button class="btn btn-secondary" id="btnReportDownload" title="Download the report as a CSV file">⬇ Download</button>
               <button class="btn btn-secondary" id="btnReportEmail" title="E-mail the report as a CSV attachment">✉ Email</button>
@@ -617,8 +617,8 @@ tr:hover td { background: #f8fafc; }
       <div class="section">
         <div class="section-body" style="padding:0">
           <table>
-            <thead><tr><th>Time</th><th>Clinic</th><th>User</th><th>Alarm Sent By</th><th>System</th><th>Acked By</th><th>Status</th></tr></thead>
-            <tbody id="reportBody"><tr class="empty-row"><td colspan="7">Run report to see data</td></tr></tbody>
+            <thead><tr><th>Time</th><th>Clinic Name</th><th>Clinic Code</th><th>User</th><th>Alarm Sent By</th><th>System</th><th>Acked By</th><th>Status</th></tr></thead>
+            <tbody id="reportBody"><tr class="empty-row"><td colspan="8">Run report to see data</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1030,6 +1030,7 @@ async function showPage(page) {
   if (page === 'departments') loadLocationsPage();
   if (page === 'deptBlocks')  loadDeptBlocksPage();
   if (page === 'logs')        loadLogs();
+  if (page === 'reports')     loadReportClinics();
   if (page === 'networkSettings') loadNetworkSettings();
   if (page === 'changePassword') {
     document.getElementById('cpUsername').value = window._currentAdminUsername || 'admin';
@@ -1044,7 +1045,7 @@ let _dashClients = [];
 let _dashLogs    = [];
 
 async function loadDashboard() {
-  const [clients, logs] = await Promise.all([api('GET','/api/admin/clients'), api('GET','/api/admin/logs')]);
+  const [clients, logs] = await Promise.all([api('GET','/api/admin/clients'), api('GET','/api/admin/logs?view=dash')]);
   _dashClients = Array.isArray(clients) ? clients : [];
   _dashLogs    = Array.isArray(logs)    ? logs    : [];
   const today = new Date().toDateString();
@@ -1145,16 +1146,16 @@ function initDashClear() {
   document.getElementById('btnDashClearSelected').addEventListener('click', async () => {
     const ids = [...document.querySelectorAll('.dash-chk:checked')].map(c => c.value);
     if (!ids.length) return;
-    if (!confirm(`Clear ${ids.length} selected log entr${ids.length===1?'y':'ies'}?`)) return;
-    const r = await api('DELETE', '/api/admin/logs', { ids });
+    if (!confirm(`Clear ${ids.length} selected entr${ids.length===1?'y':'ies'} from the Dashboard?\n\nThey stay in Alarm Logs and Reports.`)) return;
+    const r = await api('DELETE', '/api/admin/logs', { ids, view: 'dash' });
     if (r.error) { flash(r.error, false); return; }
     flash(`✅ ${r.deleted} log entr${r.deleted===1?'y':'ies'} cleared`, true);
     loadDashboard();
   });
 
   document.getElementById('btnDashClearAll').addEventListener('click', async () => {
-    if (!confirm('Clear ALL alarm logs?')) return;
-    const r = await api('DELETE', '/api/admin/logs', { all: true });
+    if (!confirm('Clear ALL alarms from the Dashboard?\n\nThey stay in Alarm Logs and Reports.')) return;
+    const r = await api('DELETE', '/api/admin/logs', { all: true, view: 'dash' });
     if (r.error) { flash(r.error, false); return; }
     flash(`✅ All logs cleared (${r.deleted} entries)`, true);
     loadDashboard();
@@ -1576,17 +1577,31 @@ async function deleteDeptBlock(id, name) {
 }
 
 // ── Reports ────────────────────────────────────────────────────
-// Filter from the Reports form. datetime-local gives LOCAL time; the server stores UTC, so convert.
+// Filter from the Reports form (clinic dropdown + From/To dates).
 function reportFilter() {
   const f = {};
   const hosp = document.getElementById('rHospital').value.trim();
-  const toIso = (v) => { if (!v) return ''; const d = new Date(v); return isNaN(d) ? '' : d.toISOString(); };
+  // <input type="date"> gives local YYYY-MM-DD: From = start of that day, To = end of that day (local time -> UTC)
+  const toIso = (v, end) => { if (!v) return ''; const d = new Date(v + (end ? 'T23:59:59' : 'T00:00:00')); return isNaN(d) ? '' : d.toISOString(); };
   if (hosp) f.hospital_code = hosp;
-  const from = toIso(document.getElementById('rFrom').value);
-  const to   = toIso(document.getElementById('rTo').value);
+  const from = toIso(document.getElementById('rFrom').value, false);
+  const to   = toIso(document.getElementById('rTo').value, true);
   if (from) f.from = from;
   if (to)   f.to   = to;
   return f;
+}
+
+async function loadReportClinics() {
+  const sel = document.getElementById('rHospital');
+  const keep = sel.value;
+  const clients = await api('GET', '/api/admin/clients');
+  sel.innerHTML = '<option value="">All clinics</option>';
+  if (Array.isArray(clients)) clients.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.hospital_code; o.textContent = c.client_name;
+    sel.appendChild(o);
+  });
+  sel.value = keep;
 }
 
 function initReport() {
@@ -1629,7 +1644,7 @@ async function openEmailLogs(filter) {
 
 // ── Logs ───────────────────────────────────────────────────────
 async function loadLogs() {
-  const data = await api('GET', '/api/admin/logs');
+  const data = await api('GET', '/api/admin/logs?view=logs');
   renderLogsTable('logsBody', data, 'full');
   updateClearSelectedBtn();
 }
@@ -1656,7 +1671,7 @@ function alarmRowsHtml(rows, mode) {
     if (mode !== 'report') tds += `<td><input type="checkbox" class="${chk[0]}" value="${esc(r.alarm_id)}" onchange="${chk[1]}"></td>`;
     tds += `<td>${dbDate(r.triggered_at).toLocaleString()}</td>`;
     if (mode === 'full') tds += `<td style="font-family:monospace;font-size:11px">${esc(r.alarm_id.slice(0,8))}</td>`;
-    tds += `<td>${esc(r.hospital_code)}</td><td>${esc(r.sent_by)}</td><td>${esc(r.sent_room)}</td>`;
+    tds += `<td>${esc(r.hospital_name || r.hospital_code)}</td>${mode === 'report' ? `<td>${esc(r.hospital_code)}</td>` : ''}<td>${esc(r.sent_by)}</td><td>${esc(r.sent_room)}</td>`;
     if (mode === 'report') tds += `<td>${esc(r.system_number || '—')}</td>`;
     const tip = (r.stations || []).map(x => `${x.who} [${x.room}]: ${x.status_label}`).join('\n');
     tds += `<td>${esc(r.acked_by)}</td><td${tip ? ` title="${esc(tip)}"` : ''}>${statusBadge(r)}</td>`;
@@ -1666,7 +1681,7 @@ function alarmRowsHtml(rows, mode) {
 
 function renderLogsTable(tbodyId, data, mode) {
   const tbody = document.getElementById(tbodyId);
-  const cols = mode === 'full' ? 8 : 7;
+  const cols = mode === 'full' || mode === 'report' ? 8 : 7;
   if (!Array.isArray(data) || !data.length) {
     tbody.innerHTML = `<tr class="empty-row"><td colspan="${cols}">No records found</td></tr>`;
     if (mode === 'full') document.getElementById('selectAllLogs').checked = false;
@@ -1682,8 +1697,8 @@ function updateClearSelectedBtn() {
 }
 
 function initLogsClear() {
-  document.getElementById('btnLogsDownload').addEventListener('click', () => downloadLogsCsv({}));
-  document.getElementById('btnLogsEmail').addEventListener('click', () => openEmailLogs({}));
+  document.getElementById('btnLogsDownload').addEventListener('click', () => downloadLogsCsv({ view: 'logs' }));
+  document.getElementById('btnLogsEmail').addEventListener('click', () => openEmailLogs({ view: 'logs' }));
   document.getElementById('btnEmailLogsCancel').addEventListener('click', () => closeModal('emailLogsModal'));
   document.getElementById('btnEmailLogsSend').addEventListener('click', async () => {
     const emails = document.getElementById('emailLogsTo').value.trim();
@@ -1704,16 +1719,16 @@ function initLogsClear() {
   document.getElementById('btnClearSelected').addEventListener('click', async () => {
     const ids = [...document.querySelectorAll('.log-chk:checked')].map(c => c.value);
     if (!ids.length) return;
-    if (!confirm(`Clear ${ids.length} selected log entr${ids.length===1?'y':'ies'}?\n\nThe data stays in the database — only removed from this view. Reports are unaffected.`)) return;
-    const r = await api('DELETE', '/api/admin/logs', { ids });
+    if (!confirm(`Clear ${ids.length} selected log entr${ids.length===1?'y':'ies'}?\n\nThey are removed from this page only; the Dashboard and Reports are unaffected.`)) return;
+    const r = await api('DELETE', '/api/admin/logs', { ids, view: 'logs' });
     if (r.error) { flash(r.error, false); return; }
     flash(`✅ ${r.deleted} log entr${r.deleted===1?'y':'ies'} cleared`, true);
     loadLogs();
   });
 
   document.getElementById('btnClearAll').addEventListener('click', async () => {
-    if (!confirm('Clear ALL alarm logs from the view?\n\nThe data stays in the database — Reports are unaffected.')) return;
-    const r = await api('DELETE', '/api/admin/logs', { all: true });
+    if (!confirm('Clear ALL alarm logs from the view?\n\nThey are removed from this page only; the Dashboard and Reports are unaffected.')) return;
+    const r = await api('DELETE', '/api/admin/logs', { all: true, view: 'logs' });
     if (r.error) { flash(r.error, false); return; }
     flash(`✅ All logs cleared (${r.deleted} entries)`, true);
     loadLogs();

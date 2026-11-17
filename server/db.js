@@ -189,6 +189,15 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 3,
+    name: 'independent Clear for the Dashboard and the Alarm Logs page (hide flags; Reports always shows everything)',
+    up(db) {
+      const cols = db.pragma('table_info(alarm_log)').map(c => c.name);
+      if (!cols.includes('hide_dash')) db.exec(`ALTER TABLE alarm_log ADD COLUMN hide_dash INTEGER NOT NULL DEFAULT 0;`);
+      if (!cols.includes('hide_logs')) db.exec(`ALTER TABLE alarm_log ADD COLUMN hide_logs INTEGER NOT NULL DEFAULT 0;`);
+    },
+  },
 ];
 const migrationResult = runMigrations(db, path.resolve(DB_PATH), MIGRATIONS);
 if (migrationResult.backup) console.log(`[DB] Upgraded schema v${migrationResult.from} -> v${migrationResult.to}; safety copy: ${migrationResult.backup}`);
@@ -318,7 +327,11 @@ module.exports = {
       AND triggered_at <= datetime('now', ?)
   `),
   deleteLogById:       db.prepare('DELETE FROM alarm_log WHERE alarm_id = ?'),
-  deleteAllLogs:       db.prepare('DELETE FROM alarm_log'),
+  // "Clear" only hides the alarm from ONE view; the row stays for Reports and for the other view
+  hideLogDash:         db.prepare('UPDATE alarm_log SET hide_dash = 1 WHERE alarm_id = ?'),
+  hideLogLogs:         db.prepare('UPDATE alarm_log SET hide_logs = 1 WHERE alarm_id = ?'),
+  hideAllDash:         db.prepare('UPDATE alarm_log SET hide_dash = 1 WHERE hide_dash = 0'),
+  hideAllLogs:         db.prepare('UPDATE alarm_log SET hide_logs = 1 WHERE hide_logs = 0'),
 
   // Locations (type='location') — shown in client setup dropdown + client record
   listLocations:            db.prepare("SELECT * FROM departments WHERE type='location' AND active=1 ORDER BY name"),

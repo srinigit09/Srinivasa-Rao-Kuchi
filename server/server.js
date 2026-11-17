@@ -51,7 +51,7 @@ const {
   insertLog, findAlarm, insertRecipient, ackRecipient, ackRecipientDevice, noRespRecipient, noRespRecipientDevice,
   notDeliveredRecipient, settleRecipients, settleStaleRecipients,
   acknowledgeAlarm, markNoResponse, setAlarmDelivered, settleStaleAlarms,
-  deleteLogById, deleteAllLogs,
+  deleteLogById, hideLogDash, hideLogLogs, hideAllDash, hideAllLogs,
   getSetting, setSetting,
   listLocations, listLocationsByHospital,
   listDeptBlocks, listDeptBlocksByHospital,
@@ -538,7 +538,7 @@ app.delete('/api/admin/dept-blocks/:id', requireAdmin, (req, res) => {
 
 // One row per RECEIVING station per alarm (see alarm-logs.js). Filters: hospital_code, from, to (ISO times).
 app.get('/api/admin/logs', requireAdmin, (req, res) => {
-  const r = queryLogRows({ hospital: req.query.hospital_code, from: req.query.from, to: req.query.to, limit: 500 });
+  const r = queryLogRows({ hospital: req.query.hospital_code, from: req.query.from, to: req.query.to, view: req.query.view, limit: 500 });
   if (r.error) return res.status(400).json({ error: r.error });
   res.json(r.rows);
 });
@@ -552,7 +552,7 @@ const exportStamp = () => new Date().toISOString().slice(0, 19).replace(/[-:T]/g
 
 // GET /api/admin/logs/export — CSV download of the same rows
 app.get('/api/admin/logs/export', requireAdmin, (req, res) => {
-  const r = queryLogRows({ hospital: req.query.hospital_code, from: req.query.from, to: req.query.to, limit: 5000 });
+  const r = queryLogRows({ hospital: req.query.hospital_code, from: req.query.from, to: req.query.to, view: req.query.view, limit: 5000 });
   if (r.error) return res.status(400).json({ error: r.error });
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="alarm-logs-${exportStamp()}.csv"`);
@@ -568,7 +568,7 @@ app.post('/api/admin/logs/email', requireAdmin, async (req, res) => {
   const to = mailer.parseRecipients(b.emails);
   if (!to.length) return res.status(400).json({ error: `Enter 1 to ${mailer.MAX_RECIPIENTS} valid e-mail addresses` });
   if (!mailer.isConfigured()) return res.status(503).json({ error: 'E-mail (SMTP) is not configured on this server. See server.env.' });
-  const r = queryLogRows({ hospital: b.hospital_code, from: b.from, to: b.to, limit: 5000 });
+  const r = queryLogRows({ hospital: b.hospital_code, from: b.from, to: b.to, view: b.view, limit: 5000 });
   if (r.error) return res.status(400).json({ error: r.error });
   try {
     await mailer.sendMail({
@@ -585,19 +585,21 @@ app.post('/api/admin/logs/email', requireAdmin, async (req, res) => {
   }
 });
 
+// Clear = hide from ONE view ({view:'dash'|'logs'}); the other view and Reports keep the alarm
 app.delete('/api/admin/logs', requireAdmin, (req, res) => {
-  const { ids, all } = req.body || {};
+  const { ids, all, view } = req.body || {};
+  if (view !== 'dash' && view !== 'logs') return res.status(400).json({ error: 'view must be dash or logs' });
   if (all) {
-    const info = deleteAllLogs.run();
-    return res.json({ deleted: info.changes });
+    return res.json({ deleted: (view === 'dash' ? hideAllDash : hideAllLogs).run().changes });
   }
   if (Array.isArray(ids) && ids.length > 0) {
-    const del = db.transaction((list) => {
+    const hide = view === 'dash' ? hideLogDash : hideLogLogs;
+    const run = db.transaction((list) => {
       let n = 0;
-      for (const id of list) { const r = deleteLogById.run(String(id)); n += r.changes; }
+      for (const id of list) n += hide.run(String(id)).changes;
       return n;
     });
-    return res.json({ deleted: del(ids) });
+    return res.json({ deleted: run(ids) });
   }
   res.status(400).json({ error: 'Provide ids[] or all:true' });
 });
