@@ -1,7 +1,7 @@
 {
   "name": "panic-alarm-server",
   "version": "1.0.0",
-  "description": "Panic Alarm Server — Hospital Emergency Notification System",
+  "description": "Panic Alarm Server — Clinic Emergency Notification System",
   "main": "server-main.js",
   "scripts": {
     "start": "node server.js",

@@ -765,7 +765,7 @@ function rebuildTrayMenu(config, state) {
   const items = config ? [
     { label: roleLabel, enabled: false },
     { label: roomLine, enabled: false },
-    { label: `Hospital: ${config.clientName || config.hospitalCode}`, enabled: false },
+    { label: `Clinic: ${config.clientName || config.hospitalCode}`, enabled: false },
     { label: serverInfo, enabled: false },
     { label: statusLabel, enabled: false },
     { type: 'separator' },

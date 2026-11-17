@@ -7,7 +7,7 @@
  *   SMTP_SECURE true = TLS from the start (implied for port 465)
  *   SMTP_USER   login user name                    (optional: leave empty for a relay that needs no login)
  *   SMTP_PASS   login password                     (keep it out of version control)
- *   SMTP_FROM   sender address, e.g. "Panic Alarm <alerts@hospital.org>"  (defaults to SMTP_USER)
+ *   SMTP_FROM   sender address, e.g. "Panic Alarm <alerts@clinic.org>"  (defaults to SMTP_USER)
  *
  * TLS 1.2 or higher is always required and the server certificate is always verified.
  */

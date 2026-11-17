@@ -24,7 +24,7 @@ body {
 /* ── Body ── */
 .card-body { padding: 16px 20px 18px; }
 
-/* ── Hospital pill ── */
+/* ── Clinic pill ── */
 .hospital-pill {
   display: flex; align-items: center; gap: 8px;
   background: #f0fdf4; border: 1px solid #bbf7d0;
@@ -161,11 +161,11 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
         <label>Server IP &amp; Port <span class="required-star">*</span></label>
         <div style="display:flex;gap:6px;align-items:center">
           <input type="text" id="serverUrl" placeholder="http://<server-ip>:<port>" autocomplete="off" spellcheck="false" style="margin-bottom:0;flex:1">
-          <button class="btn-reload" id="btnReload" title="Connect / Reload hospitals">⟳ Connect</button>
+          <button class="btn-reload" id="btnReload" title="Connect / Reload clinics">⟳ Connect</button>
         </div>
       </div>
       <div class="fg">
-        <label>Hospital / Clinic Name <span class="required-star">*</span></label>
+        <label>Clinic Name <span class="required-star">*</span></label>
         <select id="hospitalSelect" disabled>
           <option value="">— Enter server URL above to load —</option>
         </select>
@@ -178,7 +178,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
       </div>
     </div>
 
-    <!-- Hospital pill (edit mode only) -->
+    <!-- Clinic pill (edit mode only) -->
     <div class="hospital-pill" id="hospitalPill" style="display:none">
       <div class="hp-text">
         <div class="hp-name" id="hospitalName">—</div>
@@ -350,13 +350,13 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     return url;
   }
 
-  // ── Load hospitals dropdown ───────────────────────────────────────────────────
-  // preSelectCode: hospital code to pre-select after loading (optional)
+  // ── Load clinics dropdown ───────────────────────────────────────────────────
+  // preSelectCode: clinic code to pre-select after loading (optional)
   // writeBackUrl:  when true, write the normalised URL back into the input (only
   //                used during init/pre-fill so the user's own typing is never overwritten)
   async function loadHospitals(serverUrl, preSelectCode, writeBackUrl) {
     const sel = document.getElementById('hospitalSelect');
-    sel.innerHTML = '<option value="">⏳ Loading hospitals…</option>';
+    sel.innerHTML = '<option value="">⏳ Loading clinics…</option>';
     sel.disabled = true;
     verifiedHospitalCode = null;
     verifiedHospitalName = null;
@@ -371,7 +371,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       allHospitals = await resp.json();
       if (!allHospitals.length) {
-        sel.innerHTML = '<option value="">⚠️ No hospitals on server yet</option>';
+        sel.innerHTML = '<option value="">⚠️ No clinics on server yet</option>';
         return;
       }
       sel.innerHTML = '';
@@ -382,7 +382,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
         sel.appendChild(opt);
       });
       sel.disabled = false;
-      // Pre-select by saved hospital code, else fall back to first entry
+      // Pre-select by saved clinic code, else fall back to first entry
       const target = preSelectCode
         ? allHospitals.find(h => h.hospital_code === preSelectCode.toUpperCase())
         : null;
@@ -472,7 +472,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     document.getElementById('btnSecondary').title          = 'Clear form and reload server data';
     // All user fields blank
     clearRole();
-    // Auto-connect: load last known server URL + pre-select saved hospital + dept
+    // Auto-connect: load last known server URL + pre-select saved clinic + dept
     const hint = await api.getLastServerHint();
     if (hint && hint.serverUrl) {
       document.getElementById('serverUrl').value = hint.serverUrl;
@@ -491,7 +491,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     document.getElementById('btnSecondary').style.display  = 'inline-block';
     document.getElementById('btnSecondary').title          = 'Reset to last saved values';
 
-    // Hospital pill
+    // Clinic pill
     document.getElementById('hospitalName').textContent = cfg.clientName || cfg.hospitalCode || '—';
     document.getElementById('hospitalCode').textContent = cfg.hospitalCode ? `Code: ${cfg.hospitalCode}` : '—';
 
@@ -516,7 +516,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     // Load departments
     loadDepartmentsEdit(cfg.serverUrl, cfg.hospitalCode, cfg.department || '');
 
-    // Fetch live server data to refresh hospital name (silent, best-effort)
+    // Fetch live server data to refresh clinic name (silent, best-effort)
     fetchLiveServerData(cfg);
   }
 
@@ -590,7 +590,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     const department   = document.getElementById('departmentSelect').value || null;
 
     if (!serverUrl)            { flash('Server URL is required.', false); return; }
-    if (!verifiedHospitalCode) { flash('Please select a hospital from the dropdown.', false); return; }
+    if (!verifiedHospitalCode) { flash('Please select a clinic from the dropdown.', false); return; }
     const err = roomError();
     if (err) { flash(err, false); if (!selectedRole) shakeRoles(); return; }
     const roomNumber = getRoomValue();

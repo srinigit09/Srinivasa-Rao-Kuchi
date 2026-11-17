@@ -12,16 +12,15 @@ const BRAND = Object.freeze({
   location : 'Melbourne',
   email    : 'info@cianatech.com.au',
   website  : 'https://cianatech.com.au/',
+  developer: 'Srinivasa Rao Kuchi',
   copyright: 'Copyright 2026 by Ciana Tech Ltd.',
 });
 
 const ABOUT_TEXT =
-  'Panic Alarm is a hospital emergency alert system.\n\n' +
+  'Panic Alarm is a clinic emergency alert system.\n\n' +
   'Every room runs the Client, which keeps a Panic Alarm button on screen. Pressing it sends the alert to the ' +
-  'Server, which instantly pops up a warning on every other registered station of the same hospital. Each ' +
-  'station confirms that it displayed the alarm, and staff press OK to acknowledge it.\n\n' +
-  'The Server keeps a log of every alarm (who sent it, from which room, who received and acknowledged it), ' +
-  'shows it live on the dashboard, emails each alarm and lets the logs be downloaded or emailed.';
+  'Server, which instantly pops up a warning on every other registered station of the same clinic. Each ' +
+  'station confirms that it displayed the alarm, and staff press OK to acknowledge it.';
 
 function markIcon() {
   try { return nativeImage.createFromPath(path.join(__dirname, 'assets', 'ciana-mark.png')); } catch { return undefined; }
@@ -30,7 +29,7 @@ function markIcon() {
 function showAbout(parent) {
   return dialog.showMessageBox(parent && !parent.isDestroyed() ? parent : undefined, {
     type: 'none', icon: markIcon(), title: `About Us - ${BRAND.name}`,
-    message: BRAND.name, detail: `${ABOUT_TEXT}\n\n${BRAND.copyright}`,
+    message: BRAND.name, detail: `${ABOUT_TEXT}\n\nDeveloped by ${BRAND.developer}\n\n${BRAND.copyright}`,
     buttons: ['Close'], defaultId: 0, noLink: true,
   });
 }

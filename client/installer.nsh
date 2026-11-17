@@ -8,7 +8,7 @@
 !macro customWelcomePage
   !insertmacro skipPageIfUpdated
   !define MUI_WELCOMEPAGE_TITLE "Ciana Technologies"
-  !define MUI_WELCOMEPAGE_TEXT "Welcome to the Panic Alarm Client setup.$\r$\n$\r$\nThis wizard installs Panic Alarm Client, part of the Panic Alarm hospital emergency alert system by Ciana Technologies.$\r$\n$\r$\nClick Next to continue.$\r$\n$\r$\nCopyright 2026 by Ciana Tech Ltd.$\r$\nhttps://cianatech.com.au/"
+  !define MUI_WELCOMEPAGE_TEXT "Welcome to the Panic Alarm Client setup.$\r$\n$\r$\nThis wizard installs Panic Alarm Client, part of the Panic Alarm clinic emergency alert system by Ciana Technologies.$\r$\n$\r$\nClick Install to continue.$\r$\n$\r$\nCopyright 2026 by Ciana Tech Ltd.$\r$\nhttps://cianatech.com.au/"
   !insertmacro MUI_PAGE_WELCOME
 !macroend
 

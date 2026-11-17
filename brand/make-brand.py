@@ -92,7 +92,7 @@ def build(dest_assets):
     side.paste(lg, (12, 60), lg)
     d = ImageDraw.Draw(side)
     f1, f2 = font(FONT_B, 13), font('/System/Library/Fonts/Supplemental/Arial.ttf', 11)
-    for txt, fnt, yy, col in (('Panic Alarm System', f1, 160, INK), ('Hospital emergency alerts', f2, 180, (87, 96, 106))):
+    for txt, fnt, yy, col in (('Panic Alarm System', f1, 160, INK), ('Clinic emergency alerts', f2, 180, (87, 96, 106))):
         d.text(((W - d.textlength(txt, font=fnt)) / 2, yy), txt, font=fnt, fill=col)
     d.rectangle([0, H - 6, W, H], fill=BLUE)
     side.save(os.path.join(dest_assets, 'installerSidebar.bmp'), 'BMP')

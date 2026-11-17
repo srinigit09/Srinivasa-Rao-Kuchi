@@ -26,18 +26,26 @@ body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; background
   flex: 1; overflow-y: auto; min-height: 0;
 }
 .sidebar .brand {
-  padding: 20px 18px 16px;
-  border-bottom: 1px solid #f1f5f9;
+  padding: 18px 16px 16px;
+  background: linear-gradient(180deg,#f4f8fd 0%,#ffffff 100%);
+  border-bottom: 1px solid #e2e8f0;
+  position: relative;
 }
-.co-brand { text-align: center; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #f1f5f9; }
-.co-brand img { width: 150px; max-width: 100%; height: auto; display: block; margin: 0 auto; }
-.brand-logo { display: flex; align-items: center; gap: 10px; }
-.brand-icon { width: 36px; height: 36px; border-radius: 10px;
-  background: linear-gradient(135deg,#ef4444,#b91c1c);
-  display: flex; align-items: center; justify-content: center; font-size: 18px;
-  box-shadow: 0 3px 10px rgba(239,68,68,.3); flex-shrink: 0; }
-.brand-text h2 { font-size: 13px; color: #1e293b; font-weight: 700; letter-spacing: .8px; }
-.brand-text p  { font-size: 10px; color: #94a3b8; margin-top: 1px; letter-spacing: .3px; }
+.sidebar .brand::before {
+  content: ''; position: absolute; left: 0; top: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg,#2c5f80 0%,#3b82d4 60%,#ef4444 100%);
+}
+.co-brand { text-align: center; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid #e5eaf1; }
+.co-brand img { width: 128px; max-width: 100%; height: auto; display: block; margin: 0 auto; }
+.brand-logo { display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+  background: #fff; border: 1px solid #e5eaf1; border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(15,23,42,.06); }
+.brand-icon { width: 38px; height: 38px; border-radius: 10px;
+  background: linear-gradient(135deg,#f87171,#b91c1c);
+  display: flex; align-items: center; justify-content: center; font-size: 19px;
+  box-shadow: 0 3px 10px rgba(239,68,68,.35); flex-shrink: 0; }
+.brand-text h2 { font-size: 14px; color: #0f172a; font-weight: 800; letter-spacing: 1px; line-height: 1.15; }
+.brand-text p  { font-size: 10px; color: #3b82d4; font-weight: 700; margin-top: 3px; letter-spacing: 1.6px; }
 
 /* Nav sections */
 .nav-section { padding: 8px 0 2px; }
@@ -366,7 +374,7 @@ tr:hover td { background: #f8fafc; }
           <table>
             <thead><tr>
               <th style="width:36px"><input type="checkbox" id="selectAllDash" title="Select all"></th>
-              <th>Time</th><th>Hospital</th><th>User</th><th>Alarm Sent By</th><th>Acked By</th><th>Status</th>
+              <th>Time</th><th>Clinic</th><th>User</th><th>Alarm Sent By</th><th>Acked By</th><th>Status</th>
             </tr></thead>
             <tbody id="recentAlarms"><tr class="empty-row"><td colspan="7">No alarms yet</td></tr></tbody>
           </table>
@@ -378,7 +386,7 @@ tr:hover td { background: #f8fafc; }
         <div class="section-hdr"><h3>Registered Clients</h3></div>
         <div class="section-body" style="padding:0">
           <table>
-            <thead><tr><th>Hospital Name</th><th>Code</th><th>Location</th><th>Users</th><th>Limit</th><th>Added</th></tr></thead>
+            <thead><tr><th>Clinic Name</th><th>Code</th><th>Location</th><th>Users</th><th>Limit</th><th>Added</th></tr></thead>
             <tbody id="dash-clients-body"><tr class="empty-row"><td colspan="6">Loading…</td></tr></tbody>
           </table>
         </div>
@@ -389,7 +397,7 @@ tr:hover td { background: #f8fafc; }
         <div class="section-hdr"><h3>All Users</h3></div>
         <div class="section-body" style="padding:0">
           <table>
-            <thead><tr><th>Role</th><th>Hospital</th><th>Location</th><th>Dept/Block</th></tr></thead>
+            <thead><tr><th>Role</th><th>Clinic</th><th>Location</th><th>Dept/Block</th></tr></thead>
             <tbody id="dash-users-body"><tr class="empty-row"><td colspan="4">Loading…</td></tr></tbody>
           </table>
         </div>
@@ -402,15 +410,15 @@ tr:hover td { background: #f8fafc; }
       <div class="client-hero">
         <div class="hero-sub">Alarm Management System</div>
         <h1>Client Name</h1>
-        <p style="margin-top:6px;font-size:13px;color:rgba(255,255,255,.7)">Register a new hospital or clinic in the system</p>
+        <p style="margin-top:6px;font-size:13px;color:rgba(255,255,255,.7)">Register a new clinic in the system</p>
       </div>
 
       <div class="section">
         <div class="section-hdr"><h3>New Client Details</h3></div>
         <div class="section-body">
           <div class="form-grid">
-            <div class="fg"><label>Client / Hospital Name <span class="required-star">*</span></label><input type="text" id="cName" placeholder="e.g. Apollo Hospital"></div>
-            <div class="fg"><label>Hospital Code <span class="required-star">*</span></label><input type="text" id="cCode" placeholder="e.g. APL001" style="text-transform:uppercase"></div>
+            <div class="fg"><label>Client / Clinic Name <span class="required-star">*</span></label><input type="text" id="cName" placeholder="e.g. Apollo Clinic"></div>
+            <div class="fg"><label>Clinic Code <span class="required-star">*</span></label><input type="text" id="cCode" placeholder="e.g. APL001" style="text-transform:uppercase"></div>
             <div class="fg"><label>System Limit</label><input type="number" id="cLimit" value="100" min="1" max="10000"></div>
             <div class="fg">
               <label>Location</label>
@@ -420,7 +428,7 @@ tr:hover td { background: #f8fafc; }
             </div>
           </div>
           <div class="form-grid" style="margin-top:14px">
-            <div class="fg"><label>Contact Email</label><input type="email" id="cEmail" placeholder="admin@hospital.com"></div>
+            <div class="fg"><label>Contact Email</label><input type="email" id="cEmail" placeholder="admin@clinic.com"></div>
             <div class="fg">
               <label>Email Notifications</label>
               <div class="checkbox-row"><input type="checkbox" id="cEmailLogs"> Send Alarm Logs</div>
@@ -431,7 +439,7 @@ tr:hover td { background: #f8fafc; }
             </div>
           </div>
           <p style="margin-top:14px;font-size:12px;color:#94a3b8">
-            The <strong>Hospital Code</strong> is used by client apps to register. System Limit is the max number of PCs allowed.
+            The <strong>Clinic Code</strong> is used by client apps to register. System Limit is the max number of PCs allowed.
           </p>
         </div>
       </div>
@@ -440,11 +448,11 @@ tr:hover td { background: #f8fafc; }
     <!-- CLIENT LIST -->
     <div class="tab-content" id="page-clientList">
       <div class="page-title">Client List</div>
-      <div class="page-sub">All registered hospitals — click a name to manage its users</div>
+      <div class="page-sub">All registered clinics — click a name to manage its users</div>
       <div class="section">
         <div class="section-body" style="padding:0">
           <table>
-            <thead><tr><th>Hospital Name (Code)</th><th>Location</th><th>Users</th><th>Email</th><th>Notifications</th><th>Limit</th><th>Added</th><th style="text-align:right">Actions</th></tr></thead>
+            <thead><tr><th>Clinic Name (Code)</th><th>Location</th><th>Users</th><th>Email</th><th>Notifications</th><th>Limit</th><th>Added</th><th style="text-align:right">Actions</th></tr></thead>
             <tbody id="clientsTableBody"><tr class="empty-row"><td colspan="8">No clients yet</td></tr></tbody>
           </table>
         </div>
@@ -499,7 +507,7 @@ tr:hover td { background: #f8fafc; }
 
       <div class="section">
         <div class="section-hdr">
-          <h3>All Users in this Hospital</h3>
+          <h3>All Users in this Clinic</h3>
           <span style="font-size:11px;color:#64748b">
             <span class="badge badge-self">Self-reg</span> via client app &nbsp;
             <span class="badge badge-admin">Admin</span> added here
@@ -519,15 +527,15 @@ tr:hover td { background: #f8fafc; }
     <!-- LOCATIONS -->
     <div class="tab-content" id="page-departments">
       <div class="page-title">Locations</div>
-      <div class="page-sub">Add and manage hospital locations — these appear in the client setup dropdown</div>
+      <div class="page-sub">Add and manage clinic locations — these appear in the client setup dropdown</div>
 
       <div class="section" style="margin-bottom:16px">
         <div class="section-hdr"><h3>Add Location</h3></div>
         <div class="section-body">
           <div class="form-grid">
             <div class="fg">
-              <label>Hospital <span class="required-star">*</span></label>
-              <select id="dHospital"><option value="">— Select Hospital —</option></select>
+              <label>Clinic <span class="required-star">*</span></label>
+              <select id="dHospital"><option value="">— Select Clinic —</option></select>
             </div>
             <div class="fg">
               <label>Location Name <span class="required-star">*</span></label>
@@ -545,7 +553,7 @@ tr:hover td { background: #f8fafc; }
         <div class="section-hdr"><h3>All Locations</h3></div>
         <div class="section-body" style="padding:0">
           <table>
-            <thead><tr><th>Hospital</th><th>Location Name</th><th>Created</th><th style="text-align:right">Actions</th></tr></thead>
+            <thead><tr><th>Clinic</th><th>Location Name</th><th>Created</th><th style="text-align:right">Actions</th></tr></thead>
             <tbody id="deptsTableBody"><tr class="empty-row"><td colspan="4">No locations yet</td></tr></tbody>
           </table>
         </div>
@@ -562,8 +570,8 @@ tr:hover td { background: #f8fafc; }
         <div class="section-body">
           <div class="form-grid">
             <div class="fg">
-              <label>Hospital <span class="required-star">*</span></label>
-              <select id="dbHospital"><option value="">— Select Hospital —</option></select>
+              <label>Clinic <span class="required-star">*</span></label>
+              <select id="dbHospital"><option value="">— Select Clinic —</option></select>
             </div>
             <div class="fg">
               <label>Department / Block Name <span class="required-star">*</span></label>
@@ -580,7 +588,7 @@ tr:hover td { background: #f8fafc; }
         <div class="section-hdr"><h3>All Departments</h3></div>
         <div class="section-body" style="padding:0">
           <table>
-            <thead><tr><th>Hospital</th><th>Department / Block</th><th>Created</th><th style="text-align:right">Actions</th></tr></thead>
+            <thead><tr><th>Clinic</th><th>Department / Block</th><th>Created</th><th style="text-align:right">Actions</th></tr></thead>
             <tbody id="deptBlocksTableBody"><tr class="empty-row"><td colspan="4">No departments yet</td></tr></tbody>
           </table>
         </div>
@@ -595,7 +603,7 @@ tr:hover td { background: #f8fafc; }
         <div class="section-hdr"><h3>Filter</h3></div>
         <div class="section-body">
           <div class="form-grid">
-            <div class="fg"><label>Hospital Code</label><input type="text" id="rHospital" placeholder="Leave blank for all"></div>
+            <div class="fg"><label>Clinic Code</label><input type="text" id="rHospital" placeholder="Leave blank for all"></div>
             <div class="fg"><label>From</label><input type="datetime-local" id="rFrom"></div>
             <div class="fg"><label>To</label><input type="datetime-local" id="rTo"></div>
             <div class="fg" style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap">
@@ -609,7 +617,7 @@ tr:hover td { background: #f8fafc; }
       <div class="section">
         <div class="section-body" style="padding:0">
           <table>
-            <thead><tr><th>Time</th><th>Hospital</th><th>User</th><th>Alarm Sent By</th><th>System</th><th>Acked By</th><th>Status</th></tr></thead>
+            <thead><tr><th>Time</th><th>Clinic</th><th>User</th><th>Alarm Sent By</th><th>System</th><th>Acked By</th><th>Status</th></tr></thead>
             <tbody id="reportBody"><tr class="empty-row"><td colspan="7">Run report to see data</td></tr></tbody>
           </table>
         </div>
@@ -634,7 +642,7 @@ tr:hover td { background: #f8fafc; }
             <thead>
               <tr>
                 <th style="width:36px"><input type="checkbox" id="selectAllLogs" title="Select all"></th>
-                <th>Time</th><th>Alarm ID</th><th>Hospital</th><th>User</th><th>Alarm Sent By</th><th>Acked By</th><th>Status</th>
+                <th>Time</th><th>Alarm ID</th><th>Clinic</th><th>User</th><th>Alarm Sent By</th><th>Acked By</th><th>Status</th>
               </tr>
             </thead>
             <tbody id="logsBody"><tr class="empty-row"><td colspan="8">Loading…</td></tr></tbody>
@@ -757,7 +765,7 @@ tr:hover td { background: #f8fafc; }
     <div class="modal-title">E-mail alarm logs</div>
     <div class="fg">
       <label>Send to (up to 5 e-mail addresses, comma separated)</label>
-      <input type="text" id="emailLogsTo" placeholder="name@hospital.org, other@hospital.org" autocomplete="off">
+      <input type="text" id="emailLogsTo" placeholder="name@clinic.org, other@clinic.org" autocomplete="off">
     </div>
     <p class="pw-hint" id="emailLogsNote" style="margin-top:10px"></p>
     <div class="modal-btns">
@@ -772,14 +780,14 @@ tr:hover td { background: #f8fafc; }
     <div class="modal-title">Edit Client</div>
     <input type="hidden" id="ecId">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-      <div class="fg" style="grid-column:1/-1"><label>Client / Hospital Name</label><input type="text" id="ecName"></div>
-      <div class="fg"><label>Hospital Code</label><input type="text" id="ecCode" style="text-transform:uppercase"></div>
+      <div class="fg" style="grid-column:1/-1"><label>Client / Clinic Name</label><input type="text" id="ecName"></div>
+      <div class="fg"><label>Clinic Code</label><input type="text" id="ecCode" style="text-transform:uppercase"></div>
       <div class="fg"><label>System Limit</label><input type="number" id="ecLimit" min="1"></div>
       <div class="fg" style="grid-column:1/-1">
         <label>Location</label>
         <select id="ecLocation"><option value="">None</option></select>
       </div>
-      <div class="fg" style="grid-column:1/-1"><label>Contact Email</label><input type="email" id="ecEmail" placeholder="admin@hospital.com"></div>
+      <div class="fg" style="grid-column:1/-1"><label>Contact Email</label><input type="email" id="ecEmail" placeholder="admin@clinic.com"></div>
       <div class="fg" style="grid-column:1/-1">
         <label>Email Notifications</label>
         <div style="display:flex;gap:24px;margin-top:4px">
@@ -1163,7 +1171,7 @@ function initAddClient() {
     const eLogs    = document.getElementById('cEmailLogs').checked ? 1 : 0;
     const eReps    = document.getElementById('cEmailReports').checked ? 1 : 0;
     const location = document.getElementById('cLocation').value || null;
-    if (!name || !code) { flash('Client name and hospital code are required', false); return; }
+    if (!name || !code) { flash('Client name and clinic code are required', false); return; }
     const r = await api('POST', '/api/admin/clients', { client_name: name, hospital_code: code, system_limit: parseInt(limit), email, email_logs: eLogs, email_reports: eReps, location });
     if (r.error) { flash(r.error, false); return; }
     flash('✅ Client added: ' + name, true);
@@ -1235,7 +1243,7 @@ async function openEditClient(id) {
   document.getElementById('ecEmail').value = c.email || '';
   document.getElementById('ecEmailLogs').checked    = !!c.email_logs;
   document.getElementById('ecEmailReports').checked = !!c.email_reports;
-  // Load location dropdown scoped to this hospital, then set current value
+  // Load location dropdown scoped to this clinic, then set current value
   await loadLocationDropdown('ecLocation', c.hospital_code);
   document.getElementById('ecLocation').value = c.location || '';
   document.getElementById('editClientModal').classList.add('open');
@@ -1271,7 +1279,7 @@ function drillClient(id, name, code) {
   currentClientId = id;
   currentHospitalCode = code;
   document.getElementById('clientUsersTitle').textContent = name + ' (' + code + ')';
-  document.getElementById('clientUsersSub').textContent = 'Hospital Code: ' + code + ' — All users registered at this hospital';
+  document.getElementById('clientUsersSub').textContent = 'Clinic Code: ' + code + ' — All users registered at this clinic';
   showPage('clientUsers');
 }
 
@@ -1427,7 +1435,7 @@ async function deleteUser(id, name) {
 async function loadLocationsPage() {
   const clients = await api('GET', '/api/admin/clients');
   const sel = document.getElementById('dHospital');
-  sel.innerHTML = '<option value="">— Select Hospital —</option>';
+  sel.innerHTML = '<option value="">— Select Clinic —</option>';
   if (Array.isArray(clients)) {
     clients.forEach(c => {
       const o = document.createElement('option');
@@ -1460,7 +1468,7 @@ function initDepartments() {
   document.getElementById('btnAddDept').addEventListener('click', async () => {
     const code = document.getElementById('dHospital').value;
     const name = document.getElementById('dName').value.trim();
-    if (!code) { flash('Please select a hospital', false); return; }
+    if (!code) { flash('Please select a clinic', false); return; }
     if (!name) { flash('Location name is required', false); return; }
     const r = await api('POST', '/api/admin/locations', { hospital_code: code, name });
     if (r.error) { flash(r.error, false); return; }
@@ -1500,7 +1508,7 @@ async function deleteDept(id, name) {
 async function loadDeptBlocksPage() {
   const clients = await api('GET', '/api/admin/clients');
   const sel = document.getElementById('dbHospital');
-  sel.innerHTML = '<option value="">— Select Hospital —</option>';
+  sel.innerHTML = '<option value="">— Select Clinic —</option>';
   if (Array.isArray(clients)) {
     clients.forEach(c => {
       const o = document.createElement('option');
@@ -1533,7 +1541,7 @@ function initDeptBlocks() {
   document.getElementById('btnAddDeptBlock').addEventListener('click', async () => {
     const code = document.getElementById('dbHospital').value;
     const name = document.getElementById('dbName').value.trim();
-    if (!code) { flash('Please select a hospital', false); return; }
+    if (!code) { flash('Please select a clinic', false); return; }
     if (!name) { flash('Department name is required', false); return; }
     const r = await api('POST', '/api/admin/dept-blocks', { hospital_code: code, name });
     if (r.error) { flash(r.error, false); return; }

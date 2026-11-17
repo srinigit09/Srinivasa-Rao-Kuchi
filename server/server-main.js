@@ -240,7 +240,7 @@ function chooseKeepOrFresh() {
     type: 'question',
     title: 'Panic Alarm Server — Existing data found',
     message: 'Existing server data was found from a previous installation.',
-    detail: 'Keep data (upgrade): hospitals, users, alarm logs and settings are kept, and registered clients keep working.\n\n' +
+    detail: 'Keep data (upgrade): clinics, users, alarm logs and settings are kept, and registered clients keep working.\n\n' +
             'Start fresh: all data is cleared (only the license activation is kept). The old database is saved as a backup file first, and clients must register again.',
     buttons: ['Keep data (upgrade)', 'Start fresh'],
     defaultId: 0,

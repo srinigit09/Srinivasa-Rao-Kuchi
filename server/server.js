@@ -124,7 +124,7 @@ app.get('/health', (req, res) => res.json({
   ts: new Date().toISOString()
 }));
 
-// ── Public: list hospitals for client dropdown (no auth) ───────
+// ── Public: list clinics for client dropdown (no auth) ───────
 app.get('/api/public/hospitals', (req, res) => {
   const rows = listClients.all();
   res.json(rows.map(r => ({
@@ -134,7 +134,7 @@ app.get('/api/public/hospitals', (req, res) => {
   })));
 });
 
-// ── Public: get dept/blocks by hospital code (for client setup dropdown) ───
+// ── Public: get dept/blocks by clinic code (for client setup dropdown) ───
 app.get('/api/public/departments/:hospitalCode', (req, res) => {
   const code = req.params.hospitalCode.trim().toUpperCase();
   // Return only type='department' rows to the client setup screen
@@ -146,7 +146,7 @@ app.get('/api/public/departments/:hospitalCode', (req, res) => {
 app.get('/api/public/server-info', (req, res) => {
   const ips = Object.values(os.networkInterfaces())
     .flat().filter(i => i && i.family === 'IPv4' && !i.internal).map(i => i.address);
-  const hospitalRow = listClients.all()[0]; // First hospital registered
+  const hospitalRow = listClients.all()[0]; // First clinic registered
   res.json({
     serverIp    : ips[0] || 'localhost',
     port        : PORT,
@@ -343,7 +343,7 @@ app.post('/api/admin/clients', requireAdmin, (req, res) => {
     res.status(201).json({ id: r.lastInsertRowid, message: 'Client created' });
   } catch (e) {
     if (e.message.includes('UNIQUE'))
-      return res.status(409).json({ error: 'Hospital code already exists' });
+      return res.status(409).json({ error: 'Clinic code already exists' });
     throw e;
   }
 });
@@ -398,7 +398,7 @@ app.post('/api/admin/clients/:id/users', requireAdmin, (req, res) => {
   const uid  = String(user_id ?? '').trim();
   const name = String(user_name ?? '').trim() || roleTitle(normalizedRole);
   if (uid && findClientUserByUserId.get(uid, client.hospital_code))
-    return res.status(409).json({ error: `User ID "${uid}" already exists in this hospital` });
+    return res.status(409).json({ error: `User ID "${uid}" already exists in this clinic` });
   const deviceId = 'admin-' + uuidv4();
   const token    = signClientToken({
     deviceId, hospital_code: client.hospital_code,
@@ -420,7 +420,7 @@ app.put('/api/admin/client-users/:id', requireAdmin, (req, res) => {
   if (user_id && user_id !== u.user_id) {
     const existing = findClientUserByUserId.get(user_id, u.hospital_code);
     if (existing && existing.id !== u.id)
-      return res.status(409).json({ error: `User ID "${user_id}" already exists in this hospital` });
+      return res.status(409).json({ error: `User ID "${user_id}" already exists in this clinic` });
   }
   const normalizedRole = normalizeRole(role || u.role);
   let roomValue = u.room_number;
@@ -472,7 +472,7 @@ app.post('/api/admin/locations', requireAdmin, (req, res) => {
     res.status(201).json({ id: r.lastInsertRowid, message: 'Location created' });
   } catch (e) {
     if (e.message.includes('UNIQUE'))
-      return res.status(409).json({ error: 'Location already exists for this hospital' });
+      return res.status(409).json({ error: 'Location already exists for this clinic' });
     throw e;
   }
 });
@@ -513,7 +513,7 @@ app.post('/api/admin/dept-blocks', requireAdmin, (req, res) => {
     res.status(201).json({ id: r.lastInsertRowid, message: 'Department created' });
   } catch (e) {
     if (e.message.includes('UNIQUE'))
-      return res.status(409).json({ error: 'Department already exists for this hospital' });
+      return res.status(409).json({ error: 'Department already exists for this clinic' });
     throw e;
   }
 });
@@ -760,7 +760,7 @@ app.post('/api/client/register', (req, res) => {
 
   const code   = hospital_code.trim().toUpperCase();
   const client = findClientByCode.get(code);
-  if (!client) return res.status(404).json({ error: 'Hospital code not recognised. Contact your administrator.' });
+  if (!client) return res.status(404).json({ error: 'Clinic code not recognised. Contact your administrator.' });
 
   // Check system limit
   const { cnt } = countClientUsers.get(client.id);
@@ -871,7 +871,7 @@ function emitAlarmUpdated(alarmId) {
   try { io.to('admin').emit('alarm_updated', { alarmId }); } catch { /* best effort */ }
 }
 
-// Every alarm is e-mailed to the hospital's contact address (SMTP). Never blocks or fails the alarm itself.
+// Every alarm is e-mailed to the clinic's contact address (SMTP). Never blocks or fails the alarm itself.
 async function emailAlarm(alarmId) {
   if (!mailer.isConfigured()) return;
   try {
@@ -965,7 +965,7 @@ app.post('/api/client/alarm/trigger', requireClient, async (req, res) => {
     catch (e) { console.error('[ALARM] settle failed', e.message); }
   }, ALARM_SETTLE_MS);
 
-  // ── Deliver to the OTHER stations of this hospital and find out who really received it ──
+  // ── Deliver to the OTHER stations of this clinic and find out who really received it ──
   // The sender's own PC is excluded (all OS users on one PC share a device id). "Delivered" means a
   // station CONFIRMED it displayed the alarm — a press the server merely accepted is not delivery.
   let recipients = [];
@@ -1047,7 +1047,7 @@ app.post('/api/client/alarm/trigger', requireClient, async (req, res) => {
   res.json({ alarmId, delivered, message: 'Alarm sent' });
 });
 
-// A station may only report on alarms of its own hospital
+// A station may only report on alarms of its own clinic
 function ownAlarm(u, alarmId) {
   const a = findAlarm.get(String(alarmId));
   return !!a && String(a.hospital_code || '').toUpperCase() === String(u.hospital_code || '').trim().toUpperCase();

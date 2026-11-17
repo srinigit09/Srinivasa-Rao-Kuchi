@@ -1,7 +1,7 @@
 {
   "name": "panic-alarm-client",
   "version": "1.0.0",
-  "description": "Panic Alarm Client - Zero-login desktop app for hospital rooms",
+  "description": "Panic Alarm Client - Zero-login desktop app for clinic rooms",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

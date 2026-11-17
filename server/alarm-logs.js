@@ -110,7 +110,7 @@ function tzLabel(tzOffsetMin) {
 }
 
 function toCsv(rows, tzOffsetMin = 0) {
-  const head = ['Time (' + tzLabel(tzOffsetMin) + ')', 'Alarm ID', 'Hospital', 'User', 'Alarm Sent By', 'System',
+  const head = ['Time (' + tzLabel(tzOffsetMin) + ')', 'Alarm ID', 'Clinic', 'User', 'Alarm Sent By', 'System',
                 'Acked By', 'Status', 'Station Responses'];
   const lines = [head.map(csvCell).join(',')];
   for (const r of rows) {
@@ -141,9 +141,9 @@ function buildAlarmEmail(alarmId) {
     'PANIC ALARM', '',
     `Alarm ID        : ${a.alarm_id}`,
     `Time            : ${whenText}`,
-    `Hospital        : ${hospName}`,
+    `Clinic          : ${hospName}`,
     `User            : ${sentBy}`,
-    `Alarm Sent By  : ${a.room_number}`,
+    `Alarm Sent By   : ${a.room_number}`,
     `System          : ${a.system_number || '—'}`,
     `Severity        : ${a.severity}`,
     `Message         : ${a.message}`, '',
@@ -161,7 +161,7 @@ function buildAlarmEmail(alarmId) {
     `<td style="padding:5px 10px;border:1px solid #e5e7eb">${escHtml(STATUS_LABEL[s.status] || s.status)}</td></tr>`).join('');
   const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#1f2328">
 <h2 style="color:#dc2626;margin:0 0 10px">PANIC ALARM</h2>
-<table style="border-collapse:collapse">${row('Alarm ID', a.alarm_id)}${row('Time', whenText)}${row('Hospital', hospName)}${row('User', sentBy)}${row('Alarm Sent By', a.room_number)}${row('System', a.system_number || '—')}${row('Severity', a.severity)}${row('Message', a.message)}</table>
+<table style="border-collapse:collapse">${row('Alarm ID', a.alarm_id)}${row('Time', whenText)}${row('Clinic', hospName)}${row('User', sentBy)}${row('Alarm Sent By', a.room_number)}${row('System', a.system_number || '—')}${row('Severity', a.severity)}${row('Message', a.message)}</table>
 <p style="margin:14px 0 6px"><b>Stations:</b> ${stations.length} &nbsp;|&nbsp; <b>Delivered:</b> ${delivered} &nbsp;|&nbsp; <b>Not delivered:</b> ${notDelivered}</p>
 ${stations.length ? `<table style="border-collapse:collapse"><tr style="background:#f7f8fa"><th style="padding:5px 10px;border:1px solid #e5e7eb;text-align:left">Station</th><th style="padding:5px 10px;border:1px solid #e5e7eb;text-align:left">Room</th><th style="padding:5px 10px;border:1px solid #e5e7eb;text-align:left">Status</th></tr>${stationRows}</table>` : '<p>No other station was registered or online to receive this alarm.</p>'}
 </div>`;

@@ -25,7 +25,7 @@ db.exec(`
     created_at  DATETIME DEFAULT (datetime('now'))
   );
 
-  -- Clients = hospital / organisation registered in the system
+  -- Clients = clinic / organisation registered in the system
   -- hospital_code must match the code entered on each client PC
   CREATE TABLE IF NOT EXISTS clients (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -196,7 +196,7 @@ if (migrationResult.backup) console.log(`[DB] Upgraded schema v${migrationResult
 // ── One-time cleanup: remove soft-deleted clients so hospital_code UNIQUE is freed ──
 const ghostClients = db.prepare('DELETE FROM clients WHERE active = 0').run();
 if (ghostClients.changes > 0)
-  console.log(`[DB] Cleaned up ${ghostClients.changes} soft-deleted client(s) — hospital codes freed`);
+  console.log(`[DB] Cleaned up ${ghostClients.changes} soft-deleted client(s) — clinic codes freed`);
 
 // ── Seed admin on first run ────────────────────────────────────
 const seedAdmin = db.transaction(() => {
