@@ -52,26 +52,39 @@ function queryLogRows(f = {}) {
            r.os_user, r.user_title, r.room_label, r.status, r.ack_at
     FROM a LEFT JOIN alarm_recipient r ON r.alarm_id = a.alarm_id
     ORDER BY a.triggered_at DESC, a.id DESC, r.id ASC`;
-  const rows = db.prepare(sql).all(...args).map((r) => {
-    const hasStation = r.status !== null && r.status !== undefined;
-    let status = r.status;
-    if (!hasStation) {   // alarm with no station records (nobody else was registered/online) or a pre-upgrade alarm
+  // One row per ALARM. Every station's own result is folded in: "Acked By" is the room(s) of the station(s)
+  // that pressed OK ("None" when nobody did); "stations" keeps each station's result (CSV, e-mail, tooltip).
+  const byAlarm = new Map();
+  for (const r of db.prepare(sql).all(...args)) {
+    let g = byAlarm.get(r.alarm_id);
+    if (!g) { g = { base: r, stations: [] }; byAlarm.set(r.alarm_id, g); }
+    if (r.status !== null && r.status !== undefined) {
+      g.stations.push({ who: who(r.user_title, r.os_user), room: r.room_label || '—', status: r.status, status_label: STATUS_LABEL[r.status] || r.status });
+    }
+  }
+  const rows = [...byAlarm.values()].map(({ base: r, stations }) => {
+    const ackedRooms = [...new Set(stations.filter(s => s.status === 'acked').map(s => s.room))];
+    let status;
+    if (stations.length) {
+      if (ackedRooms.length) status = 'acked';
+      else if (stations.every(s => s.status === 'not_delivered')) status = 'not_delivered';
+      else if (stations.some(s => s.status === 'no_response')) status = 'no_response';
+      else status = 'delivered';
+    } else {   // no station records (nobody else was registered/online) or a pre-upgrade alarm
       status = r.acknowledged ? 'acked' : (r.delivered_count === 0 ? 'not_delivered' : (r.no_response ? 'no_response' : 'delivered'));
     }
     return {
       alarm_id      : r.alarm_id,
       hospital_code : r.hospital_code,
       triggered_at  : r.triggered_at,
-      sent_by       : who(r.triggered_by, r.sender_os_user),
-      sent_room     : r.sent_room || '—',
+      sent_by       : who(r.triggered_by, r.sender_os_user),   // "User" column, e.g. Doctor(srini)
+      sent_room     : r.sent_room || '—',                      // "Alarm Sent By" column: the room the alarm came from
       system_number : r.system_number || '',
-      received_by   : hasStation ? who(r.user_title, r.os_user) : '—',
-      received_room : hasStation ? (r.room_label || '—') : '—',
-      // Only a station that really pressed OK has an acknowledging room; everything else is "None"
-      acked_by      : hasStation ? (status === 'acked' ? (r.room_label || 'None') : 'None')
-                                 : (r.acknowledged && r.ack_by ? r.ack_by : 'None'),
+      acked_by      : ackedRooms.length ? ackedRooms.join(', ')
+                                        : (!stations.length && r.acknowledged && r.ack_by ? r.ack_by : 'None'),
       status,
       status_label  : STATUS_LABEL[status] || status,
+      stations,
     };
   });
   return { rows };
@@ -97,12 +110,13 @@ function tzLabel(tzOffsetMin) {
 }
 
 function toCsv(rows, tzOffsetMin = 0) {
-  const head = ['Time (' + tzLabel(tzOffsetMin) + ')', 'Alarm ID', 'Hospital', 'Sent By', 'Alarm Sent Room', 'System',
-                'Received By', 'Received Room', 'Acked By', 'Status'];
+  const head = ['Time (' + tzLabel(tzOffsetMin) + ')', 'Alarm ID', 'Hospital', 'User', 'Alarm Sent By', 'System',
+                'Acked By', 'Status', 'Station Responses'];
   const lines = [head.map(csvCell).join(',')];
   for (const r of rows) {
     lines.push([fmtLocal(r.triggered_at, tzOffsetMin), r.alarm_id, r.hospital_code, r.sent_by, r.sent_room, r.system_number,
-                r.received_by, r.received_room, r.acked_by, r.status_label].map(csvCell).join(','));
+                r.acked_by, r.status_label,
+                r.stations.map(x => `${x.who} [${x.room}]: ${x.status_label}`).join('; ')].map(csvCell).join(','));
   }
   return '\ufeff' + lines.join('\r\n') + '\r\n';   // BOM so Excel reads UTF-8
 }
@@ -128,8 +142,8 @@ function buildAlarmEmail(alarmId) {
     `Alarm ID        : ${a.alarm_id}`,
     `Time            : ${whenText}`,
     `Hospital        : ${hospName}`,
-    `Sent By         : ${sentBy}`,
-    `Alarm Sent Room : ${a.room_number}`,
+    `User            : ${sentBy}`,
+    `Alarm Sent By  : ${a.room_number}`,
     `System          : ${a.system_number || '—'}`,
     `Severity        : ${a.severity}`,
     `Message         : ${a.message}`, '',
@@ -147,9 +161,9 @@ function buildAlarmEmail(alarmId) {
     `<td style="padding:5px 10px;border:1px solid #e5e7eb">${escHtml(STATUS_LABEL[s.status] || s.status)}</td></tr>`).join('');
   const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#1f2328">
 <h2 style="color:#dc2626;margin:0 0 10px">PANIC ALARM</h2>
-<table style="border-collapse:collapse">${row('Alarm ID', a.alarm_id)}${row('Time', whenText)}${row('Hospital', hospName)}${row('Sent By', sentBy)}${row('Alarm Sent Room', a.room_number)}${row('System', a.system_number || '—')}${row('Severity', a.severity)}${row('Message', a.message)}</table>
+<table style="border-collapse:collapse">${row('Alarm ID', a.alarm_id)}${row('Time', whenText)}${row('Hospital', hospName)}${row('User', sentBy)}${row('Alarm Sent By', a.room_number)}${row('System', a.system_number || '—')}${row('Severity', a.severity)}${row('Message', a.message)}</table>
 <p style="margin:14px 0 6px"><b>Stations:</b> ${stations.length} &nbsp;|&nbsp; <b>Delivered:</b> ${delivered} &nbsp;|&nbsp; <b>Not delivered:</b> ${notDelivered}</p>
-${stations.length ? `<table style="border-collapse:collapse"><tr style="background:#f7f8fa"><th style="padding:5px 10px;border:1px solid #e5e7eb;text-align:left">Received By</th><th style="padding:5px 10px;border:1px solid #e5e7eb;text-align:left">Received Room</th><th style="padding:5px 10px;border:1px solid #e5e7eb;text-align:left">Status</th></tr>${stationRows}</table>` : '<p>No other station was registered or online to receive this alarm.</p>'}
+${stations.length ? `<table style="border-collapse:collapse"><tr style="background:#f7f8fa"><th style="padding:5px 10px;border:1px solid #e5e7eb;text-align:left">Station</th><th style="padding:5px 10px;border:1px solid #e5e7eb;text-align:left">Room</th><th style="padding:5px 10px;border:1px solid #e5e7eb;text-align:left">Status</th></tr>${stationRows}</table>` : '<p>No other station was registered or online to receive this alarm.</p>'}
 </div>`;
 
   return { subject: `PANIC ALARM - ${sentBy} - ${a.room_number} - ${a.hospital_code}`, text: lines.join('\n'), html, hospital };

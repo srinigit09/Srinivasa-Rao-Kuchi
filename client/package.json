@@ -25,16 +25,21 @@
       {
         "from": "watchdog.vbs",
         "to": "watchdog.vbs"
+      },
+      {
+        "from": "wake.vbs",
+        "to": "wake.vbs"
       }
     ],
     "appId": "com.hospital.panicalarmclient",
     "productName": "PanicAlarmClient",
-    "copyright": "Hospital Panic Alarm System",
+    "copyright": "Copyright 2026 by Ciana Tech Ltd.",
     "directories": {
       "output": "dist"
     },
     "files": [
       "main.js",
+      "brand.js",
       "preload.js",
       "renderer/**/*",
       "assets/**/*",
@@ -54,17 +59,24 @@
           ]
         }
       ],
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "legalTrademarks": "Ciana Technologies"
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
       "perMachine": true,
       "include": "installer.nsh",
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": false,
       "createStartMenuShortcut": true,
       "shortcutName": "Panic Alarm Client",
-      "runAfterFinish": true
+      "runAfterFinish": true,
+      "installerIcon": "assets/ciana-installer.ico",
+      "uninstallerIcon": "assets/ciana-installer.ico",
+      "artifactName": "CianaTech-${productName}-Setup-${version}.${ext}",
+      "installerSidebar": "assets/installerSidebar.bmp",
+      "uninstallerSidebar": "assets/installerSidebar.bmp",
+      "installerHeader": "assets/installerHeader.bmp"
     },
     "dmg": {
       "internetEnabled": false,
@@ -84,7 +96,9 @@
           "type": "link",
           "path": "/Applications"
         }
-      ]
+      ],
+      "title": "Ciana Technologies - ${productName} ${version}",
+      "artifactName": "CianaTech-${productName}-${version}-${arch}.${ext}"
     },
     "mac": {
       "target": [
@@ -110,5 +124,10 @@
     }
   },
   "license": "UNLICENSED",
-  "private": true
+  "private": true,
+  "author": {
+    "name": "Ciana Technologies",
+    "email": "info@cianatech.com.au"
+  },
+  "homepage": "https://cianatech.com.au/"
 }

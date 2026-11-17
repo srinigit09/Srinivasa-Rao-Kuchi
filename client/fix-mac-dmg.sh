@@ -17,7 +17,7 @@ VERSION="1.0.0"
 
 fix_dmg() {
   local APP_DIR="$1"  # e.g. dist/mac-arm64
-  local DMG="$2"      # e.g. dist/PanicAlarmClient-1.0.0-arm64.dmg
+  local DMG="$2"      # e.g. dist/CianaTech-PanicAlarmClient-1.0.0-arm64.dmg
   local ARCH="$3"     # arm64 or x64
 
   echo ""
@@ -48,14 +48,14 @@ fix_dmg() {
 
 case "${1:-}" in
   --intel)
-    fix_dmg "$DIST/mac"       "$DIST/${APP_NAME}-${VERSION}.dmg"       "x64"
+    fix_dmg "$DIST/mac"       "$DIST/CianaTech-${APP_NAME}-${VERSION}-x64.dmg"       "x64"
     ;;
   --both)
-    fix_dmg "$DIST/mac-arm64" "$DIST/${APP_NAME}-${VERSION}-arm64.dmg" "arm64"
-    fix_dmg "$DIST/mac"       "$DIST/${APP_NAME}-${VERSION}.dmg"       "x64"
+    fix_dmg "$DIST/mac-arm64" "$DIST/CianaTech-${APP_NAME}-${VERSION}-arm64.dmg" "arm64"
+    fix_dmg "$DIST/mac"       "$DIST/CianaTech-${APP_NAME}-${VERSION}-x64.dmg"       "x64"
     ;;
   *)
-    fix_dmg "$DIST/mac-arm64" "$DIST/${APP_NAME}-${VERSION}-arm64.dmg" "arm64"
+    fix_dmg "$DIST/mac-arm64" "$DIST/CianaTech-${APP_NAME}-${VERSION}-arm64.dmg" "arm64"
     ;;
 esac
 

@@ -1,6 +1,7 @@
 'use strict';
 
 const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, dialog, powerMonitor, Notification, shell } = require('electron');
+const brand = require('./brand');
 const path   = require('path');
 const fs     = require('fs');
 const { io } = require('socket.io-client');
@@ -508,6 +509,7 @@ function connectSocket(config) {
     }
     console.log('[Alarm] Received:', alarmData.triggeredBy, alarmData.locationLabel || alarmData.roomNumber);
     try {
+      wakeScreenForAlarm();
       showAlertPopup(alarmData);
       // Confirm to the server ONLY if a person can really see the popup: not while this OS user's session
       // is in the background (another user switched in) or locked. Otherwise the sender would be told
@@ -584,6 +586,42 @@ function createAlarmButton(config) {
   });
 }
 
+// ── Screen saver / sleeping display ───────────────────────────────────────────
+// A running screen saver is a full-screen window that would cover the popup, and a sleeping display shows
+// nothing. A single harmless key press (F15, which no program uses) ends the screen saver and wakes the
+// display, and the display is kept on while the alarm is open. This cannot reach the Windows LOCK screen:
+// Windows draws that on a separate secure desktop that no normal program may paint on. While locked, the
+// alarm is announced by sound and notification and the popup is waiting when the user unlocks.
+let alarmPowerBlock = null;
+function wakeScreenForAlarm() {
+  try {
+    const { powerSaveBlocker } = require('electron');
+    if (alarmPowerBlock === null || !powerSaveBlocker.isStarted(alarmPowerBlock)) {
+      alarmPowerBlock = powerSaveBlocker.start('prevent-display-sleep');
+    }
+  } catch (e) { console.warn('[Alarm] Could not keep the display on:', e.message); }
+  if (process.platform === 'win32') {
+    try {
+      const vbs = path.join(process.resourcesPath || __dirname, 'wake.vbs');
+      if (fs.existsSync(vbs)) {
+        require('child_process').spawn('wscript.exe', ['//B', '//Nologo', vbs], { windowsHide: true, stdio: 'ignore' })
+          .on('error', () => { /* best effort */ });
+      }
+    } catch { /* best effort */ }
+  }
+  if (sessionHidden) {   // locked / another user is on screen: make the alarm heard and noticed anyway
+    if (shell && shell.beep) { shell.beep(); setTimeout(() => shell.beep(), 700); setTimeout(() => shell.beep(), 1400); }
+    showNotification('PANIC ALARM', 'A panic alarm was received. Unlock the screen to see and acknowledge it.');
+  }
+}
+function releaseAlarmPowerBlock() {
+  try {
+    const { powerSaveBlocker } = require('electron');
+    if (alarmPowerBlock !== null && powerSaveBlocker.isStarted(alarmPowerBlock)) powerSaveBlocker.stop(alarmPowerBlock);
+  } catch { /* ignore */ }
+  alarmPowerBlock = null;
+}
+
 // ── Alert popup — shown when a panic alarm is received ────────────────────────
 function showAlertPopup(alarmData) {
   activeAlarmData = alarmData;
@@ -622,7 +660,7 @@ function showAlertPopup(alarmData) {
     alertPopup.moveTop();
     alertPopup.webContents.send('new-alarm', alarmData);
   });
-  alertPopup.on('closed', () => { alertPopup = null; activeAlarmData = null; });
+  alertPopup.on('closed', () => { alertPopup = null; activeAlarmData = null; releaseAlarmPowerBlock(); });
 }
 
 // ── Settings window (Edit My Profile) ────────────────────────────────────────
@@ -749,6 +787,10 @@ function rebuildTrayMenu(config, state) {
       checked: getUserPrefs().remindersEnabled,
       click: (item) => { setRemindersEnabled(item.checked); },
     },
+    { type: 'separator' },
+    { label: 'About Us', click: () => brand.showAbout() },
+    { label: 'Contact Us', click: () => brand.showContact() },
+    { type: 'separator' },
     { label: 'Quit Panic Alarm', click: quitWithConfirm },
   ] : [
     { label: '🚨 Panic Alarm — Click to Setup', enabled: false },
@@ -759,6 +801,9 @@ function rebuildTrayMenu(config, state) {
         else { setupWindow.show(); setupWindow.focus(); setupWindow.moveTop(); }
       }
     },
+    { type: 'separator' },
+    { label: 'About Us', click: () => brand.showAbout() },
+    { label: 'Contact Us', click: () => brand.showContact() },
     { type: 'separator' },
     { label: 'Quit', click: quitWithConfirm },
   ];
@@ -1038,7 +1083,10 @@ function watchForRegistrationByAnotherUser() {
 let sessionHidden = false;
 if (powerMonitor) {
   powerMonitor.on('lock-screen',   () => { sessionHidden = true;  console.log('[Session] locked / switched away'); });
-  powerMonitor.on('unlock-screen', () => { sessionHidden = false; console.log('[Session] unlocked / back on screen'); });
+  powerMonitor.on('unlock-screen', () => {
+    sessionHidden = false; console.log('[Session] unlocked / back on screen');
+    if (alertPopup && !alertPopup.isDestroyed()) { alertPopup.show(); alertPopup.setAlwaysOnTop(true, 'screen-saver'); alertPopup.moveTop(); }
+  });
   powerMonitor.on('user-did-resign-active',  () => { sessionHidden = true;  });   // macOS fast user switching
   powerMonitor.on('user-did-become-active',  () => { sessionHidden = false; });
 }

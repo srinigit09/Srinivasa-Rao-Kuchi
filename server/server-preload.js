@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('serverAPI', {
   login           : (creds) => ipcRenderer.invoke('server-login', creds),
   loginSuccess    : (data)  => ipcRenderer.invoke('login-success', data),
   logout          : ()      => ipcRenderer.invoke('admin-logout'),
+  relogin         : ()      => ipcRenderer.invoke('admin-relogin'),
   getServerInfo   : ()      => ipcRenderer.invoke('get-server-info'),
   getLoginPrefs   : ()      => ipcRenderer.invoke('get-login-prefs'),
   saveLoginPrefs  : (prefs) => ipcRenderer.invoke('save-login-prefs', prefs),

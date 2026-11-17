@@ -121,7 +121,8 @@ html, body { width: 580px; overflow: hidden; background: #1a0000; font-family: -
     if (!data) return;
     currentAlarmId = data.alarmId;
     pendingAlarmIds.add(data.alarmId);   // keep earlier unresolved alarms so OK/timeout covers them too
-    document.getElementById('userName').textContent   = data.triggeredBy || '—';
+    // "Doctor(srini)": the role plus the OS user who pressed the button (textContent: never interpreted as HTML)
+    document.getElementById('userName').textContent   = (data.triggeredBy || '—') + (data.senderOsUser ? `(${data.senderOsUser})` : '');
     // locationLabel already carries the field name, e.g. "Consulting Room: 12" or "Reception Area"
     document.getElementById('roomDetail').textContent = data.locationLabel || data.roomNumber || '—';
     // The full alarm message, in smaller letters than the main line (textContent: never interpreted as HTML)

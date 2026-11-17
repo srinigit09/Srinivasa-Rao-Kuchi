@@ -38,12 +38,13 @@
     ],
     "appId": "com.hospital.panicalarm.server",
     "productName": "PanicAlarmServer",
-    "copyright": "Hospital Panic Alarm System",
+    "copyright": "Copyright 2026 by Ciana Tech Ltd.",
     "directories": {
       "output": "dist"
     },
     "files": [
       "server-main.js",
+      "brand.js",
       "server-preload.js",
       "server.js",
       "db.js",
@@ -78,19 +79,24 @@
           ]
         }
       ],
-      "icon": "assets/server-icon.ico"
+      "icon": "assets/server-icon.ico",
+      "legalTrademarks": "Ciana Technologies"
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
       "perMachine": true,
       "include": "installer.nsh",
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": false,
       "createStartMenuShortcut": true,
       "shortcutName": "Panic Alarm Server",
-      "installerIcon": "assets/server-icon.ico",
-      "uninstallerIcon": "assets/server-icon.ico",
-      "runAfterFinish": true
+      "installerIcon": "assets/ciana-installer.ico",
+      "uninstallerIcon": "assets/ciana-installer.ico",
+      "runAfterFinish": true,
+      "artifactName": "CianaTech-${productName}-Setup-${version}.${ext}",
+      "installerSidebar": "assets/installerSidebar.bmp",
+      "uninstallerSidebar": "assets/installerSidebar.bmp",
+      "installerHeader": "assets/installerHeader.bmp"
     },
     "dmg": {
       "internetEnabled": false,
@@ -110,7 +116,9 @@
           "type": "link",
           "path": "/Applications"
         }
-      ]
+      ],
+      "title": "Ciana Technologies - ${productName} ${version}",
+      "artifactName": "CianaTech-${productName}-${version}-${arch}.${ext}"
     },
     "mac": {
       "target": [
@@ -139,5 +147,10 @@
   "private": true,
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "author": {
+    "name": "Ciana Technologies",
+    "email": "info@cianatech.com.au"
+  },
+  "homepage": "https://cianatech.com.au/"
 }

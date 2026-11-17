@@ -1,3 +1,17 @@
+; ── Ciana Technologies branding ────────────────────────────────────────────────
+; Bottom-left text of every installer / uninstaller page
+!macro customHeader
+  BrandingText "Ciana Technologies  |  Copyright 2026 by Ciana Tech Ltd."
+!macroend
+
+; Welcome page with the company logo (side bitmap = assets/installerSidebar.bmp)
+!macro customWelcomePage
+  !insertmacro skipPageIfUpdated
+  !define MUI_WELCOMEPAGE_TITLE "Ciana Technologies"
+  !define MUI_WELCOMEPAGE_TEXT "Welcome to the Panic Alarm Server setup.$\r$\n$\r$\nThis wizard installs Panic Alarm Server, part of the Panic Alarm hospital emergency alert system by Ciana Technologies.$\r$\n$\r$\nClick Next to continue.$\r$\n$\r$\nCopyright 2026 by Ciana Tech Ltd.$\r$\nhttps://cianatech.com.au/"
+  !insertmacro MUI_PAGE_WELCOME
+!macroend
+
 !macro customInstall
   DetailPrint "Configuring Windows Firewall rules for Panic Alarm Server..."
   nsExec::Exec 'netsh advfirewall firewall add rule name="Panic Alarm Server" dir=in action=allow program="$INSTDIR\PanicAlarmServer.exe" enable=yes profile=any'
@@ -47,7 +61,8 @@
     ${If} $0 != ""
       RMDir /r "$0\PanicAlarmServer"
     ${EndIf}
-    nsExec::Exec `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-ChildItem -LiteralPath (Join-Path $$env:SystemDrive 'Users') -Directory -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item -LiteralPath (Join-Path $$_.FullName 'AppData\Roaming\panic-alarm-server'),(Join-Path $$_.FullName 'AppData\Local\PanicAlarm\server-stopped.flag') -Recurse -Force -ErrorAction SilentlyContinue }"`
+    ; Every Windows user's own settings (plain cmd - no PowerShell / execution-policy bypass, which antivirus dislikes)
+    nsExec::Exec 'cmd.exe /d /c for /d %u in ("%SystemDrive%\Users\*") do (rd /s /q "%u\AppData\Roaming\panic-alarm-server" 2>nul & del /f /q "%u\AppData\Local\PanicAlarm\server-stopped.flag" 2>nul)'
   keepData:
   ${endIf}
 !macroend

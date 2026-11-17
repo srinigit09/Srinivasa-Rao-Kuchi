@@ -274,6 +274,14 @@ app.post('/api/admin/login', (req, res) => {
   res.json(result);
 });
 
+// POST /api/admin/refresh - a fresh admin token for an open admin panel, so a panel left open for many
+// hours is not bounced to the login window (which would also switch the alarm system off for every client).
+app.post('/api/admin/refresh', requireAdmin, (req, res) => {
+  const user = findAdmin.get(req.admin.username);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  res.json({ token: signAdminToken({ id: user.id, username: user.username, ...(req.admin.mustChangePassword && { mustChangePassword: true }) }) });
+});
+
 // POST /api/admin/change-password (supports updating Username and/or Password)
 app.post('/api/admin/change-password', requireAdmin, (req, res) => {
   const { currentPassword, newPassword, newUsername } = req.body || {};
@@ -846,6 +854,9 @@ app.post('/api/client/event', requireClient, (req, res) => {
 });
 
 // POST /api/client/alarm/trigger
+const recentAlarmFromDevice = db.prepare(
+  `SELECT 1 FROM alarm_log WHERE device_id = ? AND alarm_id <> ? AND delivered_count > 0 AND triggered_at >= datetime('now', '-60 seconds') LIMIT 1`);
+const deleteRecipientsOfAlarm = db.prepare('DELETE FROM alarm_recipient WHERE alarm_id = ?');
 const lastAlarmByDevice = new Map();   // deviceId -> timestamp of last accepted alarm
 const ALARM_LOCK_MS = 20 * 1000;
 const ALARM_ACK_TIMEOUT_MS = 2000;   // how long to wait for stations to confirm they displayed the alarm (must stay below the button's request timeout)
@@ -912,7 +923,16 @@ app.post('/api/client/alarm/trigger', requireClient, async (req, res) => {
   const location = roomLabel(role, u.room_number);
   const message  = `🚨 PANIC ALARM — ${title} (${location}) needs IMMEDIATE HELP!`;
   const severity = 'PANIC';
-  const senderOsUser = cleanOsUser(req.body && req.body.osUser);
+  let senderOsUser = cleanOsUser(req.body && req.body.osUser);
+  if (!senderOsUser && u.deviceId) {
+    // The press arrived without the OS user (e.g. an older client build). Use the OS user that THIS device's
+    // own client reported when it connected - but only when that is unambiguous (one user on the device).
+    try {
+      const mine = new Set((await io.in(`hospital_${(u.hospital_code || '').toString().trim().toUpperCase()}`).fetchSockets())
+        .filter(sk => sk.data && sk.data.deviceId === u.deviceId && sk.data.osUser).map(sk => sk.data.osUser));
+      if (mine.size === 1) senderOsUser = [...mine][0];
+    } catch { /* best effort */ }
+  }
 
   insertLog.run(alarmId, u.hospital_code, title, userId, location, u.system_number || '', u.deviceId, severity, message, senderOsUser);
 
@@ -996,13 +1016,27 @@ app.post('/api/client/alarm/trigger', requireClient, async (req, res) => {
   // Connected older clients cannot confirm, so they are counted as reached (best available knowledge)
   const delivered = confirmedIds.size + legacy.length;
   try { setAlarmDelivered.run(delivered, alarmId); } catch (e) { console.error('[ALARM] could not save delivery', e.message); }
+
+  // A repeat press shortly after an earlier alarm from the SAME device that WAS delivered, and which nobody
+  // confirms this time, is only noise (double-clicking the button, a retry): record nothing in the logs and
+  // send no e-mail for it. The sender still sees "NOT SENT!" and may press again; the server's own event
+  // log keeps a line for it. A first alarm that nobody received is still recorded as Not Delivered.
+  let repeatNoise = false;
+  if (delivered === 0 && u.deviceId) {
+    try {
+      repeatNoise = !!recentAlarmFromDevice.get(u.deviceId, alarmId);
+      if (repeatNoise) {
+        db.transaction(() => { deleteRecipientsOfAlarm.run(alarmId); deleteLogById.run(alarmId); })();
+      }
+    } catch (e) { console.error('[ALARM] could not drop repeat press', e.message); repeatNoise = false; }
+  }
   emitAlarmUpdated(alarmId);
-  emailAlarm(alarmId);   // every alarm, whatever its outcome; runs in the background
+  if (!repeatNoise) emailAlarm(alarmId);   // every recorded alarm, whatever its outcome; runs in the background
 
   if (delivered === 0) {
     // Nobody received it: do not let the sender believe help is coming, and let them press again at once
     lastAlarmByDevice.delete(lockKey);
-    try { markNoResponse.run(alarmId); } catch { /* best effort */ }
+    if (!repeatNoise) { try { markNoResponse.run(alarmId); } catch { /* best effort */ } }
     eventLog.error('alarm_not_delivered', { alarmId, hospital: hCode, deviceId: u.deviceId, connectedStations: recipients.length });
     console.warn(`[ALARM] NOT DELIVERED ${alarmId} | ${hCode} | ${location} | stations online: ${recipients.length}`);
     return res.json({ alarmId, delivered: 0, message: 'No other station received the alarm' });

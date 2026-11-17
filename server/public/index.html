@@ -29,6 +29,8 @@ body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; background
   padding: 20px 18px 16px;
   border-bottom: 1px solid #f1f5f9;
 }
+.co-brand { text-align: center; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #f1f5f9; }
+.co-brand img { width: 150px; max-width: 100%; height: auto; display: block; margin: 0 auto; }
 .brand-logo { display: flex; align-items: center; gap: 10px; }
 .brand-icon { width: 36px; height: 36px; border-radius: 10px;
   background: linear-gradient(135deg,#ef4444,#b91c1c);
@@ -256,6 +258,7 @@ tr:hover td { background: #f8fafc; }
   <!-- ── Sidebar ── -->
   <div class="sidebar">
     <div class="brand">
+      <div class="co-brand"><img src="ciana-logo.png" alt="Ciana Technologies"></div>
       <div class="brand-logo">
         <div class="brand-icon">🚨</div>
         <div class="brand-text">
@@ -363,9 +366,9 @@ tr:hover td { background: #f8fafc; }
           <table>
             <thead><tr>
               <th style="width:36px"><input type="checkbox" id="selectAllDash" title="Select all"></th>
-              <th>Time</th><th>Hospital</th><th>Sent By</th><th>Alarm Sent Room</th><th>Received By</th><th>Received Room</th><th>Acked By</th><th>Status</th>
+              <th>Time</th><th>Hospital</th><th>User</th><th>Alarm Sent By</th><th>Acked By</th><th>Status</th>
             </tr></thead>
-            <tbody id="recentAlarms"><tr class="empty-row"><td colspan="9">No alarms yet</td></tr></tbody>
+            <tbody id="recentAlarms"><tr class="empty-row"><td colspan="7">No alarms yet</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -606,8 +609,8 @@ tr:hover td { background: #f8fafc; }
       <div class="section">
         <div class="section-body" style="padding:0">
           <table>
-            <thead><tr><th>Time</th><th>Hospital</th><th>Sent By</th><th>Alarm Sent Room</th><th>System</th><th>Received By</th><th>Received Room</th><th>Acked By</th><th>Status</th></tr></thead>
-            <tbody id="reportBody"><tr class="empty-row"><td colspan="9">Run report to see data</td></tr></tbody>
+            <thead><tr><th>Time</th><th>Hospital</th><th>User</th><th>Alarm Sent By</th><th>System</th><th>Acked By</th><th>Status</th></tr></thead>
+            <tbody id="reportBody"><tr class="empty-row"><td colspan="7">Run report to see data</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -631,10 +634,10 @@ tr:hover td { background: #f8fafc; }
             <thead>
               <tr>
                 <th style="width:36px"><input type="checkbox" id="selectAllLogs" title="Select all"></th>
-                <th>Time</th><th>Alarm ID</th><th>Hospital</th><th>Sent By</th><th>Alarm Sent Room</th><th>Received By</th><th>Received Room</th><th>Acked By</th><th>Status</th>
+                <th>Time</th><th>Alarm ID</th><th>Hospital</th><th>User</th><th>Alarm Sent By</th><th>Acked By</th><th>Status</th>
               </tr>
             </thead>
-            <tbody id="logsBody"><tr class="empty-row"><td colspan="10">Loading…</td></tr></tbody>
+            <tbody id="logsBody"><tr class="empty-row"><td colspan="8">Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -973,6 +976,30 @@ async function _refreshDashboardStats() {
   document.getElementById('stat-users').textContent   = _dashClients.reduce((s, c) => s + (c.user_count || 0), 0);
 }
 
+// The admin session ran out (panel open for many hours, or the PC slept). Sign in again silently when the
+// admin chose "Remember Password" - so the panel stays up and the alarm system never switches off - and only
+// fall back to the login window when that is not possible.
+let _expiring = false;
+async function sessionExpired() {
+  if (_expiring) return;
+  _expiring = true;
+  try {
+    const r = await window.serverAPI.relogin();
+    if (r && r.ok && r.token) { token = r.token; try { localStorage.setItem('adminToken', token); } catch {} location.reload(); return; }
+  } catch { /* fall through to the login window */ }
+  _expiring = false;
+  logout();
+}
+
+// Keep the admin session fresh while the panel is open (the token itself lasts 8 hours)
+setInterval(async () => {
+  if (!token) return;
+  try {
+    const r = await fetch('/api/admin/refresh', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+    if (r.ok) { const j = await r.json(); if (j.token) { token = j.token; try { localStorage.setItem('adminToken', token); } catch {} } }
+  } catch { /* server restarting - try again next time */ }
+}, 30 * 60 * 1000);
+
 function logout() {
   token = '';
   localStorage.removeItem('adminToken');
@@ -1049,7 +1076,7 @@ function _renderDashAlarms(logs) {
   const tbody = document.getElementById('recentAlarms');
   document.getElementById('selectAllDash').checked = false;
   if (!logs.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="9">No alarms yet</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No alarms yet</td></tr>';
     updateDashClearBtn();
     return;
   }
@@ -1569,7 +1596,7 @@ async function downloadLogsCsv(filter) {
   const p = new URLSearchParams({ ...filter, tz: String(new Date().getTimezoneOffset()) });
   try {
     const r = await fetch('/api/admin/logs/export?' + p.toString(), { headers: { 'Authorization': `Bearer ${token}` } });
-    if (r.status === 401) { logout(); return; }
+    if (r.status === 401) { sessionExpired(); return; }
     if (!r.ok) { const j = await r.json().catch(() => ({})); flash(j.error || 'Download failed', false); return; }
     const blob = await r.blob();
     const a = document.createElement('a');
@@ -1611,35 +1638,27 @@ function statusBadge(r) {
   }
 }
 
-// The API returns one row per receiving station. Rows of one alarm are shown together: the alarm's own
-// columns (time, sender, room …) span all of its station rows.
+// One row per alarm. "Acked By" is the room that acknowledged it ("None" otherwise); hovering the status shows
+// every receiving station's own response.
 // mode: 'dash' | 'full' (Alarm Logs page) | 'report'
 function alarmRowsHtml(rows, mode) {
-  const groups = new Map();
-  for (const r of rows) { if (!groups.has(r.alarm_id)) groups.set(r.alarm_id, []); groups.get(r.alarm_id).push(r); }
   const chk = mode === 'dash' ? ['dash-chk', 'updateDashClearBtn()'] : ['log-chk', 'updateClearSelectedBtn()'];
-  let html = '';
-  for (const g of groups.values()) {
-    const f = g[0], span = g.length > 1 ? ` rowspan="${g.length}"` : '';
-    g.forEach((r, i) => {
-      let tds = '';
-      if (i === 0) {
-        if (mode !== 'report') tds += `<td${span}><input type="checkbox" class="${chk[0]}" value="${esc(f.alarm_id)}" onchange="${chk[1]}"></td>`;
-        tds += `<td${span}>${dbDate(f.triggered_at).toLocaleString()}</td>`;
-        if (mode === 'full') tds += `<td${span} style="font-family:monospace;font-size:11px">${esc(f.alarm_id.slice(0,8))}</td>`;
-        tds += `<td${span}>${esc(f.hospital_code)}</td><td${span}>${esc(f.sent_by)}</td><td${span}>${esc(f.sent_room)}</td>`;
-        if (mode === 'report') tds += `<td${span}>${esc(f.system_number || '—')}</td>`;
-      }
-      tds += `<td>${esc(r.received_by)}</td><td>${esc(r.received_room)}</td><td>${esc(r.acked_by)}</td><td>${statusBadge(r)}</td>`;
-      html += `<tr data-alarm-id="${esc(f.alarm_id)}">${tds}</tr>`;
-    });
-  }
-  return html;
+  return rows.map((r) => {
+    let tds = '';
+    if (mode !== 'report') tds += `<td><input type="checkbox" class="${chk[0]}" value="${esc(r.alarm_id)}" onchange="${chk[1]}"></td>`;
+    tds += `<td>${dbDate(r.triggered_at).toLocaleString()}</td>`;
+    if (mode === 'full') tds += `<td style="font-family:monospace;font-size:11px">${esc(r.alarm_id.slice(0,8))}</td>`;
+    tds += `<td>${esc(r.hospital_code)}</td><td>${esc(r.sent_by)}</td><td>${esc(r.sent_room)}</td>`;
+    if (mode === 'report') tds += `<td>${esc(r.system_number || '—')}</td>`;
+    const tip = (r.stations || []).map(x => `${x.who} [${x.room}]: ${x.status_label}`).join('\n');
+    tds += `<td>${esc(r.acked_by)}</td><td${tip ? ` title="${esc(tip)}"` : ''}>${statusBadge(r)}</td>`;
+    return `<tr data-alarm-id="${esc(r.alarm_id)}">${tds}</tr>`;
+  }).join('');
 }
 
 function renderLogsTable(tbodyId, data, mode) {
   const tbody = document.getElementById(tbodyId);
-  const cols = mode === 'full' ? 10 : 9;
+  const cols = mode === 'full' ? 8 : 7;
   if (!Array.isArray(data) || !data.length) {
     tbody.innerHTML = `<tr class="empty-row"><td colspan="${cols}">No records found</td></tr>`;
     if (mode === 'full') document.getElementById('selectAllLogs').checked = false;
@@ -1845,7 +1864,7 @@ async function api(method, path, body, withAuth = true) {
   try {
     const r = await fetch(path, opts);
     const j = await r.json();
-    if (r.status === 401) { logout(); return {}; }
+    if (r.status === 401) { sessionExpired(); return {}; }
     return j;
   } catch { return { error: 'Network error' }; }
 }

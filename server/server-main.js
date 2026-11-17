@@ -12,6 +12,7 @@
  */
 
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, powerMonitor } = require('electron');
+const brand = require('./brand');
 const path   = require('path');
 const fs     = require('fs');
 const http   = require('http');
@@ -281,7 +282,8 @@ function resetDatabaseKeepingLicense(dbPath) {
 // ── Global Server Process Lifecycle Handlers ──────────────────────────────────
 global.__restartServerApp = () => {
   console.log('[Server] Restarting Panic Alarm Server application...');
-  app.relaunch();
+  // --restarted: the admin asked for this restart, so sign back in by itself when "Remember Password" is on
+  app.relaunch({ args: process.argv.slice(1).filter(a => a !== '--restarted').concat(['--restarted']) });
   app.quit();
 };
 
@@ -606,7 +608,7 @@ function createMainWindow(adminToken) {
     height: Math.min(860, height - 40),
     minWidth: 900, minHeight: 600,
     center: true,
-    title: 'Panic Alarm — Admin Panel',
+    title: 'Panic Alarm — Admin Panel | Ciana Technologies',
     icon: path.join(__dirname, 'assets', 'server-icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'server-preload.js'),
@@ -635,7 +637,7 @@ function buildAppMenu() {
     ...(process.platform === 'darwin' ? [{
       label: 'Panic Alarm Server',
       submenu: [
-        { label: 'About Panic Alarm Server', role: 'about' },
+        { label: 'About Panic Alarm Server', click: () => brand.showAbout(mainWindow) },
         { type: 'separator' },
         { label: '🔄 Restart Server', accelerator: 'CmdOrCtrl+Shift+R', click: () => global.__restartServerApp() },
         { label: '⏻ Close / Stop Server', click: stopWithConfirm },
@@ -691,7 +693,9 @@ function buildAppMenu() {
         { type: 'separator' },
         { role: 'togglefullscreen' },
       ]
-    }
+    },
+    { label: 'About Us',   submenu: [{ label: `About ${brand.BRAND.name}`,   click: () => brand.showAbout(mainWindow) }] },
+    { label: 'Contact Us', submenu: [{ label: `Contact ${brand.BRAND.name}`, click: () => brand.showContact(mainWindow) }] },
   ]);
 }
 
@@ -759,6 +763,9 @@ function rebuildTrayMenu(running) {
           }
         }
       ] : []),
+      { type: 'separator' },
+      { label: 'About Us', click: () => brand.showAbout(mainWindow) },
+      { label: 'Contact Us', click: () => brand.showContact(mainWindow) },
       { type: 'separator' },
       { label: '🔄 Restart Server', click: () => global.__restartServerApp() },
       { label: '⏻ Close / Stop Server', click: stopWithConfirm },
@@ -832,6 +839,15 @@ ipcMain.handle('login-success', (_, { token }) => {
   // Token is passed in the URL hash so the admin panel logs in on first load
   createMainWindow(token);
   rebuildTrayMenu(true);
+});
+
+// The admin panel's session ran out (long uptime / PC slept). If the admin chose "Remember Password", sign in
+// again silently so the panel and the alarm system stay up; otherwise the panel falls back to the login window.
+ipcMain.handle('admin-relogin', async () => {
+  const prefs = getLoginPrefs();
+  if (!prefs.rememberPassword || !prefs.username || !prefs.password) return { ok: false };
+  const r = await attemptAutoLogin(prefs.username, prefs.password);
+  return r && r.ok && r.token ? { ok: true, token: r.token } : { ok: false };
 });
 
 ipcMain.handle('admin-logout', () => {
@@ -955,7 +971,8 @@ app.whenReady().then(async () => {
 
   // Check if Auto Login is enabled (Requirement 5 & 8)
   const prefs = getLoginPrefs();
-  if (!suppressAutoLogin && prefs.autoLogin && prefs.username && prefs.password) {
+  const afterRestart = process.argv.includes('--restarted') && prefs.rememberPassword;
+  if (!suppressAutoLogin && (prefs.autoLogin || afterRestart) && prefs.username && prefs.password) {
     console.log('[Server] Auto Login is enabled. Attempting automatic sign-in...');
     const result = await attemptAutoLogin(prefs.username, prefs.password);
     if (result.ok && result.token) {
