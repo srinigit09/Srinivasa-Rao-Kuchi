@@ -465,34 +465,49 @@ function registrationGone() {
   if (!setupWindow || setupWindow.isDestroyed()) createSetupWindow();
   watchForRegistrationByAnotherUser();
 }
-async function ensureRegistration(force) {
+// newServerUrl (optional): Edit User Details points at a DIFFERENT server address than the saved one. Then everything is
+// checked/registered on that address, and nothing is saved or reconnected here - the caller saves it with the user's changes.
+async function ensureRegistration(force, newServerUrl) {
   if (regBusy || (!force && Date.now() - lastRegCheck < 30 * 1000)) return { ok: false };
   regBusy = true;
   lastRegCheck = Date.now();
   try {
     const cfg = loadConfig();
     if (!cfg || !cfg.token || !cfg.serverUrl) return { ok: false };
-    const hr = await fetch(`${cfg.serverUrl}/api/public/hospitals`, { signal: AbortSignal.timeout(5000) });
+    let url = cfg.serverUrl;
+    if (newServerUrl) {
+      try {
+        const p = new URL(String(newServerUrl));
+        if (p.protocol !== 'http:' && p.protocol !== 'https:') return { ok: false };
+        url = `${p.protocol}//${p.host}`;
+      } catch { return { ok: false }; }
+    }
+    const moved = url !== cfg.serverUrl;
+    const hr = await fetch(`${url}/api/public/hospitals`, { signal: AbortSignal.timeout(5000) });
     if (!hr.ok) return { ok: false };
     const list = await hr.json().catch(() => null);
     if (!Array.isArray(list)) return { ok: false };
     const code = String(cfg.hospitalCode || '').toUpperCase();
-    if (!list.some(h => String(h.hospital_code || '').toUpperCase() === code)) { registrationGone(); return { ok: false, gone: true }; }
+    if (!list.some(h => String(h.hospital_code || '').toUpperCase() === code)) {
+      if (!moved) registrationGone();
+      return { ok: false, gone: true };
+    }
 
-    const me = await fetch(`${cfg.serverUrl}/api/client/me`, { headers: { Authorization: `Bearer ${cfg.token}` }, signal: AbortSignal.timeout(5000) });
+    const me = await fetch(`${url}/api/client/me`, { headers: { Authorization: `Bearer ${cfg.token}` }, signal: AbortSignal.timeout(5000) });
     if (me.status !== 401) return { ok: true };
 
-    const reg = await fetch(`${cfg.serverUrl}/api/client/register`, {
+    const reg = await fetch(`${url}/api/client/register`, {
       method : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body   : JSON.stringify({ hospital_code: code, room_number: cfg.room_number, role: cfg.role, device_id: cfg.deviceId, department: cfg.department || null }),
       signal : AbortSignal.timeout(8000),
     });
-    if (reg.status === 404) { registrationGone(); return { ok: false, gone: true }; }
+    if (reg.status === 404) { if (!moved) registrationGone(); return { ok: false, gone: true }; }
     if (!reg.ok) return { ok: false };
     const d = await reg.json().catch(() => ({}));
     if (!d || !d.token) return { ok: false };
     const fresh = { ...cfg, token: d.token, clientName: d.clientName || cfg.clientName, hospitalCode: d.hospitalCode || cfg.hospitalCode };
+    if (moved) return { ok: true, refreshed: true, config: { ...fresh, serverUrl: url } };
     saveConfig(fresh);
     console.log('[Registration] Saved token was rejected — registered again automatically');
     connectSocket(fresh);
@@ -1003,7 +1018,10 @@ ipcMain.on('resize-alert', (_e, h) => {
 });
 ipcMain.handle('get-device-id',        () => getOrCreateDeviceId());
 // Edit Details found the saved token rejected: register again silently, then the window retries
-ipcMain.handle('refresh-registration', async () => { const r = await ensureRegistration(true); return { ok: !!r.ok, gone: !!r.gone, config: r.ok ? withUserButtonPrefs(loadConfig()) : null }; });
+ipcMain.handle('refresh-registration', async (_, serverUrl) => {
+  const r = await ensureRegistration(true, serverUrl);
+  return { ok: !!r.ok, gone: !!r.gone, config: r.ok ? (r.config || withUserButtonPrefs(loadConfig())) : null };
+});
 ipcMain.handle('get-last-server-hint', () => getLastServerHint());
 ipcMain.handle('get-connection-status',() => ({ connected: socket?.connected || false }));
 

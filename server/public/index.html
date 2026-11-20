@@ -26,7 +26,7 @@ body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; background
   flex: 1; overflow-y: auto; min-height: 0;
 }
 .sidebar .brand {
-  padding: 18px 16px 16px;
+  padding: 10px 14px 12px;
   background: linear-gradient(180deg,#f4f8fd 0%,#ffffff 100%);
   border-bottom: 1px solid #e2e8f0;
   position: relative;
@@ -35,14 +35,18 @@ body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; background
   content: ''; position: absolute; left: 0; top: 0; right: 0; height: 3px;
   background: linear-gradient(90deg,#2c5f80 0%,#3b82d4 60%,#ef4444 100%);
 }
-.co-brand { text-align: center; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid #e5eaf1; }
-.co-brand img { width: 128px; max-width: 100%; height: auto; display: block; margin: 0 auto; }
-.brand-logo { display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+/* Company symbol in the top-left corner with the company name beside it */
+.co-brand { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.co-brand img { width: 30px; height: 30px; object-fit: contain; display: block; flex-shrink: 0; }
+.co-brand span { font-size: 14px; font-weight: 800; color: #0a0a0a; letter-spacing: .2px; white-space: nowrap; }
+.co-brand span b { color: #2e6da4; font-weight: 800; }
+/* Product block stays centred, as before */
+.brand-logo { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px 10px;
   background: #fff; border: 1px solid #e5eaf1; border-radius: 12px;
   box-shadow: 0 1px 3px rgba(15,23,42,.06); }
-.brand-icon { width: 38px; height: 38px; border-radius: 10px;
+.brand-icon { width: 34px; height: 34px; border-radius: 10px;
   background: linear-gradient(135deg,#f87171,#b91c1c);
-  display: flex; align-items: center; justify-content: center; font-size: 19px;
+  display: flex; align-items: center; justify-content: center; font-size: 17px;
   box-shadow: 0 3px 10px rgba(239,68,68,.35); flex-shrink: 0; }
 .brand-text h2 { font-size: 14px; color: #0f172a; font-weight: 800; letter-spacing: 1px; line-height: 1.15; }
 .brand-text p  { font-size: 10px; color: #3b82d4; font-weight: 700; margin-top: 3px; letter-spacing: 1.6px; }
@@ -266,7 +270,7 @@ tr:hover td { background: #f8fafc; }
   <!-- ── Sidebar ── -->
   <div class="sidebar">
     <div class="brand">
-      <div class="co-brand"><img src="ciana-logo.png" alt="Ciana Technologies"></div>
+      <div class="co-brand"><img src="ciana-mark.png" alt="Ciana Technologies"><span>Ciana <b>Technologies</b></span></div>
       <div class="brand-logo">
         <div class="brand-icon">🚨</div>
         <div class="brand-text">
@@ -694,10 +698,10 @@ tr:hover td { background: #f8fafc; }
 
           <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
             <div>
-              <div style="font-size:11px;color:#1d4ed8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Client Desktop Connection URL</div>
-              <div style="font-size:14px;color:#1e293b;font-weight:700;margin-top:2px;" id="netClientUrl">Loading…</div>
+              <div style="font-size:11px;color:#1d4ed8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Server URL</div>
+              <div style="font-size:14px;color:#1e293b;font-weight:700;margin-top:2px;" id="netServerUrl">Loading…</div>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="copyClientUrl()" style="padding:8px 16px;font-size:12px;">📋 Copy Client URL</button>
+            <button class="btn btn-primary btn-sm" onclick="copyServerUrl()" style="padding:8px 16px;font-size:12px;">📋 Copy Server URL</button>
           </div>
 
           <div style="margin-top:14px;font-size:12px;color:#64748b;" id="netAllIps"></div>
@@ -744,7 +748,11 @@ tr:hover td { background: #f8fafc; }
               </ul>
             </div>
 
-            <button class="btn btn-primary" id="btnSaveNetworkSettings" onclick="saveNetworkSettings()" style="padding:10px 24px;">Verify & Save Network Settings</button>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button class="btn" id="btnTestNetworkSettings" onclick="testNetworkSettings()" style="padding:10px 24px;">Test Connection</button>
+              <button class="btn btn-primary" id="btnSaveNetworkSettings" onclick="saveNetworkSettings()" style="padding:10px 24px;">Test & Save Network Settings</button>
+            </div>
+            <p style="font-size:11px;color:#64748b;margin-top:6px;">The settings are only saved when the connection test succeeds.</p>
             <div class="flash" id="netFlash" style="margin-top:14px;"></div>
           </div>
         </div>
@@ -889,6 +897,17 @@ tr:hover td { background: #f8fafc; }
     <div class="modal-btns">
       <button class="btn btn-secondary" onclick="closeModal('editDeptBlockModal')">Cancel</button>
       <button class="btn btn-primary" id="btnSaveDeptBlock">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Connection test result ── -->
+<div class="modal-bg" id="netTestModal">
+  <div class="modal" style="width:460px">
+    <div class="modal-title" id="netTestTitle"></div>
+    <div id="netTestText" style="font-size:14px;line-height:1.6;word-break:break-word;"></div>
+    <div class="modal-btns">
+      <button class="btn btn-primary" onclick="closeModal('netTestModal')">OK</button>
     </div>
   </div>
 </div>
@@ -1814,7 +1833,7 @@ function cpFlash(msg, ok) {
 }
 
 // ── Server & Network Settings ──────────────────────────────────
-let _currentClientUrl = '';
+let _currentServerUrl = '';
 
 function renderIpWait(w) {
   const box = document.getElementById('ipWaitBox');
@@ -1876,9 +1895,9 @@ async function dismissClientNotice() {
   if (!r.error) renderClientNotice(null);
 }
 
-async function loadNetworkSettings() {
+async function loadNetworkSettings(keepFlash) {
   const elFlash = document.getElementById('netFlash');
-  if (elFlash) elFlash.style.display = 'none';
+  if (elFlash && !keepFlash) elFlash.style.display = 'none';
 
   const info = await api('GET', '/api/admin/network-info');
   if (info.error) {
@@ -1891,11 +1910,11 @@ async function loadNetworkSettings() {
   renderIpWait(info.ipWait || null);
   const port = info.activePort;
   const ip = info.primaryIp || 'localhost';
-  _currentClientUrl = `http://${ip}:${port}`;
+  _currentServerUrl = `http://${ip}:${port}`;
 
   document.getElementById('netActivePort').textContent = String(port);
   document.getElementById('netPrimaryIp').textContent = ip;
-  document.getElementById('netClientUrl').textContent = _currentClientUrl;
+  document.getElementById('netServerUrl').textContent = _currentServerUrl;
 
   const ips = info.ips || [];
   const allIps = ips.length ? ips.join(', ') : 'none available';
@@ -1923,26 +1942,73 @@ function togglePortInput() {
   if (group) group.style.display = isAuto ? 'none' : 'block';
 }
 
-function copyClientUrl() {
-  if (!_currentClientUrl) return;
-  navigator.clipboard.writeText(_currentClientUrl).then(() => {
-    flash('📋 Client URL copied to clipboard!', true);
+function copyServerUrl() {
+  if (!_currentServerUrl) return;
+  navigator.clipboard.writeText(_currentServerUrl).then(() => {
+    flash('📋 Server URL copied to clipboard!', true);
   }).catch(() => {
-    flash('Copied: ' + _currentClientUrl, true);
+    flash('Copied: ' + _currentServerUrl, true);
   });
 }
 
-async function saveNetworkSettings() {
+async function testNetworkSettings() {
+  const body = readNetworkForm();
+  if (!body) return;
+  const btn = document.getElementById('btnTestNetworkSettings');
+  btn.disabled = true;
+  btn.textContent = 'Testing…';
+  document.getElementById('netFlash').style.display = 'none';
+  try {
+    const res = await api('POST', '/api/admin/network-test', body);
+    if (res.error) showNetTestPopup(false, res.error);
+    else showNetTestPopup(true, (res.urls || []).join('\n'));
+  } catch (e) {
+    showNetTestPopup(false, 'The connection test could not be completed.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Test Connection';
+  }
+}
+
+// Popup with the result of Test Connection: "Connection Success" (with the tested URLs) or the reason it failed
+function showNetTestPopup(ok, detail) {
+  const title = document.getElementById('netTestTitle');
+  title.textContent = ok ? 'Connection Success' : 'Connection Failed';
+  title.style.color = ok ? '#16a34a' : '#dc2626';
+  const text = document.getElementById('netTestText');
+  text.textContent = '';
+  if (ok) {
+    const p = document.createElement('div');
+    p.textContent = 'These addresses answered:';
+    text.appendChild(p);
+    (detail || '').split('\n').filter(Boolean).forEach(u => {
+      const d = document.createElement('div');
+      d.style.fontWeight = '700';
+      d.textContent = u;
+      text.appendChild(d);
+    });
+    const n = document.createElement('div');
+    n.style.cssText = 'margin-top:10px;font-size:12px;color:#64748b;';
+    n.textContent = 'Nothing has been changed yet. Click "Test & Save Network Settings" to use this address.';
+    text.appendChild(n);
+  } else {
+    text.textContent = detail || 'The connection test failed.';
+  }
+  document.getElementById('netTestModal').classList.add('open');
+}
+
+function showNetFlash(msg, ok) {
+  const elFlash = document.getElementById('netFlash');
+  elFlash.textContent = msg;
+  elFlash.className = 'flash ' + (ok ? 'ok' : 'err');
+  elFlash.style.display = 'block';
+}
+
+// Reads and checks the IP + port form; returns the request body, or null (after showing the problem)
+function readNetworkForm() {
   const isAuto = document.getElementById('portModeAuto').checked;
   const portVal = document.getElementById('netInputPort').value.trim();
   const host = document.getElementById('netInputHost').value;
-  const elFlash = document.getElementById('netFlash');
-
-  const showNetFlash = (msg, ok) => {
-    elFlash.textContent = msg;
-    elFlash.className = 'flash ' + (ok ? 'ok' : 'err');
-    elFlash.style.display = 'block';
-  };
 
   let body = { host };
   if (isAuto) {
@@ -1951,10 +2017,16 @@ async function saveNetworkSettings() {
     const portNum = parseInt(portVal, 10);
     if (!portVal || isNaN(portNum) || portNum < 1024 || portNum > 65535) {
       showNetFlash('Please enter a valid port number between 1024 and 65535', false);
-      return;
+      return null;
     }
     body.port = portNum;
   }
+  return body;
+}
+
+async function saveNetworkSettings() {
+  const body = readNetworkForm();
+  if (!body) return;
 
   const btn = document.getElementById('btnSaveNetworkSettings');
   btn.disabled = true;
@@ -1967,13 +2039,34 @@ async function saveNetworkSettings() {
     } else {
       showNetFlash((res.urlChanged ? '⚠️ ' : '✅ ') + (res.message || 'Settings saved successfully!'), true);
       if (res.urlChanged) checkClientNotice();
-      // The server moves to the new address by itself (no restart); the page reloads from the new address
+      // The top card (port, IP, Server URL / Copy button) changes only once the new address really answers.
+      // The server moves to it a moment after saving (no restart), so wait, then check.
+      setTimeout(async () => {
+        const info = await api('GET', '/api/admin/network-info');
+        if (info && !info.error) { loadNetworkSettings(true); return; }   // page still reaches the server: show its real state
+        // This page was opened from the old address: check the new address directly
+        let u = null;
+        try { u = new URL(res.newUrl); } catch { /* no usable address */ }
+        let up = false;
+        if (u) {
+          try { const h = await fetch(`${u.origin}/health`, { signal: AbortSignal.timeout(4000) }); up = h.ok; } catch { /* not reachable from here */ }
+        }
+        if (up) {
+          _currentServerUrl = u.origin;
+          document.getElementById('netActivePort').textContent = u.port || String(res.port);
+          document.getElementById('netPrimaryIp').textContent = u.hostname;
+          document.getElementById('netServerUrl').textContent = u.origin;
+          showNetFlash('✅ Saved. The server now answers on ' + u.origin + '. This page was opened from the old address - open ' + u.origin + '/admin/ to continue.', true);
+        } else {
+          showNetFlash('Saved, but the new address ' + (res.newUrl || '') + ' did not answer yet. The top address was not changed.', false);
+        }
+      }, 1500);
     }
   } catch (e) {
     showNetFlash('Failed to save settings: ' + e.message, false);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Verify & Save Network Settings';
+    btn.textContent = 'Test & Save Network Settings';
   }
 }
 

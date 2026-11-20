@@ -901,9 +901,32 @@ function setClientUrlNotice(n) {
 }
 function clearClientUrlNotice() { setClientUrlNotice(null); }
 
-// Validate and save the IP + port the server listens on from the next start.
+// Opens a real connection to http://<host>:<port>/ and checks that the expected body comes back
+function probeHttp(host, port, expectBody, expectServerId) {
+  return new Promise((resolve) => {
+    const path = expectServerId ? '/health' : '/';
+    const req = http.get({ host, port, path, agent: false, timeout: 3000 }, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (c) => { if (body.length < 4096) body += c; });
+      res.on('end', () => {
+        if (expectServerId) {
+          try { resolve(JSON.parse(body).serverId === expectServerId); } catch { resolve(false); }
+        } else {
+          resolve(body === expectBody);
+        }
+      });
+    });
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+    req.on('error', () => resolve(false));
+  });
+}
+
+// Tests an IP + port WITHOUT changing anything: the IP must exist on this computer, and the port must either be
+// free (a short-lived listener is opened on it) or already be this server's own port. Then a real HTTP request is
+// made to every complete server URL (http://<ip>:<port>) - one IP, or every usable IP for "all interfaces".
 // host: '' or '0.0.0.0' = all interfaces, otherwise one IP that is usable right now.
-async function applyNetworkConfig({ host, port }) {
+async function testNetworkConfig({ host, port }) {
   const wantHost = (typeof host === 'string' ? host.trim() : '') || '0.0.0.0';
   const portNum = parseInt(port, 10);
   if (isNaN(portNum) || portNum < 1024 || portNum > 65535)
@@ -916,12 +939,55 @@ async function applyNetworkConfig({ host, port }) {
       return { ok: false, error: `IP address ${wantHost} is not available on this computer right now (adapter disabled or disconnected). Available: ${ips.join(', ') || 'none'}.` };
   }
 
-  // The port this process already holds is fine; any other one must be free on the chosen address
+  // The complete URLs clients will use
+  const probeHosts = wantHost === '0.0.0.0' ? (usableIpCache.length ? usableIpCache.slice() : ['127.0.0.1']) : [wantHost];
+  const failed = (hosts) => ({
+    ok: false,
+    error: `Connection test failed for ${hosts.map(h => `http://${h}:${portNum}`).join(', ')}. Check the IP address, the port, the firewall and the network adapter.`,
+  });
+  const done = { ok: true, host: wantHost, port: portNum, urls: probeHosts.map(h => `http://${h}:${portNum}`) };
+
   const bound = server.address();
-  if (!(bound && bound.port === portNum)) {
-    const check = await testPortAvailability(portNum, wantHost);
-    if (!check.available) return { ok: false, error: check.error };
+  if (bound && bound.port === portNum) {
+    if (HOST === '0.0.0.0' || HOST === wantHost) {
+      // This server already holds the port on that address: request /health on each URL and check it is this server
+      const id = getServerId();
+      const results = await Promise.all(probeHosts.map(h => probeHttp(h, portNum, '', id)));
+      const bad = probeHosts.filter((h, i) => !results[i]);
+      return bad.length ? failed(bad) : done;
+    }
+    if (wantHost === '0.0.0.0') {
+      // Moving from one IP to all interfaces on the same port: the port is ours, the other addresses cannot be tried yet
+      const ok = await probeHttp(HOST, portNum, '', getServerId());
+      return ok ? done : failed([HOST]);
+    }
+    // Bound to another single IP: the same port on the new IP is free to try below
   }
+
+  // Any other port (or IP) must be free on the chosen address, and a real request to each full URL must work
+  const check = await testPortAvailability(portNum, wantHost);
+  if (!check.available) return { ok: false, error: check.error };
+
+  const nonce = uuidv4();
+  const tester = http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end(nonce); });
+  const listening = await new Promise((resolve) => {
+    tester.once('error', (err) => resolve({ error: err.message }));
+    tester.listen(portNum, wantHost, () => resolve({}));
+  });
+  if (listening.error) return { ok: false, error: `Cannot listen on ${wantHost}:${portNum}: ${listening.error}` };
+  const results = await Promise.all(probeHosts.map(h => probeHttp(h, portNum, nonce, null)));
+  await new Promise((resolve) => { tester.close(() => resolve()); if (tester.closeAllConnections) tester.closeAllConnections(); });
+  const bad = probeHosts.filter((h, i) => !results[i]);
+  return bad.length ? failed(bad) : done;
+}
+
+// Test, then save the IP + port the server listens on. Nothing is changed unless the connection test succeeds.
+async function applyNetworkConfig({ host, port }) {
+  const tested = await testNetworkConfig({ host, port });
+  if (!tested.ok) return tested;
+  const wantHost = tested.host;
+  const portNum = tested.port;
+  const bound = server.address();
 
   // Will the address clients use today still work after this change?
   // While waiting for the saved IP, "today" means that IP (the one clients still have), not the local-only listener.
@@ -1031,7 +1097,15 @@ app.post('/api/admin/stop-server', requireAdmin, (req, res) => {
   }, 200);
 });
 
-// POST /api/admin/network-settings  { host, port } — validate (IP exists, port free) and save for the next start
+// POST /api/admin/network-test  { host, port } — test only (IP exists, port usable, a real connection works); changes nothing
+app.post('/api/admin/network-test', requireAdmin, async (req, res) => {
+  const { port, autoPort, host } = req.body || {};
+  const r = await testNetworkConfig({ host, port: autoPort ? await findAvailablePort(5000) : port });
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true, urls: r.urls, message: `Connection test successful: ${r.urls.join(', ')}` });
+});
+
+// POST /api/admin/network-settings  { host, port } — test the connection, then save (only if the test passes)
 // (or apply right away when the server is waiting for its IP)
 app.post('/api/admin/network-settings', requireAdmin, async (req, res) => {
   const { port, autoPort, host } = req.body || {};
@@ -1040,7 +1114,7 @@ app.post('/api/admin/network-settings', requireAdmin, async (req, res) => {
   const where = `${r.host === '0.0.0.0' ? 'all network interfaces' : r.host}, port ${r.port}`;
   return res.json({
     message: (r.live ? `Now using ${where}.` : `Saved: ${where}. Already in use - nothing to change.`) +
-      (r.urlChanged ? ` IMPORTANT: the client address changes from ${r.oldUrl} to ${r.newUrl}. Running clients are told the new address automatically; any that are not running or cannot follow must be updated by hand.` : ''),
+      (r.urlChanged ? ` IMPORTANT: the server address changes from ${r.oldUrl} to ${r.newUrl}. Running clients are told the new address automatically; any that are not running or cannot follow must be updated by hand.` : ''),
     host: r.host,
     port: r.port,
     restartRequired: false,

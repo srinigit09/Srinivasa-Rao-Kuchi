@@ -147,12 +147,17 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
 <div class="card">
   <div class="card-body">
 
-    <!-- Page heading -->
-    <div style="text-align:center; padding: 6px 0 8px; border-bottom: 1px solid #e2e8f0; margin-bottom: 10px;">
-      <div style="font-size:16px; margin-bottom:2px;">🚨</div>
+    <!-- Company symbol in the top-left corner with the company name beside it -->
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;">
+      <img src="../assets/ciana-mark.png" alt="Ciana Technologies" style="width:28px; height:28px; object-fit:contain; display:block; flex-shrink:0;">
+      <span style="font-size:13px; font-weight:800; color:#0a0a0a; white-space:nowrap;">Ciana <span style="color:#2e6da4;">Technologies</span></span>
+    </div>
+    <!-- Page heading: centred, as before (moved up a little) -->
+    <div style="text-align:center; padding: 0 0 8px; border-bottom: 1px solid #e2e8f0; margin-bottom: 10px;">
+      <div style="font-size:28px; line-height:1.1; margin-bottom:2px;">🚨</div>
       <div style="font-size:11px; font-weight:800; letter-spacing:1.5px; color:#1e293b; text-transform:uppercase;">Panic Alarm Client</div>
       <div style="font-size:10px; color:#94a3b8; margin-top:1px;" id="pageSubtitle">User Details</div>
-      <div id="connStatus" style="font-size:10px; margin-top:4px; display:none;"></div>
+      <div id="connStatus" style="font-size:10px; margin-top:3px; display:none;"></div>
     </div>
 
     <!-- Server connection (register mode only) -->
@@ -229,7 +234,10 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     <!-- Server URL + Department (edit mode only) -->
     <div class="fg" id="deptEditSection" style="display:none">
       <label>Server URL</label>
-      <input type="text" id="serverUrlEdit" placeholder="http://<server-ip>:<port>" autocomplete="off" spellcheck="false">
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="text" id="serverUrlEdit" placeholder="http://<server-ip>:<port>" autocomplete="off" spellcheck="false" style="margin-bottom:0;flex:1">
+        <button class="btn-reload" id="btnConnectEdit" title="Connect to this server and load its data">⟳ Connect</button>
+      </div>
       <div style="height:8px"></div>
       <label>Department / Block</label>
       <select id="departmentSelectEdit">
@@ -520,29 +528,81 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     fetchLiveServerData(cfg);
   }
 
-  async function fetchLiveServerData(cfg) {
-    if (!cfg?.serverUrl || !cfg?.token) return;
+  // Set as soon as the user changes role/location/department by hand, so loaded server data never overwrites typing
+  let editDirty = false;
+  ['rcDoctor', 'rcNurse', 'rcStaff'].forEach(id => document.getElementById(id).addEventListener('click', () => { editDirty = true; }));
+  ['roomNumber', 'mgmtRoom', 'departmentSelectEdit'].forEach(id => document.getElementById(id).addEventListener('input', () => { editDirty = true; }));
+  document.querySelectorAll('input[name="staffArea"]').forEach(r => r.addEventListener('change', () => { editDirty = true; }));
+
+  // Checks the server at rawUrl and loads this client's current data from it (clinic name, role, location, department).
+  // If the server does not accept the saved token (for example a different server or a reset database), the client
+  // registers again on that server with the details it already has. Returns { ok, error }.
+  async function syncFromServer(rawUrl, fillFields) {
+    const url = normaliseUrl(rawUrl);
+    if (!url || !config) return { ok: false, error: 'Server URL is required.' };
     try {
-      const meResp = await fetch(`${cfg.serverUrl}/api/client/me`, {
-        headers: { 'Authorization': `Bearer ${cfg.token}` },
+      const hResp = await fetch(`${url}/api/public/hospitals`, { signal: AbortSignal.timeout(8000) });
+      if (!hResp.ok) throw new Error('HTTP ' + hResp.status);
+      const hospitals = await hResp.json();
+      const code  = String(config.hospitalCode || '').toUpperCase();
+      const match = hospitals.find(h => String(h.hospital_code || '').toUpperCase() === code);
+      if (!match) return { ok: false, error: `Clinic ${config.hospitalCode} does not exist on ${url}. Check the Server URL.` };
+
+      const getMe = () => fetch(`${url}/api/client/me`, {
+        headers: { 'Authorization': `Bearer ${config.token}` },
         signal: AbortSignal.timeout(8000),
       });
-      if (!meResp.ok) return;
+      let meResp = await getMe();
+      if (meResp.status === 401) {
+        const r = await api.refreshRegistration(url);
+        if (r && r.gone) return { ok: false, error: `Clinic ${config.hospitalCode} does not exist on ${url}.` };
+        if (!(r && r.ok && r.config)) return { ok: false, error: 'The server did not accept this client and automatic registration failed. Please try again.' };
+        config = { ...config, token: r.config.token };
+        meResp = await getMe();
+      }
+      if (!meResp.ok) return { ok: false, error: 'This client is not active on that server (it may have been deactivated by the administrator).' };
       const me = await meResp.json();
-      try {
-        const hResp = await fetch(`${cfg.serverUrl}/api/public/hospitals`,
-          { signal: AbortSignal.timeout(5000) });
-        if (hResp.ok) {
-          const hospitals = await hResp.json();
-          const match = hospitals.find(h => h.hospital_code === me.hospital_code);
-          if (match) {
-            document.getElementById('hospitalName').textContent = match.client_name;
-            document.getElementById('hospitalCode').textContent = `Code: ${match.hospital_code}`;
-          }
-        }
-      } catch { /* use cached */ }
-    } catch { /* server offline — no update */ }
+
+      document.getElementById('hospitalName').textContent = match.client_name;
+      document.getElementById('hospitalCode').textContent = `Code: ${match.hospital_code}`;
+      if (fillFields) {
+        if (me.role) { selectRole(me.role); setRoomValue(me.room_number || ''); }
+        await loadDepartmentsEdit(url, match.hospital_code, me.department || '');
+      } else {
+        await loadDepartmentsEdit(url, match.hospital_code, document.getElementById('departmentSelectEdit').value);
+      }
+      return { ok: true, url };
+    } catch {
+      return { ok: false, error: `Cannot connect to ${url}. Check the Server URL and that the server is running.` };
+    }
   }
+
+  // Edit mode: refresh from the saved server when the window opens (silent, best-effort)
+  async function fetchLiveServerData(cfg) {
+    if (!cfg?.serverUrl || !cfg?.token) return;
+    await syncFromServer(cfg.serverUrl, !editDirty);
+  }
+
+  // Edit mode: "Connect" next to the Server URL - same idea as in New User Registration
+  async function connectEdit() {
+    const raw = document.getElementById('serverUrlEdit').value;
+    if (!normaliseUrl(raw)) { flash('Enter a Server IP & Port first.', false); return; }
+    flash('', false);
+    setBusy(true);
+    try {
+      const r = await syncFromServer(raw, true);
+      if (!r.ok) { flash(r.error, false); return; }
+      document.getElementById('serverUrlEdit').value = r.url;
+      editDirty = false;
+      flash('✅ Connected. Server data loaded - click SAVE CHANGES to use this server.', true);
+    } finally {
+      setBusy(false);
+    }
+  }
+  document.getElementById('btnConnectEdit').addEventListener('click', connectEdit);
+  document.getElementById('serverUrlEdit').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); connectEdit(); }
+  });
 
   // ── Init: decide mode based on whether config exists ─────────────────────────
   async function init() {
@@ -660,7 +720,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
       let resp = await put();
       if (resp.status === 401) {
         // The server no longer accepts the saved token: register again automatically, then retry once
-        const r = await api.refreshRegistration();
+        const r = await api.refreshRegistration(serverUrl);
         if (r && r.gone) { flash('This clinic no longer exists on the server. Please register again.', false); return; }
         if (r && r.ok && r.config) { config = { ...config, token: r.config.token }; resp = await put(); }
       }
@@ -689,6 +749,8 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
     document.getElementById('btnSecondary').disabled = on;
     const reload = document.getElementById('btnReload');
     if (reload) reload.disabled = on;
+    const connectEditBtn = document.getElementById('btnConnectEdit');
+    if (connectEditBtn) connectEditBtn.disabled = on;
     document.getElementById('spinner').style.display = on ? 'block' : 'none';
   }
 

@@ -972,7 +972,7 @@ function rebuildTrayMenu(running) {
   if (!tray) return;
   const ips = getLocalIPs();
   const waitInfo = activeIpWait();   // while waiting, clients still use the saved address
-  const clientUrl = waitInfo ? `http://${waitInfo.ip}:${waitInfo.port}` : `http://${ips[0] || 'localhost'}:${serverPort}`;
+  const serverUrl = waitInfo ? `http://${waitInfo.ip}:${waitInfo.port}` : `http://${ips[0] || 'localhost'}:${serverPort}`;
   const isLoggedIn = isServerActive();
 
   tray.setToolTip(running
@@ -1006,8 +1006,8 @@ function rebuildTrayMenu(running) {
           }
         },
       ] : []),
-      { label: `📋 Copy Client URL  (${clientUrl})`, click: () => {
-          require('electron').clipboard.writeText(clientUrl);
+      { label: `📋 Copy Server URL  (${serverUrl})`, click: () => {
+          require('electron').clipboard.writeText(serverUrl);
         }
       },
       { label: '🌐 Edit IP Address', click: showNetworkWindow },
