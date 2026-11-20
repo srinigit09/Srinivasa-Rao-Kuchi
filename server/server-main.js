@@ -538,6 +538,8 @@ function showNetworkWindow() {
 
 
 // ── Start embedded server ─────────────────────────────────────────────────────
+let freshInstallLaunch = false;   // true only on the first launch after an install / upgrade
+let startupFailure = null;        // reason the server could not start (shown to the user)
 function startEmbeddedServer() {
   if (serverStarted) return;
   serverStarted = true;
@@ -572,7 +574,8 @@ function startEmbeddedServer() {
     }
 
     // Every (re)install / upgrade: if data from a previous install exists, the user chooses keep or start fresh.
-    if (isFreshInstall()) {
+    freshInstallLaunch = isFreshInstall();
+    if (freshInstallLaunch) {
       const dbFile = path.resolve(process.env.DB_PATH);
       if (fs.existsSync(dbFile) && chooseKeepOrFresh() === 'fresh') {
         resetDatabaseKeepingLicense(dbFile);
@@ -585,6 +588,7 @@ function startEmbeddedServer() {
     const serverJs   = path.join(serverRoot, 'server.js');
     if (!fs.existsSync(serverJs)) {
       console.error('[Server] Cannot find server.js at:', serverJs);
+      startupFailure = 'The server files are missing from the installation (server.js was not found). Please reinstall Panic Alarm Server.';
       return;
     }
     // Load server module inline (same process — clean for desktop app).
@@ -614,6 +618,7 @@ function startEmbeddedServer() {
   } catch (e) {
     console.error('[Server] Failed to start embedded server:', e.message);
     eventLog.error('server_start_failed', { code: e.code || 'ERR', message: e.message });
+    startupFailure = e.message || 'Unknown error';
     // Database upgrade problems must never be silent: the data is untouched (see db-migrate.js), so say so and stop.
     if (e.code === 'DB_TOO_NEW' || e.code === 'DB_MIGRATION_FAILED' || e.code === 'DB_BACKUP_FAILED') {
       const show = () => {
@@ -624,6 +629,7 @@ function startEmbeddedServer() {
           detail: e.message + '\n\nNo data was lost or changed. Contact support before reinstalling.',
           buttons: ['Close'], noLink: true,
         });
+        startupFailure = null;   // already reported by this dialog
         setStopFlag(true);   // do not let the watchdog restart-loop on this error
         app.exit(1);
       };
@@ -1265,6 +1271,34 @@ app.whenReady().then(async () => {
     });
   }
   if (portBusy) return;
+
+  // Startup result popup. Failure: always shown with the reason. Success: shown on the first launch after an install.
+  // (Async dialogs: the server runs in this process and must keep answering while the popup is open.)
+  if (startupFailure) {
+    dialog.showMessageBox({
+      type: 'error',
+      title: 'Panic Alarm Server',
+      message: 'Panic Alarm Server could not start.',
+      detail: startupFailure,
+      buttons: ['OK'], noLink: true,
+    });
+  } else if (freshInstallLaunch && httpServerInstance && httpServerInstance.listening) {
+    dialog.showMessageBox({
+      type: 'info',
+      title: 'Panic Alarm Server',
+      message: 'Panic Alarm Server is Running',
+      detail: `The server is listening on port ${serverPort || httpServerInstance.address().port}.`,
+      buttons: ['Ok'], noLink: true,
+    });
+  } else if (freshInstallLaunch) {
+    dialog.showMessageBox({
+      type: 'error',
+      title: 'Panic Alarm Server',
+      message: 'Panic Alarm Server could not start.',
+      detail: 'The server did not start listening on its network port. Check the log in the data folder or restart the application.',
+      buttons: ['OK'], noLink: true,
+    });
+  }
 
   // The server runs in the background by default and NO window opens. If "Auto Login" is on (or the admin just
   // restarted with a saved password) the server is marked active silently with the saved credentials; the

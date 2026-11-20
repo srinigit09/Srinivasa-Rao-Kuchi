@@ -1242,7 +1242,8 @@ app.whenReady().then(() => {
 
   // Every (re)install / upgrade: if a registration from a previous install exists, the user chooses
   // to keep it (the client reconnects by itself) or start fresh (register again).
-  if (isFreshInstall() && loadConfig()) {
+  const freshInstallLaunch = isFreshInstall();   // true only on the first launch after an install / upgrade
+  if (freshInstallLaunch && loadConfig()) {
     const choice = dialog.showMessageBoxSync({
       type: 'question',
       title: 'Panic Alarm Client — Existing registration found',
@@ -1255,16 +1256,36 @@ app.whenReady().then(() => {
     if (choice === 1) wipeConfigForFreshInstall();
   }
 
-  const config = loadConfig();
-  if (config && config.token) {
-    // Existing registration found — reopen, go straight to running
-    createTray(config);
-    launchAfterSetup(config);
-  } else {
-    // Fresh install or no config — show registration form
-    createTray(null);
-    createSetupWindow();
-    watchForRegistrationByAnotherUser();
+  try {
+    const config = loadConfig();
+    if (config && config.token) {
+      // Existing registration found — reopen, go straight to running
+      createTray(config);
+      launchAfterSetup(config);
+    } else {
+      // Fresh install or no config — show registration form
+      createTray(null);
+      createSetupWindow();
+      watchForRegistrationByAnotherUser();
+    }
+    if (freshInstallLaunch) {
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Panic Alarm Client',
+        message: 'Panic Alarm Client is Running',
+        buttons: ['Ok'], noLink: true,
+      });
+    }
+  } catch (e) {
+    console.error('[App] Client failed to start:', e.message);
+    startupTrace(`start failed: ${e.message}`);
+    dialog.showMessageBox({
+      type: 'error',
+      title: 'Panic Alarm Client',
+      message: 'Panic Alarm Client could not start.',
+      detail: e.message || 'Unknown error',
+      buttons: ['OK'], noLink: true,
+    });
   }
 });
 
