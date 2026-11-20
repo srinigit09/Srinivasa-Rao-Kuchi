@@ -98,6 +98,21 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
   font-size: 11px; padding: 4px 12px; cursor: pointer; border: 1px solid #d0d7de;
   border-radius: 4px; background: #f6f8fa; color: #1f2328; margin-bottom: 14px;
 }
+/* Password-reset view is the tallest: tighter spacing so it fits the window without scrolling */
+.card.compact { padding-top: 16px; padding-bottom: 14px; }
+.card.compact .co-brand { margin-bottom: 4px; }
+.card.compact .logo { margin-bottom: 8px; }
+.card.compact .logo .icon { font-size: 30px; }
+.card.compact .logo h1 { margin-top: 2px; }
+.card.compact .logo p { margin-top: 2px; }
+.card.compact .server-badge { padding: 6px 12px; margin-bottom: 10px; }
+.card.compact .reset-section label { margin-top: 6px; margin-bottom: 3px; }
+.card.compact input { padding: 8px 12px; margin-bottom: 8px; }
+.card.compact textarea { height: 46px; margin-bottom: 8px; }
+.card.compact .code-box { padding: 7px 12px; margin-bottom: 6px; }
+.card.compact .btn-small { margin-bottom: 6px; }
+.card.compact .btn-login { padding: 10px; }
+.card.compact .btn-link { margin-top: 4px; padding: 4px; }
 </style>
 </head>
 <body>
@@ -200,6 +215,7 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
     document.getElementById('activateSection').style.display = name === 'activate' ? 'block' : 'none';
     document.getElementById('loginSection').style.display    = name === 'login'    ? 'block' : 'none';
     document.getElementById('resetSection').style.display    = name === 'reset'    ? 'block' : 'none';
+    document.querySelector('.card').classList.toggle('compact', name === 'reset');
   }
 
   let currentStatus = null;
