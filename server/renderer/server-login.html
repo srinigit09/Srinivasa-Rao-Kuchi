@@ -127,23 +127,20 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
     <label>Password</label>
     <input type="password" id="password" placeholder="Password" autocomplete="current-password">
 
-    <div style="display:flex; flex-direction:column; gap:8px; margin: 2px 0 16px 2px;">
-      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; font-weight:500; color:#1f2328; margin:0; text-transform:none; letter-spacing:normal;">
-        <input type="checkbox" id="rememberPassword" style="width:auto; margin:0; accent-color:#3b82d4; cursor:pointer;">
-        Remember Password
-      </label>
+    <div style="display:flex; flex-direction:column; gap:4px; margin: 2px 0 16px 2px;">
       <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; font-weight:500; color:#1f2328; margin:0; text-transform:none; letter-spacing:normal;">
         <input type="checkbox" id="autoLogin" style="width:auto; margin:0; accent-color:#3b82d4; cursor:pointer;">
-        Auto Login (Run automatically on system restarts)
+        Auto Login (start the server automatically)
       </label>
+      <span style="font-size:11px; color:#57606a; margin-left:22px;">Only starts the server in the background. This admin screen always asks for your credentials.</span>
     </div>
 
     <button class="btn-login" id="btnLogin">SIGN IN</button>
     <button class="btn-link" id="btnShowReset">Forgot admin password?</button>
 
     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding-top:12px; border-top:1px solid #e2e8f0;">
-      <button class="btn-link" id="btnRestartApp" style="color:#475569; font-size:11px; margin:0; padding:0; text-decoration:none; cursor:pointer;">🔄 Restart Server</button>
-      <button class="btn-link" id="btnCloseApp" style="color:#dc2626; font-size:11px; margin:0; padding:0; text-decoration:none; cursor:pointer;">⏻ Close Server</button>
+      <button class="btn-link" id="btnRestartApp" style="color:#475569; font-size:11px; margin:0; padding:0; text-decoration:none; cursor:pointer;">🔄 Restart Application</button>
+      <button class="btn-link" id="btnCloseApp" style="color:#dc2626; font-size:11px; margin:0; padding:0; text-decoration:none; cursor:pointer;">⏻ Quit Application</button>
     </div>
   </div>
 
@@ -185,11 +182,16 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
         return;
       }
       const ips  = info.ips && info.ips.length ? info.ips : [];
+      window._serverHost = info.host || 'localhost';
       const primaryIp = ips[0] || null;
       document.getElementById('serverBadge').textContent =
         primaryIp ? `🟢 Running  ·  ${primaryIp}:${port}` : `🟢 Running  ·  Port ${port}`;
+      // Show at most 3 URLs so a long list (VPN / VM adapters) cannot push the form out of the window
+      const MAX_SHOWN = 3;
+      const shown = ips.slice(0, MAX_SHOWN).map(ip => `<strong style="color:#1f2328">http://${ip}:${port}</strong>`);
+      if (ips.length > MAX_SHOWN) shown.push(`<span style="color:#57606a">+ ${ips.length - MAX_SHOWN} more (see Edit IP Address)</span>`);
       const allIps = ips.length
-        ? ips.map(ip => `<strong style="color:#1f2328">http://${ip}:${port}</strong>`).join('<br>')
+        ? shown.join('<br>')
         : `<strong style="color:#1f2328">http://localhost:${port}</strong>`;
       document.getElementById('serverInfo').innerHTML =
         `<span style="color:#57606a">Client URL${ips.length > 1 ? 's' : ''}:</span><br>${allIps}` +
@@ -207,6 +209,7 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
   }
 
   loadServerInfo();
+  setInterval(loadServerInfo, 10000);   // follow adapters being enabled / disabled while this window is open
 
   // ── Activation ─────────────────────────────────────────────────
   function showSection(name) {
@@ -221,7 +224,7 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
     if (!info.port || info.port === 0) {
       throw new Error('Server not ready yet');
     }
-    const resp = await fetch(`http://localhost:${info.port}${path}`, options);
+    const resp = await fetch(`http://${info.host || 'localhost'}:${info.port}${path}`, options);
     return { resp, data: await resp.json() };
   }
   function postJson(body) {
@@ -309,32 +312,15 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
   // ── Load saved login preferences ────────────────────────────────
   async function loadLoginPrefs() {
     try {
+      // The saved password is never put into this form: the admin screen always needs the password typed in.
       const prefs = await sapi.getLoginPrefs();
       if (prefs) {
         document.getElementById('username').value = prefs.username || 'admin';
-        if (prefs.rememberPassword) {
-          document.getElementById('rememberPassword').checked = true;
-          document.getElementById('password').value = prefs.password || '';
-        }
-        if (prefs.autoLogin) {
-          document.getElementById('autoLogin').checked = true;
-        }
+        document.getElementById('autoLogin').checked = !!prefs.autoLogin;
       }
     } catch {}
   }
   loadLoginPrefs();
-
-  // Checkbox bindings: Auto-login implies Remember Password
-  document.getElementById('autoLogin').addEventListener('change', e => {
-    if (e.target.checked) {
-      document.getElementById('rememberPassword').checked = true;
-    }
-  });
-  document.getElementById('rememberPassword').addEventListener('change', e => {
-    if (!e.target.checked) {
-      document.getElementById('autoLogin').checked = false;
-    }
-  });
 
   document.getElementById('btnLogin').addEventListener('click', doLogin);
   document.getElementById('password').addEventListener('keydown', e => {
@@ -351,7 +337,6 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
   async function doLogin() {
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value;
-    const remember = document.getElementById('rememberPassword').checked;
     const auto     = document.getElementById('autoLogin').checked;
 
     clearMessages();
@@ -370,8 +355,8 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
         // Persist login preferences
         await sapi.saveLoginPrefs({
           username,
-          password: remember ? password : '',
-          rememberPassword: remember,
+          password: auto ? password : '',   // kept (encrypted) only so the server can start by itself
+          rememberPassword: auto,
           autoLogin: auto,
         });
         await sapi.loginSuccess({ token: result.token });

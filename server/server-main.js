@@ -5,13 +5,13 @@
  * ──────────────────────────────────────────────────────────────
  * This wraps the Node.js panic alarm server in a desktop app.
  * On launch:
- *  1. Shows a login screen (username + password)
- *  2. Starts the built-in HTTP/Socket.IO server (port read from server.env)
- *  3. Opens the admin panel in a BrowserWindow after login
- *  4. System tray icon keeps the server running even when window is closed
+ *  1. Starts the built-in HTTP/Socket.IO server in the background (no window is opened)
+ *  2. If "Auto Login" was chosen at the last admin sign-in, marks the server active silently
+ *     (Auto Login only starts the server - the Admin UI ALWAYS asks for admin credentials)
+ *  3. The system tray menu offers Admin Login, Start Server, Edit IP Address, Restart / Quit Application
  */
 
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, powerMonitor } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, powerMonitor, safeStorage, Notification } = require('electron');
 const brand = require('./brand');
 const path   = require('path');
 const fs     = require('fs');
@@ -128,17 +128,12 @@ app.on('second-instance', (_event, _argv, _cwd, additionalData) => {
     app.quit();
     return;
   }
-  const isLoggedIn = serverModule && serverModule.getServerLoggedIn ? serverModule.getServerLoggedIn() : false;
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.show(); mainWindow.focus();
   } else if (loginWindow && !loginWindow.isDestroyed()) {
     loginWindow.show(); loginWindow.focus();
   } else if (app.isReady()) {
-    if (isLoggedIn) {
-      createMainWindow();
-    } else {
-      createLoginWindow();
-    }
+    createLoginWindow();   // the Admin UI always needs admin credentials
   }
 });
 
@@ -157,23 +152,45 @@ let serverPort         = 0;
 let serverStarted      = false;
 let httpServerInstance = null;
 let serverModule       = null;
-let suppressAutoLogin  = false;
+let networkWindow      = null;
+let startupDone        = false;   // no window may open by itself before the background start has finished
 
 const LOGIN_PREFS_FILE = path.join(USER_DATA, 'server-login-prefs.json');
 
+// The remembered password is encrypted with the OS keychain (Electron safeStorage), never stored as plain text.
+// Older plain-text files are still read, and are rewritten encrypted the next time the admin signs in.
 function getLoginPrefs() {
+  const defaults = { username: 'admin', password: '', rememberPassword: false, autoLogin: false };
   try {
     if (fs.existsSync(LOGIN_PREFS_FILE)) {
-      return JSON.parse(fs.readFileSync(LOGIN_PREFS_FILE, 'utf8'));
+      const p = { ...defaults, ...JSON.parse(fs.readFileSync(LOGIN_PREFS_FILE, 'utf8')) };
+      if (p.passwordEnc) {
+        try { p.password = safeStorage.decryptString(Buffer.from(p.passwordEnc, 'base64')); } catch { p.password = ''; }
+      }
+      delete p.passwordEnc;
+      return p;
     }
   } catch {}
-  return { username: 'admin', password: '', rememberPassword: false, autoLogin: false };
+  return defaults;
 }
 
 function saveLoginPrefs(prefs) {
   try {
+    const username = String((prefs && prefs.username) || 'admin');
+    const out = { username, rememberPassword: !!(prefs && prefs.rememberPassword), autoLogin: !!(prefs && prefs.autoLogin) };
+    if (out.rememberPassword) {
+      // The sign-in form never shows the saved password, so an empty field means "keep the saved one"
+      const existing = getLoginPrefs();
+      const password = (prefs && prefs.password) || (existing.username === username ? existing.password : '');
+      if (password && safeStorage.isEncryptionAvailable()) {
+        out.passwordEnc = safeStorage.encryptString(password).toString('base64');
+      } else {
+        out.rememberPassword = false;   // cannot be stored safely - do not store it
+      }
+    }
+    if (!out.rememberPassword) out.autoLogin = false;   // Auto Login needs the saved credentials
     if (!fs.existsSync(USER_DATA)) fs.mkdirSync(USER_DATA, { recursive: true });
-    fs.writeFileSync(LOGIN_PREFS_FILE, JSON.stringify(prefs, null, 2), 'utf8');
+    fs.writeFileSync(LOGIN_PREFS_FILE, JSON.stringify(out, null, 2), { encoding: 'utf8', mode: 0o600 });
   } catch (e) {
     console.error('[Server] Failed to save login prefs:', e.message);
   }
@@ -282,26 +299,49 @@ function resetDatabaseKeepingLicense(dbPath) {
 // ── Global Server Process Lifecycle Handlers ──────────────────────────────────
 global.__restartServerApp = () => {
   console.log('[Server] Restarting Panic Alarm Server application...');
-  // --restarted: the admin asked for this restart, so sign back in by itself when "Remember Password" is on
-  app.relaunch({ args: process.argv.slice(1).filter(a => a !== '--restarted').concat(['--restarted']) });
+  // --was-active: the server was active before this restart, so it comes back active by itself (no credentials needed)
+  const args = process.argv.slice(1).filter(a => a !== '--was-active');
+  if (serverModule && serverModule.getServerLoggedIn && serverModule.getServerLoggedIn()) args.push('--was-active');
+  app.relaunch({ args });
   app.quit();
 };
 
-// Emergency system: stopping must be deliberate. Menu/tray stop actions ask first.
-function confirmStop(what) {
+// Emergency system: stopping or restarting must be deliberate. Menu/tray actions ask first.
+function confirmStop() {
   const choice = dialog.showMessageBoxSync({
     type: 'warning',
     title: 'Panic Alarm Server',
-    message: `Stop the ${what}?`,
-    detail: 'While the server is stopped, NO panic alarms can be sent or received by any client. Only stop it if you really mean to.',
-    buttons: ['Keep Running', 'Stop Server'],
+    message: 'Quit the Panic Alarm Server application?',
+    detail: 'While the application is closed, NO panic alarms can be sent or received by any client. Only quit if you really mean to.',
+    buttons: ['Keep Running', 'Quit Application'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,
   });
   return choice === 1;
 }
-const stopWithConfirm = () => { if (confirmStop('Panic Alarm Server')) global.__stopServerApp(); };
+const stopWithConfirm = () => { if (confirmStop()) global.__stopServerApp(); };
+
+function confirmRestart() {
+  // A saved-but-not-yet-applied address change makes this restart a client-affecting one: say so
+  let notice = null;
+  try { notice = serverModule && serverModule.getClientUrlNotice ? serverModule.getClientUrlNotice() : null; } catch { /* ignore */ }
+  const urlWarning = notice && !notice.applied
+    ? `\n\n⚠ The server address will change from ${notice.from} to ${notice.to}.\nThe same must be updated in ALL clients, otherwise they cannot connect.`
+    : '';
+  const choice = dialog.showMessageBoxSync({
+    type: 'warning',
+    title: 'Panic Alarm Server',
+    message: 'Restart the Panic Alarm Server application?',
+    detail: 'The server is offline while it restarts - NO panic alarms can be sent or received by any client for a short time.' + urlWarning,
+    buttons: ['Cancel', 'Restart Application'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  });
+  return choice === 1;
+}
+const restartWithConfirm = () => { if (confirmRestart()) global.__restartServerApp(); };
 
 // Windows watchdog (watchdog.vbs) restarts the server after a crash but must NOT after a deliberate stop.
 const STOP_FLAG = process.platform === 'win32' && process.env.LOCALAPPDATA
@@ -472,6 +512,28 @@ document.getElementById('btnSave').onclick = async () => {
   portPromptWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
   portPromptWindow.on('closed', () => { portPromptWindow = null; });
 }
+// ── Edit IP Address / Port window (tray + Server menu) ────────────────────────
+// Changing where the whole alarm system listens is sensitive, so the window asks for the admin credentials
+// before saving. It is NOT the Admin UI and never opens it.
+function showNetworkWindow() {
+  if (!app.isReady()) return;
+  if (networkWindow && !networkWindow.isDestroyed()) { networkWindow.show(); networkWindow.focus(); return; }
+  networkWindow = new BrowserWindow({
+    width: 460, height: 640,
+    resizable: false, center: true,
+    title: 'Panic Alarm Server — Edit IP Address',
+    icon: path.join(__dirname, 'assets', 'server-icon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'server-preload.js'),
+      contextIsolation: true, nodeIntegration: false,
+    },
+  });
+  networkWindow.setMenu(null);
+  networkWindow.loadFile(path.join(__dirname, 'renderer', 'server-network.html'));
+  networkWindow.on('closed', () => { networkWindow = null; });
+}
+
+
 
 // ── Start embedded server ─────────────────────────────────────────────────────
 function startEmbeddedServer() {
@@ -569,11 +631,14 @@ function startEmbeddedServer() {
 }
 
 // ── Get local IP addresses ────────────────────────────────────────────────────
+// Only addresses the server can really be reached on right now (re-checked by server.js every few seconds), so a
+// disabled / unplugged adapter's IP never stays on screen. Never the raw OS list: that can still list dead adapters.
 function getLocalIPs() {
-  return Object.values(os.networkInterfaces())
-    .flat()
-    .filter(i => i && i.family === 'IPv4' && !i.internal)
-    .map(i => i.address);
+  try { return serverModule && serverModule.getListeningIPs ? serverModule.getListeningIPs() : []; } catch { return []; }
+}
+// Address the server's own windows use to reach it (a server bound to one IP does not answer on localhost)
+function getLocalHost() {
+  try { return serverModule && serverModule.getLocalHost ? serverModule.getLocalHost() : 'localhost'; } catch { return 'localhost'; }
 }
 
 // ── Create login window ───────────────────────────────────────────────────────
@@ -600,6 +665,7 @@ function createLoginWindow() {
 function createMainWindow(adminToken) {
   if (!app.isReady() || standbyMode) return;
   if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.focus(); return; }
+  if (!adminToken) return;   // the Admin UI is only ever opened right after a successful admin sign-in
 
   const { width, height } = require('electron').screen.getPrimaryDisplay().workAreaSize;
 
@@ -617,11 +683,15 @@ function createMainWindow(adminToken) {
   });
   mainWindow.setMenu(buildAppMenu());
 
-  const adminUrl = `http://localhost:${serverPort}/admin/` +
-    (adminToken ? `#adminToken=${encodeURIComponent(adminToken)}` : '');
+  const adminUrl = `http://${getLocalHost()}:${serverPort}/admin/#adminToken=${encodeURIComponent(adminToken)}`;
   mainWindow.loadURL(adminUrl);
 
-  mainWindow.on('closed', () => { mainWindow = null; });
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    // Forget the admin session: the Admin UI must ask for credentials every time it is opened
+    require('electron').session.defaultSession.clearStorageData({ storages: ['localstorage'] }).catch(() => {});
+    rebuildTrayMenu(true);
+  });
 
   // Update tray menu
   rebuildTrayMenu(true);
@@ -630,7 +700,6 @@ function createMainWindow(adminToken) {
 // ── App menu (for macOS menu bar & Windows window menu) ───────────────────────
 function buildAppMenu() {
   const ips   = getLocalIPs();
-  const ipStr = ips.length ? ips.join(', ') : 'N/A';
   const isLoggedIn = serverModule && serverModule.getServerLoggedIn ? serverModule.getServerLoggedIn() : false;
 
   return Menu.buildFromTemplate([
@@ -639,8 +708,8 @@ function buildAppMenu() {
       submenu: [
         { label: 'About Panic Alarm Server', click: () => brand.showAbout(mainWindow) },
         { type: 'separator' },
-        { label: '🔄 Restart Server', accelerator: 'CmdOrCtrl+Shift+R', click: () => global.__restartServerApp() },
-        { label: '⏻ Close / Stop Server', click: stopWithConfirm },
+        { label: '🔄 Restart Application', accelerator: 'CmdOrCtrl+Shift+R', click: restartWithConfirm },
+        { label: '⏻ Quit Application', click: stopWithConfirm },
         { type: 'separator' },
         { label: 'Hide Panic Alarm Server', role: 'hide' },
         { label: 'Hide Others', role: 'hideOthers' },
@@ -650,34 +719,23 @@ function buildAppMenu() {
     {
       label: 'File',
       submenu: [
-        ...(isLoggedIn ? [
-          { label: '🚪 Sign Out Admin', click: () => {
-              if (serverModule && serverModule.setServerLoggedIn) serverModule.setServerLoggedIn(false);
-              suppressAutoLogin = true;
-              if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
-              createLoginWindow();
-              rebuildTrayMenu(true);
-            }
-          },
-          { type: 'separator' },
-        ] : []),
-        { label: '🔄 Restart Server', accelerator: 'CmdOrCtrl+R', click: () => global.__restartServerApp() },
-        { label: '⏻ Close / Stop Server', click: stopWithConfirm },
+        { label: '🔄 Restart Application', accelerator: 'CmdOrCtrl+R', click: restartWithConfirm },
+        { label: '⏻ Quit Application', click: stopWithConfirm },
       ],
     },
     {
       label: 'Server',
       submenu: [
-        { label: `Status: ${isLoggedIn ? 'Active (Logged In)' : 'Awaiting Login'}`, enabled: false },
+        { label: `Status: ${isLoggedIn ? 'Active' : 'Awaiting Start'}`, enabled: false },
         { label: `Port: ${serverPort}`, enabled: false },
-        { label: `IP: ${ipStr}`, enabled: false },
+        { label: `IP: ${ipSummary(ips)}`, enabled: false },
         { type: 'separator' },
         { label: '📋 Copy Server URL', click: () => {
             const url = `http://${ips[0] || 'localhost'}:${serverPort}`;
             require('electron').clipboard.writeText(url);
           }
         },
-        { label: '⚙️ Change Server Port...', click: () => showPortPromptWindow(serverPort) },
+        { label: '🌐 Edit IP Address...', click: showNetworkWindow },
       ],
     },
     {
@@ -710,79 +768,261 @@ function createTray() {
     tray.setTitle('🖥️');
   }
   rebuildTrayMenu(false);
+  // The Admin UI is never opened by a click on the tray icon: show the menu (Admin Login asks for credentials)
   tray.on('click', () => {
-    const isLoggedIn = serverModule && serverModule.getServerLoggedIn ? serverModule.getServerLoggedIn() : false;
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show(); mainWindow.focus();
-    } else if (isLoggedIn) {
-      createMainWindow();
-    } else if (loginWindow && !loginWindow.isDestroyed()) {
-      loginWindow.show(); loginWindow.focus();
-    } else {
-      createLoginWindow();
-    }
+    if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
+    else tray.popUpContextMenu();
   });
+}
+
+function isServerActive() {
+  return serverModule && serverModule.getServerLoggedIn ? serverModule.getServerLoggedIn() : false;
+}
+
+// The admin chose "Auto Login" at the last sign-in, so the server may be started without credentials
+function canStartWithoutLogin() {
+  const p = getLoginPrefs();
+  return !!(p.autoLogin && p.username && p.password);
+}
+
+// Start the server (mark it active) with the saved Auto Login credentials. NEVER opens the Admin UI.
+async function startServerWithSavedLogin() {
+  const prefs = getLoginPrefs();
+  if (!prefs.autoLogin || !prefs.username || !prefs.password) return { ok: false, error: 'Auto Login is not set up. Use Admin Login and tick "Auto Login".' };
+  const r = await attemptAutoLogin(prefs.username, prefs.password);
+  if (r && r.ok && r.token) {
+    if (serverModule && serverModule.setServerLoggedIn) serverModule.setServerLoggedIn(true);
+    refreshMenus();
+    return { ok: true };
+  }
+  return { ok: false, error: (r && r.error) || 'Sign-in with the saved credentials failed.' };
+}
+
+function openAdminLogin() {
+  if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); return; }
+  createLoginWindow();   // always asks for admin credentials
+}
+
+let _menuSig = '';
+function refreshMenus(force) {
+  currentPort();   // pick up the bound port before comparing
+
+  const w = activeIpWait();
+  const sig = JSON.stringify([getLocalIPs(), serverPort, activeClientNotice(), isServerActive(), standbyMode, startupDone, canStartWithoutLogin(), !!(mainWindow && !mainWindow.isDestroyed()), w && [w.ip, w.ips, Math.floor(w.remainingSec / 15)]]);
+  if (!force && sig === _menuSig) return;
+  _menuSig = sig;
+  rebuildTrayMenu(startupDone && !standbyMode);
+  if (app.isReady()) Menu.setApplicationMenu(buildAppMenu());
+}
+
+// A short summary for menus: the main IP and how many others exist (the full list is in Edit IP Address)
+function ipSummary(ips) {
+  if (!ips.length) return 'N/A';
+  return ips.length === 1 ? ips[0] : `${ips[0]}  (+${ips.length - 1} more)`;
+}
+
+// An IP appeared or disappeared (adapter enabled / disabled): tell whoever is at the server computer
+global.__onNetworkChange = ({ added, removed, ips, port, boundHost }) => {
+  refreshMenus(true);
+  const lines = [];
+  if (removed.length) {
+    lines.push(`No longer available: ${removed.join(', ')}`);
+    if (boundHost !== '0.0.0.0' && removed.includes(boundHost)) lines.push('The server is bound to this address and will restart on the remaining ones.');
+    else lines.push(`Clients using http://${removed[0]}:${port} can no longer connect.`);
+  }
+  if (added.length) lines.push(`Now available: ${added.join(', ')}`);
+  try {
+    if (Notification.isSupported()) new Notification({ title: 'Panic Alarm Server — network change', body: lines.join('\n') }).show();
+  } catch { /* notifications are best effort */ }
+};
+
+function activeClientNotice() {
+  try { return serverModule && serverModule.getClientUrlNotice ? serverModule.getClientUrlNotice() : null; } catch { return null; }
+}
+
+// ── Waiting for the saved IP ──────────────────────────────────────────────────
+// The server never moves to another IP by itself right away. While its saved IP is missing it tells the admin and
+// offers: keep waiting / use the next available address / enter an IP. After 180 s without an answer it moves on.
+function activeIpWait() {
+  try { return serverModule && serverModule.getIpWaitInfo ? serverModule.getIpWaitInfo() : null; } catch { return null; }
+}
+let ipWaitDialog = null;   // AbortController of the question that is on screen
+function closeIpWaitDialog() { if (ipWaitDialog) { try { ipWaitDialog.abort(); } catch { /* already closed */ } ipWaitDialog = null; } }
+
+async function askIpWait() {
+  const w = activeIpWait();
+  if (!w || ipWaitDialog) return;
+  const ctl = new AbortController();
+  ipWaitDialog = ctl;
+  const mins = Math.round(w.waitSec / 60 * 10) / 10;
+  const buttons = [`Keep waiting for ${w.ip} (${mins} more min)`];
+  const useNextIdx = w.nextIp ? buttons.push(`Use ${w.nextIp}:${w.port} now`) - 1 : -1;
+  const enterIdx = buttons.push(w.ips.length > 1 ? `Choose from ${w.ips.length} available addresses…` : 'Enter another IP address…') - 1;
+  buttons.push('Decide later');
+  let res;
+  try {
+    res = await dialog.showMessageBox({
+      type: 'warning',
+      title: 'Panic Alarm Server — waiting for IP address',
+      message: `Reconnecting to ${w.ip}:${w.port} …`,
+      detail:
+        `The saved server address ${w.ip}:${w.port} is not available on this computer right now. ` +
+        `Clients keep using that address, so the server is waiting for it instead of changing it.\n\n` +
+        (w.nextIp ? `Next available address: ${w.nextIp}:${w.port}\n\n` : 'No other IP address is available at the moment.\n\n') +
+        `If you do nothing, in about ${Math.max(1, Math.round(w.remainingSec))} seconds the server will start listening on all available addresses.\n` +
+        `Running clients are told the new address automatically; any that cannot follow must be updated by hand (Edit User Details).`,
+      buttons, defaultId: 0, cancelId: buttons.length - 1, noLink: true, signal: ctl.signal,
+    });
+  } catch { res = null; }
+  if (ipWaitDialog === ctl) ipWaitDialog = null;
+  if (!res || ctl.signal.aborted) return;
+  if (res.response === 0 && serverModule.ipWaitAction) await serverModule.ipWaitAction('wait');
+  else if (res.response === useNextIdx && serverModule.ipWaitAction) {
+    const r = await serverModule.ipWaitAction('use-next');
+    if (!r.ok) dialog.showMessageBox({ type: 'error', title: 'Panic Alarm Server', message: 'Could not switch the address.', detail: r.error, buttons: ['OK'], noLink: true });
+  } else if (res.response === enterIdx) showNetworkWindow();
+  refreshMenus(true);
+}
+
+// The admin picked an available address while the server waits: confirm (clients are affected), then switch right now
+async function useIpDuringWait(ip) {
+  const w = activeIpWait();
+  const choice = dialog.showMessageBoxSync({
+    type: 'warning',
+    title: 'Panic Alarm Server — change address',
+    message: `Use ${ip}:${w ? w.port : currentPort()} now?`,
+    detail: `Clients currently use ${w ? w.ip + ':' + w.port : 'the saved address'}.\n\nRunning clients are told the new address automatically. Any client that is not running, or has an old version, must be updated by hand (Edit User Details).`,
+    buttons: ['Cancel', `Use ${ip}`], defaultId: 0, cancelId: 0, noLink: true,
+  });
+  if (choice !== 1) return;
+  const r = serverModule.ipWaitAction ? await serverModule.ipWaitAction('use', ip) : { ok: false, error: 'Server is not ready yet' };
+  if (!r.ok) dialog.showMessageBox({ type: 'error', title: 'Panic Alarm Server', message: 'Could not switch the address.', detail: r.error, buttons: ['OK'], noLink: true });
+  refreshMenus(true);
+}
+
+function showIpNotification(title, body, onClick) {
+  try {
+    if (!Notification.isSupported()) return;
+    const n = new Notification({ title, body });
+    if (onClick) n.on('click', onClick);
+    n.show();
+  } catch { /* notifications are best effort */ }
+}
+
+// An address change moves the Admin window's origin: point an open Admin window at the new one (sign-in is asked again)
+function reloadAdminWindow(port) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.loadURL(`http://${getLocalHost()}:${port || currentPort()}/admin/`).catch(() => {});
+  }, 1500);
+}
+
+global.__onIpWait = (kind, info) => {
+  if (kind === 'started' || kind === 'reminder') {
+    showIpNotification('Panic Alarm Server — waiting for IP address',
+      `Reconnecting to ${info.ip}:${info.port}. Next available: ${info.nextIp || 'none'}. Choose what to do in the dialog.`, askIpWait);
+    askIpWait();
+  } else if (kind === 'returned') {
+    closeIpWaitDialog();
+    showIpNotification('Panic Alarm Server — IP address is back', `${info.ip} is available again. Nothing changed for the clients.`);
+    reloadAdminWindow(info.port);
+  } else if (kind === 'resolved') {
+    closeIpWaitDialog();
+    showIpNotification('Panic Alarm Server — address changed', `Now using ${info.ip}:${info.port} (was ${info.oldIp}). Running clients were told the new address.`, showClientNoticeDialog);
+    reloadAdminWindow(info.port);
+  } else if (kind === 'timeout') {
+    closeIpWaitDialog();
+    showIpNotification('Panic Alarm Server — address changed', `${info.ip} did not come back. The server now listens on all available addresses. Running clients were told the new address; update the rest.`, showClientNoticeDialog);
+    reloadAdminWindow(info.port);
+  }
+  refreshMenus(true);
+};
+
+function showClientNoticeDialog() {
+  const n = activeClientNotice();
+  if (!n) return;
+  const r = dialog.showMessageBoxSync({
+    type: 'warning',
+    title: 'Panic Alarm Server — update all clients',
+    message: 'The server address changed. Update it in ALL clients.',
+    detail: `Old address: ${n.from}\nNew address: ${n.to}\n\nOn each client computer: right-click the Panic Alarm tray icon → Edit User Details → enter the new server address.\n\nClients that are not updated cannot receive or send alarms.`,
+    buttons: ['Remind me later', 'All clients updated'],
+    defaultId: 0, cancelId: 0, noLink: true,
+  });
+  if (r === 1 && serverModule.clearClientUrlNotice) { serverModule.clearClientUrlNotice(); refreshMenus(true); }
 }
 
 function rebuildTrayMenu(running) {
   if (!tray) return;
   const ips = getLocalIPs();
-  const clientUrl = `http://${ips[0] || 'localhost'}:${serverPort}`;
-  const isLoggedIn = serverModule && serverModule.getServerLoggedIn ? serverModule.getServerLoggedIn() : false;
+  const waitInfo = activeIpWait();   // while waiting, clients still use the saved address
+  const clientUrl = waitInfo ? `http://${waitInfo.ip}:${waitInfo.port}` : `http://${ips[0] || 'localhost'}:${serverPort}`;
+  const isLoggedIn = isServerActive();
 
   tray.setToolTip(running
-    ? `Panic Alarm Server — ${isLoggedIn ? 'Active' : 'Awaiting Admin Login'} (Port ${serverPort})`
+    ? `Panic Alarm Server — ${isLoggedIn ? 'Active' : 'Not started'} (Port ${serverPort})`
     : (standbyMode ? 'Panic Alarm Server — Standby (running in another user session)' : 'Panic Alarm Server — Starting…'));
 
   const items = [
-    { label: running ? (isLoggedIn ? `🟢 Server Active — Port ${serverPort}` : `🟡 Awaiting Admin Login — Port ${serverPort}`) : (standbyMode ? '⏸ Standby — server is running in another user session' : '⏳ Starting server…'), enabled: false },
+    { label: running ? (isLoggedIn ? `🟢 Server Active — Port ${serverPort}` : `🟡 Server Not Started — Port ${serverPort}`) : (standbyMode ? '⏸ Standby — server is running in another user session' : '⏳ Starting server…'), enabled: false },
     ...(running ? [
-      { label: `IP: ${ips.join(', ') || 'N/A'}`, enabled: false },
+      { label: `IP: ${ipSummary(ips)}`, enabled: false },
+      ...(activeClientNotice() ? [
+        { label: `⚠ Address changed - update ALL clients  (${activeClientNotice().to})`, click: showClientNoticeDialog },
+      ] : []),
+      ...(waitInfo ? [
+        { label: `⚠ Reconnecting to ${waitInfo.ip}:${waitInfo.port} (${waitInfo.remainingSec}s left)`, submenu: [
+          { label: `Keep waiting for ${waitInfo.ip}`, click: () => { if (serverModule.ipWaitAction) serverModule.ipWaitAction('wait').then(() => refreshMenus(true)); } },
+          { type: 'separator' },
+          { label: waitInfo.ips.length ? 'Use an available address now:' : 'No other address is available right now', enabled: false },
+          ...waitInfo.ips.slice(0, 8).map(ip => ({ label: `${ip}:${waitInfo.port}`, click: () => useIpDuringWait(ip) })),
+          ...(waitInfo.ips.length > 8 ? [{ label: `+ ${waitInfo.ips.length - 8} more - use Edit IP Address`, click: showNetworkWindow }] : []),
+          { type: 'separator' },
+          { label: 'Enter another IP address…', click: showNetworkWindow },
+        ] },
+      ] : []),
       { type: 'separator' },
-      { label: '🖥️  Open Admin Panel', click: () => {
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.show(); mainWindow.focus();
-          } else if (isLoggedIn) {
-            createMainWindow();
-          } else {
-            createLoginWindow();
+      { label: '🔑 Admin Login', click: openAdminLogin },
+      ...(!isLoggedIn && canStartWithoutLogin() ? [
+        { label: '▶  Start Server', click: async () => {
+            const r = await startServerWithSavedLogin();
+            if (!r.ok) dialog.showMessageBox({ type: 'error', title: 'Panic Alarm Server', message: 'The server could not be started.', detail: r.error, buttons: ['OK'], noLink: true });
           }
-        }
-      },
+        },
+      ] : []),
       { label: `📋 Copy Client URL  (${clientUrl})`, click: () => {
           require('electron').clipboard.writeText(clientUrl);
         }
       },
-      ...(isLoggedIn ? [
-        { label: '🚪 Sign Out Admin', click: () => {
-            if (serverModule && serverModule.setServerLoggedIn) serverModule.setServerLoggedIn(false);
-            suppressAutoLogin = true;
-            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
-            createLoginWindow();
-            rebuildTrayMenu(true);
-          }
-        }
-      ] : []),
+      { label: '🌐 Edit IP Address', click: showNetworkWindow },
       { type: 'separator' },
       { label: 'About Us', click: () => brand.showAbout(mainWindow) },
       { label: 'Contact Us', click: () => brand.showContact(mainWindow) },
       { type: 'separator' },
-      { label: '🔄 Restart Server', click: () => global.__restartServerApp() },
-      { label: '⏻ Close / Stop Server', click: stopWithConfirm },
+      { label: '🔄 Restart Application', click: restartWithConfirm },
+      { label: '⏻ Quit Application', click: stopWithConfirm },
     ] : [
-      { label: '⏻ Quit Server', click: stopWithConfirm }
+      { label: '⏻ Quit Application', click: stopWithConfirm }
     ]),
   ];
   tray.setContextMenu(Menu.buildFromTemplate(items));
 }
 
 // ── Helper: attempt one HTTP login POST ───────────────────────────────────────
+function currentPort() {
+  if ((!serverPort || serverPort === 0) && httpServerInstance && httpServerInstance.address()) {
+    const addr = httpServerInstance.address();
+    if (addr && typeof addr === 'object' && addr.port) serverPort = addr.port;
+  }
+  return serverPort;
+}
+
 function attemptLogin(username, password) {
   return new Promise((resolve) => {
     const postData = JSON.stringify({ username, password });
     const req = http.request({
-      hostname: 'localhost',
-      port: serverPort,
+      hostname: getLocalHost(),
+      port: currentPort(),
       path: '/api/admin/login',
       method: 'POST',
       headers: {
@@ -838,43 +1078,65 @@ ipcMain.handle('login-success', (_, { token }) => {
   if (loginWindow && !loginWindow.isDestroyed()) loginWindow.close();
   // Token is passed in the URL hash so the admin panel logs in on first load
   createMainWindow(token);
-  rebuildTrayMenu(true);
+  refreshMenus(true);
 });
 
-// The admin panel's session ran out (long uptime / PC slept). If the admin chose "Remember Password", sign in
-// again silently so the panel and the alarm system stay up; otherwise the panel falls back to the login window.
-ipcMain.handle('admin-relogin', async () => {
-  const prefs = getLoginPrefs();
-  if (!prefs.rememberPassword || !prefs.username || !prefs.password) return { ok: false };
-  const r = await attemptAutoLogin(prefs.username, prefs.password);
-  return r && r.ok && r.token ? { ok: true, token: r.token } : { ok: false };
-});
+// The admin panel's session ran out (long uptime / PC slept). The Admin UI always asks for credentials, so the
+// saved Auto Login credentials are NOT used to reopen it: the panel falls back to the login window.
+ipcMain.handle('admin-relogin', async () => ({ ok: false }));
 
+// Signing out only closes the Admin UI. The server itself keeps running (and stays active) so alarms keep working.
 ipcMain.handle('admin-logout', () => {
-  // Close the admin panel window and reopen the login window, suppressing auto-login
-  suppressAutoLogin = true;
-  if (serverModule && serverModule.setServerLoggedIn) {
-    serverModule.setServerLoggedIn(false);
-  }
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
   createLoginWindow();
-  rebuildTrayMenu(true);
+  refreshMenus(true);
 });
 
-ipcMain.handle('restart-server', () => {
-  global.__restartServerApp();
-});
+ipcMain.handle('restart-server', () => { restartWithConfirm(); });
 
-ipcMain.handle('stop-server', () => {
-  global.__stopServerApp();
-});
+ipcMain.handle('stop-server', () => { stopWithConfirm(); });
 
 ipcMain.handle('get-login-prefs', () => {
-  return getLoginPrefs();
+  const p = getLoginPrefs();
+  // The saved password never leaves the main process; the form only needs to know one is saved
+  return { username: p.username, rememberPassword: !!p.rememberPassword, autoLogin: !!p.autoLogin, hasSavedPassword: !!p.password };
 });
 
 ipcMain.handle('save-login-prefs', (_, prefs) => {
   saveLoginPrefs(prefs);
+  refreshMenus(true);
+  return { ok: true };
+});
+
+// ── Edit IP Address window ────────────────────────────────────────────────────
+ipcMain.handle('network-get', async () => {
+  if (!serverModule || !serverModule.getNetworkInfo) return { error: 'Server is not ready yet' };
+  return serverModule.getNetworkInfo();
+});
+
+// Credentials are verified again here: changing the listening address is an admin-only action
+ipcMain.handle('network-save', async (_, { host, port, username, password }) => {
+  if (!serverModule || !serverModule.applyNetworkConfig) return { ok: false, error: 'Server is not ready yet' };
+  const auth = await attemptLogin(String(username || ''), String(password || ''));
+  if (!auth.ok) return { ok: false, error: auth.retry ? 'Server is not ready yet' : 'Invalid admin credentials' };
+  const r = await serverModule.applyNetworkConfig({ host, port });
+  if (!r.ok) return r;
+  eventLog.info('network_config_changed_from_tray', { host: r.host, port: r.port });
+  if (r.live) reloadAdminWindow(r.port);
+  return { ok: true, host: r.host, port: r.port, urlChanged: r.urlChanged, oldUrl: r.oldUrl, newUrl: r.newUrl, live: !!r.live };
+});
+
+ipcMain.handle('network-dismiss-notice', () => {
+  if (serverModule && serverModule.clearClientUrlNotice) serverModule.clearClientUrlNotice();
+  refreshMenus(true);
+  return { ok: true };
+});
+
+// The new IP / port are already saved; they take effect after a restart, which is confirmed first
+ipcMain.handle('network-apply-restart', () => {
+  if (!confirmRestart()) return { ok: false };
+  if (networkWindow && !networkWindow.isDestroyed()) networkWindow.close();
+  global.__restartServerApp();
   return { ok: true };
 });
 
@@ -929,7 +1191,7 @@ ipcMain.handle('get-server-info', () => {
       serverPort = port;
     }
   }
-  return { port: port || 0, ips };
+  return { port: port || 0, ips, host: getLocalHost() };
 });
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
@@ -958,7 +1220,7 @@ app.whenReady().then(async () => {
   Menu.setApplicationMenu(buildAppMenu());
 
   // Wait for the port to bind (or fail). If another user session already owns the port,
-  // do not show a login window here — that session serves the computer; this one stands by.
+  // this one stands by.
   if (httpServerInstance && !httpServerInstance.listening) {
     await new Promise((resolve) => {
       const t = setTimeout(resolve, 3000);
@@ -969,32 +1231,45 @@ app.whenReady().then(async () => {
   }
   if (portBusy) return;
 
-  // Check if Auto Login is enabled (Requirement 5 & 8)
+  // The server runs in the background by default and NO window opens. If "Auto Login" is on (or the admin just
+  // restarted with a saved password) the server is marked active silently with the saved credentials; the
+  // Admin UI is only ever opened from the tray "Admin Login", which always asks for credentials.
   const prefs = getLoginPrefs();
-  const afterRestart = process.argv.includes('--restarted') && prefs.rememberPassword;
-  if (!suppressAutoLogin && (prefs.autoLogin || afterRestart) && prefs.username && prefs.password) {
-    console.log('[Server] Auto Login is enabled. Attempting automatic sign-in...');
+  if (process.argv.includes('--was-active') && serverModule && serverModule.setServerLoggedIn) {
+    serverModule.setServerLoggedIn(true);   // an admin-requested restart keeps the server active
+  } else if (prefs.autoLogin && prefs.username && prefs.password) {
+    console.log('[Server] Auto Login is enabled. Starting the server silently...');
     const result = await attemptAutoLogin(prefs.username, prefs.password);
     if (result.ok && result.token) {
-      console.log('[Server] Auto Login successful');
-      if (serverModule && serverModule.setServerLoggedIn) {
-        serverModule.setServerLoggedIn(true);
-      }
-      createMainWindow(result.token);
-      rebuildTrayMenu(true);
-      return;
+      console.log('[Server] Server started with Auto Login');
+      if (serverModule && serverModule.setServerLoggedIn) serverModule.setServerLoggedIn(true);
     } else {
       console.warn('[Server] Auto Login could not complete:', result.error);
     }
   }
+  if (!isServerActive() && serverModule && serverModule.setServerLoggedIn) serverModule.setServerLoggedIn(false);
 
-  // If waiting for login, ensure server state is logged out
-  if (serverModule && serverModule.setServerLoggedIn) {
-    serverModule.setServerLoggedIn(false);
+  startupDone = true;
+
+  // The address clients use changed (by the admin's earlier edit, or by itself while the app was off): tell the
+  // person at this computer once per start, without opening any window. The tray keeps the warning until dismissed.
+  const notice = activeClientNotice();
+  if (notice && notice.applied) {
+    try {
+      if (Notification.isSupported()) {
+        const n = new Notification({
+          title: 'Panic Alarm Server — update ALL clients',
+          body: `The server address is now ${notice.to} (was ${notice.from}). The same must be updated in all clients.`,
+        });
+        n.on('click', showClientNoticeDialog);
+        n.show();
+      }
+    } catch { /* notifications are best effort */ }
   }
 
-  // Show login window promptly if auto-login is not active
-  setTimeout(createLoginWindow, 400);
+  refreshMenus(true);
+  // The IP list changes when an adapter is enabled/disabled: keep the tray and menus in step with it
+  setInterval(() => refreshMenus(), 5000).unref();
 });
 
 // Always On: Handle system resume / unlock
@@ -1030,8 +1305,8 @@ app.on('render-process-gone', (event, webContents, details) => {
   eventLog.error('renderer_crashed', { reason: details.reason });
   if (!isExplicitQuit) {
     if (mainWindow && mainWindow.webContents === webContents) {
-      mainWindow = null;
-      setTimeout(createMainWindow, 1000);
+      mainWindow = null;   // the Admin UI needs a fresh sign-in; the server itself is not affected
+      refreshMenus(true);
     } else if (loginWindow && loginWindow.webContents === webContents) {
       loginWindow = null;
       setTimeout(createLoginWindow, 1000);
@@ -1057,9 +1332,9 @@ app.on('window-all-closed', () => {
   // Server stays running in tray — do NOT quit
 });
 
+// macOS: clicking the Dock icon is a deliberate request - it shows the admin sign-in, never the Admin UI directly
 app.on('activate', () => {
-  if (!app.isReady()) return;
-  const isLoggedIn = serverModule && serverModule.getServerLoggedIn ? serverModule.getServerLoggedIn() : false;
+  if (!app.isReady() || !startupDone) return;
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.show(); mainWindow.focus();
     return;
@@ -1068,11 +1343,7 @@ app.on('activate', () => {
     loginWindow.show(); loginWindow.focus();
     return;
   }
-  if (isLoggedIn) {
-    createMainWindow();
-  } else {
-    createLoginWindow();
-  }
+  createLoginWindow();
 });
 
 app.on('before-quit', () => {

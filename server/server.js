@@ -70,27 +70,208 @@ const app    = express();
 const server = http.createServer(app);
 const io     = new Server(server, { cors: { origin: '*', methods: ['GET','POST','PUT','DELETE'] } });
 
+function readSetting(key) {
+  try { const r = getSetting.get(key); return r && r.value != null ? String(r.value) : ''; } catch { return ''; }
+}
+
+// IPv4 addresses the OS reports (read fresh every call). Link-local 169.254.x.x are not usable.
+// The OS can still list an address whose adapter is disabled/disconnected, so every candidate is
+// also test-bound (canBindIp) before it is ever used or shown as an available IP.
+function getLocalIPv4s() {
+  return Object.values(os.networkInterfaces())
+    .flat()
+    .filter(i => i && i.family === 'IPv4' && !i.internal && !i.address.startsWith('169.254.'))
+    .map(i => i.address);
+}
+
+function canBindIp(ip) {
+  return new Promise((resolve) => {
+    const t = net.createServer();
+    t.once('error', () => resolve(false));
+    t.once('listening', () => t.close(() => resolve(true)));
+    try { t.listen(0, ip); } catch { resolve(false); }
+  });
+}
+
+let usableIpCache = [];
+let usableIpKnown = false;   // the first check only learns the starting list; later differences are real changes
+async function refreshUsableIPs() {
+  const out = [];
+  for (const ip of getLocalIPv4s()) { if (await canBindIp(ip)) out.push(ip); }
+  const before = usableIpCache;
+  usableIpCache = out;
+  if (usableIpKnown) {
+    const added = out.filter(ip => !before.includes(ip));
+    const removed = before.filter(ip => !out.includes(ip));
+    if (added.length || removed.length) announceIpChange({ added, removed, ips: out });
+  }
+  usableIpKnown = true;
+  return out;
+}
+
+// An IP appeared or disappeared: record it, tell the admin panel (live) and the desktop app (notification)
+function announceIpChange(change) {
+  eventLog.warn('network_ips_changed', { added: change.added.join(','), removed: change.removed.join(',') });
+  const bound = server.address();
+  const port = bound ? bound.port : PORT;
+  const payload = { ...change, port, boundHost: HOST };
+  try { io.to('admin').emit('network_changed', payload); } catch { /* best effort */ }
+  try { if (typeof global.__onNetworkChange === 'function') global.__onNetworkChange(payload); } catch { /* best effort */ }
+}
+setInterval(() => { refreshUsableIPs().catch(() => {}); }, 10 * 1000).unref();
+
 // PORT priority:
-// 1. Environment / server.env (if explicitly set > 0)
-// 2. Database setting 'server_port' saved from previous installation/run (if set > 0)
-// 3. Default fixed port 5000 (persisted permanently on first install so restarts retain the same port)
-let initialPort = parseInt(process.env.PORT || '0', 10);
+// 1. Port chosen by the admin (Admin Panel / Edit IP Address) - 'server_port_admin'
+// 2. Environment / server.env (if explicitly set > 0)
+// 3. Database setting 'server_port' saved from previous installation/run (if set > 0)
+// 4. Default fixed port 5000 (persisted permanently on first install so restarts retain the same port)
+const adminPort = parseInt(readSetting('server_port_admin'), 10);
+let initialPort = adminPort > 0 ? adminPort : parseInt(process.env.PORT || '0', 10);
 if (!initialPort) {
-  try {
-    const r = getSetting.get('server_port');
-    if (r && r.value) {
-      const dbPort = parseInt(r.value, 10);
-      if (dbPort && !isNaN(dbPort) && dbPort > 0) {
-        initialPort = dbPort;
-      }
-    }
-  } catch {}
+  const dbPort = parseInt(readSetting('server_port'), 10);
+  if (dbPort > 0) initialPort = dbPort;
 }
 if (!initialPort) {
   initialPort = 5000; // Fixed default port for first installation
 }
-const PORT = initialPort;
-const HOST = process.env.HOST || '0.0.0.0';
+let PORT = initialPort;
+
+// ── Waiting for the saved IP ───────────────────────────────────
+// When the IP the server is meant to use is not available (adapter disabled / cable out / not up yet after a
+// reboot) the server NEVER moves to another IP by itself right away: the IP may be back in a minute, and every
+// client would have to be changed for nothing. Instead it
+//   - listens on this computer only (127.0.0.1) so the tray / admin windows keep working,
+//   - tells the admin (tray dialog, notification, admin panel) and offers: wait longer / use the next available
+//     address / enter an IP,
+//   - keeps trying the saved IP, and only after IP_WAIT_MS without any answer switches to all interfaces.
+const IP_WAIT_MS = 180 * 1000;
+let ipWait = null;   // { ip, port, since, deadline, extensions, warned, sig }
+
+// HOST priority: IP chosen by the admin ('server_host_admin') > HOST from server.env > 0.0.0.0 (all interfaces).
+// A configured IP that does not exist right now starts the wait above; the saved value is kept for when it returns.
+let hostFallbackFrom = '';
+function resolveHost(ips) {
+  const admin = readSetting('server_host_admin');
+  const env = (process.env.HOST || '').trim();
+  const wanted = admin || (env && env !== '0.0.0.0' ? env : '');
+  if (!wanted) return '0.0.0.0';
+  if (ips.includes(wanted) || (!admin && wanted === '127.0.0.1')) return wanted;
+  hostFallbackFrom = wanted;
+  eventLog.warn('configured_ip_unavailable', { ip: wanted });
+  startIpWait(wanted);
+  return '127.0.0.1';
+}
+let HOST = '0.0.0.0';   // decided just before listening (needs the async IP check)
+
+// Addresses clients can really connect to: every usable local IP when bound to all interfaces, otherwise only the bound one
+function getListeningIPs() {
+  if (ipWait) return [];   // waiting: nothing outside this computer can connect
+  if (HOST === '0.0.0.0') return usableIpCache.slice();
+  return [HOST];
+}
+// Address the server's own windows use to reach it (a server bound to one IP does not answer on localhost)
+function getLocalHost() { return HOST === '0.0.0.0' ? 'localhost' : HOST; }
+
+const IP_WARN_AFTER_MS = 15 * 1000;   // a few seconds of "adapter not up yet" at boot is normal: do not alarm the admin for it
+function currentBoundPort() { const b = server.address(); return b && b.port ? b.port : PORT; }
+function nextUsableIp(excluding) { return usableIpCache.find(ip => ip !== excluding) || ''; }
+
+// Random id of THIS server (kept in the database). Clients only follow a new address when it reports the same id,
+// so they can never be steered to some other machine.
+function getServerId() {
+  let id = readSetting('server_instance_id');
+  if (!id) { id = uuidv4(); try { setSetting.run('server_instance_id', id); } catch { /* best effort */ } }
+  return id;
+}
+// Addresses clients can try for this server: the preferred ones first, then every other IP of this computer.
+// Clients remember the list; when they lose the server they probe it (and only follow an address whose /health
+// answers with this server's id), so a changed IP does not need a visit to every client computer.
+function addressPayload(preferred, port) {
+  const urls = [...new Set([...(preferred || []), ...usableIpCache.map(ip => `http://${ip}:${port}`)])];
+  return { serverId: getServerId(), urls };
+}
+function broadcastServerAddresses(preferred, port) {
+  try { io.emit('server_addresses', addressPayload(preferred, port)); } catch { /* best effort */ }
+}
+
+// What the admin sees while the server waits for its IP (null until the short start-up grace period is over)
+function getIpWaitInfo() {
+  if (!ipWait || !ipWait.warned) return null;
+  return {
+    ip: ipWait.ip, port: ipWait.port, nextIp: nextUsableIp(ipWait.ip),
+    ips: usableIpCache.filter(ip => ip !== ipWait.ip),   // every address the admin can switch to right now
+    remainingSec: Math.max(0, Math.round((ipWait.deadline - Date.now()) / 1000)),
+    waitSec: IP_WAIT_MS / 1000, extensions: ipWait.extensions,
+  };
+}
+function announceIpWait(kind, extra) {
+  const info = { kind, ...(getIpWaitInfo() || {}), ...(extra || {}) };
+  try { io.to('admin').emit('ip_wait', info); } catch { /* best effort */ }
+  try { if (typeof global.__onIpWait === 'function') global.__onIpWait(kind, info); } catch { /* best effort */ }
+}
+
+function startIpWait(ip) {
+  if (ipWait && ipWait.ip === ip) return;
+  const now = Date.now();
+  ipWait = { ip, port: currentBoundPort(), since: now, deadline: now + IP_WARN_AFTER_MS + IP_WAIT_MS, extensions: 0, warned: false, reminded: false };
+  eventLog.warn('ip_wait_started', { ip, port: ipWait.port });
+}
+
+// Move the listener to another address without restarting the application (already connected sockets are kept)
+function rebind(host, port, delayMs = 0) {
+  HOST = host;
+  if (port) PORT = port;
+  setTimeout(() => {
+    try { server.close(); } catch { /* not listening */ }
+    server.listen(PORT, HOST);
+  }, delayMs);
+}
+
+// The wait is over because the IP came back, or the time ran out without an answer from the admin
+function finishIpWait(kind) {
+  const w = ipWait;
+  if (!w) return;
+  ipWait = null;
+  eventLog.warn('ip_wait_' + kind, { ip: w.ip, waitedSec: Math.round((Date.now() - w.since) / 1000) });
+  if (kind === 'returned') {
+    hostFallbackFrom = '';
+    rebind(w.ip, w.port);                         // same address as before: no client has to change anything
+  } else {
+    rebind('0.0.0.0', w.port);                     // nobody answered: serve on whatever addresses exist
+  }
+  if (w.warned || kind === 'timeout') announceIpWait(kind, { ip: w.ip, port: w.port });
+}
+
+// The admin chose an address while the server was waiting (next available IP, or one typed in): apply it now,
+// without restarting the application.
+function completeIpWait(host, port) {
+  const w = ipWait;
+  ipWait = null;
+  hostFallbackFrom = '';
+  rebind(host, port, 300);   // a moment later, so the answer to the request that asked for it can still be delivered
+  announceIpWait('resolved', { ip: host === '0.0.0.0' ? 'all interfaces' : host, port, oldIp: w ? w.ip : '' });
+}
+
+async function ipWaitAction(action, chosenIp) {
+  if (!ipWait) return { ok: false, error: 'The server is not waiting for an IP address any more.' };
+  if (action === 'wait') {
+    ipWait.deadline = Date.now() + IP_WAIT_MS;
+    ipWait.extensions++;
+    ipWait.reminded = false;
+    eventLog.info('ip_wait_extended', { ip: ipWait.ip, extensions: ipWait.extensions });
+    announceIpWait('extended');
+    return { ok: true, message: `Waiting ${IP_WAIT_MS / 1000} more seconds for ${ipWait.ip}.` };
+  }
+  if (action === 'use-next' || action === 'use') {
+    await refreshUsableIPs();
+    if (!ipWait) return { ok: false, error: 'The server is not waiting for an IP address any more.' };
+    // 'use' = the address the admin picked from the list; applyNetworkConfig checks it really is available
+    const target = action === 'use' ? String(chosenIp || '').trim() : nextUsableIp(ipWait.ip);
+    if (!target || target === ipWait.ip) return { ok: false, error: 'No other IP address is available on this computer right now.' };
+    return applyNetworkConfig({ host: target, port: ipWait.port });   // applies live while waiting
+  }
+  return { ok: false, error: 'Unknown action.' };
+}
 
 // ── Server ready state (tracks whether Admin is logged in) ─────
 let isServerLoggedIn = false;
@@ -121,6 +302,7 @@ app.use('/admin', express.static(path.join(__dirname, 'public')));
 app.get('/health', (req, res) => res.json({
   status: 'ok',
   serverReady: isServerLoggedIn,
+  serverId: getServerId(),   // lets a client confirm an address really is this server
   ts: new Date().toISOString()
 }));
 
@@ -144,12 +326,12 @@ app.get('/api/public/departments/:hospitalCode', (req, res) => {
 
 // ── Public: server IP info (for client installer) ─────────────
 app.get('/api/public/server-info', (req, res) => {
-  const ips = Object.values(os.networkInterfaces())
-    .flat().filter(i => i && i.family === 'IPv4' && !i.internal).map(i => i.address);
+  const ips = getListeningIPs();
   const hospitalRow = listClients.all()[0]; // First clinic registered
+  const bound = server.address();
   res.json({
     serverIp    : ips[0] || 'localhost',
-    port        : PORT,
+    port        : bound && bound.port ? bound.port : PORT,
     hospitalName: hospitalRow ? hospitalRow.client_name : '',
     hospitalCode: hospitalRow ? hospitalRow.hospital_code : '',
   });
@@ -176,8 +358,11 @@ const license = createLicense({
 // Activation and password-reset routes are only meant for the server's own login window,
 // so other computers on the network cannot use them (or lock them with wrong guesses).
 function localOnly(req, res, next) {
-  const addr = req.socket.remoteAddress || '';
-  if (addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1') return next();
+  const addr = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+  if (addr === '127.0.0.1' || addr === '::1') return next();
+  // When the server is bound to one specific IP, its own windows connect through that IP, so a request
+  // coming from any of this computer's own addresses is also local.
+  if (getLocalIPv4s().includes(addr)) return next();
   return res.status(403).json({ error: 'This action is only available on the server computer' });
 }
 
@@ -633,30 +818,41 @@ app.post('/api/admin/settings', requireAdmin, (req, res) => {
 });
 
 // GET /api/admin/network-info — current active IP(s), running port, and configured port
-app.get('/api/admin/network-info', requireAdmin, (req, res) => {
+async function getNetworkInfo() {
   const bound = server.address();
-  const activePort = bound ? bound.port : (parseInt(process.env.PORT || '0', 10) || PORT);
-  const ips = Object.values(os.networkInterfaces())
-    .flat()
-    .filter(i => i && i.family === 'IPv4' && !i.internal)
-    .map(i => i.address);
-
-  const dbSetting = getSetting.get('server_port');
-  const dbPort = dbSetting && dbSetting.value ? parseInt(dbSetting.value, 10) : null;
-
-  res.json({
+  const activePort = bound ? bound.port : PORT;
+  const ips = await refreshUsableIPs();   // only addresses that can really be listened on right now
+  const savedHost = readSetting('server_host_admin');
+  const savedPort = parseInt(readSetting('server_port_admin'), 10) || 0;
+  return {
+    clientUrlNotice: getClientUrlNotice(),   // set while clients still have to be told the new address
+    ipWait: getIpWaitInfo(),                 // set while the server waits for its saved IP (admin must decide)
     activePort,
     activeHost: HOST,
-    ips: ips.length > 0 ? ips : ['127.0.0.1'],
-    primaryIp: ips[0] || 'localhost',
-    configuredPort: dbPort !== null ? dbPort : (PORT !== 0 ? PORT : 0),
-    isAutoPort: (dbPort === null || dbPort === 0) && PORT === 0,
+    ips,
+    primaryIp: HOST !== '0.0.0.0' ? HOST : (ips[0] || 'localhost'),
+    configuredHost: savedHost || '0.0.0.0',
+    configuredPort: savedPort || activePort,
+    configuredIpAvailable: !savedHost || ips.includes(savedHost),
+    fallbackFrom: hostFallbackFrom,   // saved/env IP that was unavailable at startup (server listens on all interfaces instead)
+    isAutoPort: false,
     dbPath: process.env.DB_PATH || path.join(__dirname, 'data', 'panic_alarm.db'),
-  });
+  };
+}
+
+app.get('/api/admin/network-info', requireAdmin, async (req, res) => {
+  res.json(await getNetworkInfo());
 });
 
-// Helper to test if a port is currently available before saving
-function testPortAvailability(portNum) {
+// The notice stays until the admin confirms every client was updated
+app.post('/api/admin/client-url-notice/dismiss', requireAdmin, (req, res) => {
+  clearClientUrlNotice();
+  eventLog.info('client_url_notice_dismissed');
+  res.json({ ok: true });
+});
+
+// Helper to test if a port is currently available on a host before saving
+function testPortAvailability(portNum, host = '0.0.0.0') {
   return new Promise((resolve) => {
     const tester = net.createServer()
       .once('error', (err) => {
@@ -669,8 +865,78 @@ function testPortAvailability(portNum) {
       .once('listening', () => {
         tester.once('close', () => resolve({ available: true })).close();
       })
-      .listen(portNum, '0.0.0.0');
+      .listen(portNum, host);
   });
+}
+
+// ── "Clients must update" notice ───────────────────────────────
+// Client apps connect to http://<server-ip>:<port>. Whenever that address changes (admin edit, or the IP/port
+// changed by itself between runs) a notice is stored until the admin dismisses it, so it can be shown in the
+// tray, the Edit IP window and the admin panel.
+function urlsFor(host, port, ips) {
+  const list = host === '0.0.0.0' ? ips : [host];
+  return (list.length ? list : ['localhost']).map(ip => `http://${ip}:${port}`);
+}
+function getClientUrlNotice() {
+  try { const v = readSetting('client_url_notice'); return v ? JSON.parse(v) : null; } catch { return null; }
+}
+function setClientUrlNotice(n) {
+  try { setSetting.run('client_url_notice', n ? JSON.stringify(n) : ''); } catch { /* best effort */ }
+}
+function clearClientUrlNotice() { setClientUrlNotice(null); }
+
+// Validate and save the IP + port the server listens on from the next start.
+// host: '' or '0.0.0.0' = all interfaces, otherwise one IP that is usable right now.
+async function applyNetworkConfig({ host, port }) {
+  const wantHost = (typeof host === 'string' ? host.trim() : '') || '0.0.0.0';
+  const portNum = parseInt(port, 10);
+  if (isNaN(portNum) || portNum < 1024 || portNum > 65535)
+    return { ok: false, error: 'Port must be a valid number between 1024 and 65535.' };
+
+  if (wantHost !== '0.0.0.0') {
+    if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(wantHost)) return { ok: false, error: 'Enter a valid IPv4 address.' };
+    const ips = await refreshUsableIPs();
+    if (!ips.includes(wantHost))
+      return { ok: false, error: `IP address ${wantHost} is not available on this computer right now (adapter disabled or disconnected). Available: ${ips.join(', ') || 'none'}.` };
+  }
+
+  // The port this process already holds is fine; any other one must be free on the chosen address
+  const bound = server.address();
+  if (!(bound && bound.port === portNum)) {
+    const check = await testPortAvailability(portNum, wantHost);
+    if (!check.available) return { ok: false, error: check.error };
+  }
+
+  // Will the address clients use today still work after this change?
+  // While waiting for the saved IP, "today" means that IP (the one clients still have), not the local-only listener.
+  const waiting = !!ipWait;
+  const oldUrl = waiting
+    ? `http://${ipWait.ip}:${ipWait.port}`
+    : urlsFor(HOST, bound ? bound.port : PORT, getListeningIPs())[0];
+  const newUrls = urlsFor(wantHost, portNum, usableIpCache);
+  const newUrl = newUrls[0];
+  const urlChanged = !newUrls.includes(oldUrl);
+
+  setSetting.run('server_host_admin', wantHost === '0.0.0.0' ? '' : wantHost);
+  setSetting.run('server_port_admin', String(portNum));
+  setSetting.run('server_port', String(portNum));
+  eventLog.info('network_config_saved', { host: wantHost, port: portNum, urlChanged, live: waiting });
+
+  if (urlChanged) {
+    setClientUrlNotice({ from: oldUrl, to: newUrl, at: new Date().toISOString(), applied: waiting });
+    eventLog.warn(waiting ? 'client_url_changed' : 'client_url_will_change', { from: oldUrl, to: newUrl });
+    // Connected clients are told the new address NOW, before it takes effect, so they can follow by themselves
+    broadcastServerAddresses(newUrls, portNum);
+  } else {
+    const n = getClientUrlNotice();
+    if (n && !n.applied) clearClientUrlNotice();   // the admin changed it back before restarting
+  }
+  // Waiting for an IP: switch right away, no application restart needed (connected clients keep their sockets)
+  if (waiting) {
+    setSetting.run('last_client_url', newUrl);
+    completeIpWait(wantHost, portNum);
+  }
+  return { ok: true, host: wantHost, port: portNum, urlChanged, oldUrl, newUrl, live: waiting };
 }
 
 // Find an available port (checking startPort, otherwise auto-allocating)
@@ -696,6 +962,7 @@ function findAvailablePort(startPort = 5000) {
 function savePortSetting(portNum) {
   try {
     setSetting.run('server_port', String(portNum));
+    setSetting.run('server_port_admin', String(portNum));
     process.env.PORT = String(portNum);
     return true;
   } catch (e) {
@@ -719,37 +986,31 @@ app.post('/api/admin/stop-server', requireAdmin, (req, res) => {
   }, 200);
 });
 
-// POST /api/admin/network-settings — update saved port setting with validation & live conflict test
+// POST /api/admin/network-settings  { host, port } — validate (IP exists, port free) and save for the next start
+// (or apply right away when the server is waiting for its IP)
 app.post('/api/admin/network-settings', requireAdmin, async (req, res) => {
-  const { port, autoPort } = req.body || {};
-  if (autoPort) {
-    setSetting.run('server_port', '0');
-    return res.json({
-      message: 'Network port set to auto-assign (0). Restart the server application for changes to take effect.',
-      port: 0,
-    });
-  }
-
-  const portNum = parseInt(port, 10);
-  if (isNaN(portNum) || portNum < 1024 || portNum > 65535) {
-    return res.status(400).json({ error: 'Port must be a valid number between 1024 and 65535 (or choose Auto-assign).' });
-  }
-
-  // If the chosen port is not the currently running port, test if it is free
-  const bound = server.address();
-  const activePort = bound ? bound.port : null;
-  if (activePort && portNum !== activePort) {
-    const check = await testPortAvailability(portNum);
-    if (!check.available) {
-      return res.status(400).json({ error: check.error });
-    }
-  }
-
-  setSetting.run('server_port', String(portNum));
+  const { port, autoPort, host } = req.body || {};
+  const r = await applyNetworkConfig({ host, port: autoPort ? await findAvailablePort(5000) : port });
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  const where = `${r.host === '0.0.0.0' ? 'all network interfaces' : r.host}, port ${r.port}`;
   return res.json({
-    message: `Server port verified and saved as ${portNum}. Restart the server application for changes to take effect.`,
-    port: portNum,
+    message: (r.live ? `Now using ${where}.` : `Saved: ${where}. Restart the server application for the change to take effect.`) +
+      (r.urlChanged ? ` IMPORTANT: the client address changes from ${r.oldUrl} to ${r.newUrl}. Running clients are told the new address automatically; any that are not running or cannot follow must be updated by hand.` : ''),
+    host: r.host,
+    port: r.port,
+    restartRequired: !r.live,
+    urlChanged: r.urlChanged,
+    oldUrl: r.oldUrl,
+    newUrl: r.newUrl,
   });
+});
+
+// POST /api/admin/ip-wait  { action: 'wait' | 'use-next' } — the admin's answer while the server waits for its IP
+app.post('/api/admin/ip-wait', requireAdmin, async (req, res) => {
+  const action = String((req.body || {}).action || '');
+  const r = await ipWaitAction(action, (req.body || {}).ip);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true, message: r.message || `Now using ${r.newUrl}.`, urlChanged: !!r.urlChanged, newUrl: r.newUrl, oldUrl: r.oldUrl });
 });
 
 // ══════════════════════════════════════════════════════════════
@@ -1124,6 +1385,11 @@ io.on('connection', (socket) => {
     ready: isServerLoggedIn,
     message: isServerLoggedIn ? 'Server is active and ready' : 'Server is awaiting administrator login',
   });
+  // Every client learns the addresses of this server as soon as it connects (used if the address changes later)
+  if (!ipWait) {
+    const p = currentBoundPort();
+    socket.emit('server_addresses', addressPayload(urlsFor(HOST, p, getListeningIPs()), p));
+  }
 
   socket.on('join', (data) => {
     const code = (data && (data.hospitalCode || data.hospital_code || ''))
@@ -1166,8 +1432,15 @@ app.use((err, req, res, next) => {
 // ── Start ──────────────────────────────────────────────────────
 // Handle port binding errors (e.g. EADDRINUSE)
 server.on('error', (err) => {
-  eventLog.error('server_listen_error', { code: err.code, port: PORT });
-  if (err.code === 'EADDRINUSE') {
+  eventLog.error('server_listen_error', { code: err.code, port: PORT, host: HOST });
+  if (err.code === 'EADDRNOTAVAIL' && HOST !== '0.0.0.0' && HOST !== '127.0.0.1') {
+    // The IP vanished between the check and listen(): wait for it like at start-up (never jump to another IP)
+    console.warn(`[Server] ${HOST} is not available - waiting for it`);
+    hostFallbackFrom = HOST;
+    startIpWait(HOST);
+    HOST = '127.0.0.1';
+    server.listen(PORT, HOST);
+  } else if (err.code === 'EADDRINUSE') {
     console.error(`[Server] Port ${PORT} is already in use by another application!`);
     if (typeof global.__onServerPortError === 'function') {
       global.__onServerPortError(PORT, err);
@@ -1177,7 +1450,49 @@ server.on('error', (err) => {
   }
 });
 
-server.listen(PORT, HOST, () => {
+// Watches the IP the server is meant to use. It never changes IP by itself until the wait ran out:
+//   saved IP gone while serving  -> start waiting (clients keep their address, the IP may be back soon)
+//   saved IP back while waiting  -> serve on it again, nothing changes for any client
+//   admin not warned yet         -> after a short grace period tell the admin (tray dialog + admin panel)
+//   180 s without an answer      -> serve on all available interfaces (clients get the new addresses pushed)
+let missingIpChecks = 0;
+setInterval(() => {
+  refreshUsableIPs().then((ips) => {
+    const wanted = readSetting('server_host_admin') || (process.env.HOST || '').trim();
+    if (!ipWait) {
+      if (!wanted || wanted === '0.0.0.0' || wanted === '127.0.0.1' || HOST !== wanted) return;
+      // Two missed checks in a row (20 s) so one failed test-bind does not start a wait
+      missingIpChecks = ips.includes(wanted) ? 0 : missingIpChecks + 1;
+      if (missingIpChecks >= 2) {
+        missingIpChecks = 0;
+        eventLog.warn('bound_ip_lost', { ip: wanted });
+        hostFallbackFrom = wanted;
+        startIpWait(wanted);
+        // The old listener may be dead: keep the tray / admin windows working through this computer only
+        rebind('127.0.0.1', ipWait.port);
+      }
+      return;
+    }
+    const now = Date.now();
+    if (ips.includes(ipWait.ip)) { finishIpWait('returned'); return; }
+    if (now >= ipWait.deadline) { finishIpWait('timeout'); return; }
+    if (!ipWait.warned && now - ipWait.since >= IP_WARN_AFTER_MS) {
+      ipWait.warned = true;
+      announceIpWait('started');
+    } else if (ipWait.warned && !ipWait.reminded && ipWait.deadline - now <= 60 * 1000) {
+      ipWait.reminded = true;
+      announceIpWait('reminder');
+    }
+  }).catch(() => {});
+}, 5 * 1000).unref();
+
+// Decide the address from what really exists right now, then listen
+refreshUsableIPs().catch(() => []).then((ips) => {
+  HOST = resolveHost(ips);
+  server.listen(PORT, HOST);
+});
+
+server.on('listening', () => {
   const bound = server.address();
   const actualPort = bound ? bound.port : PORT;
   eventLog.info('server_started', { port: actualPort, host: HOST, pid: process.pid });
@@ -1190,8 +1505,28 @@ server.listen(PORT, HOST, () => {
     }
   } catch {}
 
-  const ips = Object.values(os.networkInterfaces())
-    .flat().filter(i => i && i.family === 'IPv4' && !i.internal).map(i => i.address);
+  const ips = getListeningIPs();
+
+  // Compare with the address clients were using last time: if it changed on its own (saved IP gone, port
+  // taken, DHCP gave a new IP...) clients can no longer find the server until they are updated.
+  // While waiting for the saved IP the server only listens on this computer: nothing changes for clients yet.
+  try {
+    if (ipWait) throw new Error('waiting');
+    const nowUrls = urlsFor(HOST, actualPort, ips);
+    const last = readSetting('last_client_url');
+    const existing = getClientUrlNotice();
+    if (existing && existing.to && nowUrls.includes(existing.to)) {
+      // The change the admin saved is now live
+      if (!existing.applied) setClientUrlNotice({ ...existing, applied: true });
+    } else if (last && !nowUrls.includes(last)) {
+      // Changed by itself (saved IP gone, port taken, new IP from DHCP...)
+      setClientUrlNotice({ from: last, to: nowUrls[0], at: new Date().toISOString(), applied: true, automatic: true });
+      eventLog.warn('client_url_changed', { from: last, to: nowUrls[0] });
+    }
+    setSetting.run('last_client_url', nowUrls[0]);
+    // Clients that are still connected learn the address now; the rest find it themselves (see client/main.js)
+    broadcastServerAddresses(nowUrls, actualPort);
+  } catch { /* best effort or waiting */ }
 
   console.log('');
   console.log('╔══════════════════════════════════════════════════╗');
@@ -1209,7 +1544,11 @@ process.on('SIGINT',  () => { eventLog.info('server_stopped', { signal: 'SIGINT'
 process.on('SIGTERM', () => { eventLog.info('server_stopped', { signal: 'SIGTERM' }); db.close(); process.exit(0); });
 
 // Export the http server and helpers so server-main.js can interact with them.
-module.exports = { server, app, io, testPortAvailability, findAvailablePort, savePortSetting, setServerLoggedIn, getServerLoggedIn };
+module.exports = {
+  server, app, io, testPortAvailability, findAvailablePort, savePortSetting, setServerLoggedIn, getServerLoggedIn,
+  getNetworkInfo, applyNetworkConfig, getListeningIPs, getLocalHost, refreshUsableIPs,
+  getClientUrlNotice, clearClientUrlNotice, getIpWaitInfo, ipWaitAction,
+};
 
 // ── Helpers ────────────────────────────────────────────────────
 // Roles: doctor | nurse | staff. Older records used 'other', which now maps to staff.

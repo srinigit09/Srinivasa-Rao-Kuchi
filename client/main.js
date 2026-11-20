@@ -299,7 +299,7 @@ function isFreshInstall() {
 
 /** Fresh install = full reset: registration, saved server address, device identity. */
 function wipeConfigForFreshInstall() {
-  for (const f of [CONFIG_FILE, CONFIG_FILE + '.bak', LAST_SERVER_FILE, LAST_HINT_FILE,
+  for (const f of [CONFIG_FILE, CONFIG_FILE + '.bak', LAST_SERVER_FILE, LAST_HINT_FILE, KNOWN_SERVER_FILE,
                    path.join(CONFIG_DIR, 'device-id')]) {
     try { fs.unlinkSync(f); } catch { /* already gone */ }
   }
@@ -337,6 +337,75 @@ function getOrCreateDeviceId() {
   writeShared(f, id);
   return id;
 }
+// ── Following the server when its address changes ─────────────────────────────
+// The server sends its id and every address it can be reached on over the socket the client is already connected
+// to. The client remembers them. When the connection is lost for a while, it probes those addresses and moves to
+// one whose /health answers with the SAME server id - so a changed server IP does not need a visit to every
+// client computer. Addresses are plain IPv4 http(s) URLs only. Note: the id is not a secret (/health shows it), so
+// this is a convenience for a trusted network, not protection against someone who controls the network.
+const KNOWN_SERVER_FILE = path.join(CONFIG_DIR, 'server-addresses.json');
+let knownServer = null;
+try { knownServer = JSON.parse(fs.readFileSync(KNOWN_SERVER_FILE, 'utf8')); } catch { /* none yet */ }
+let lastConnectedAt = Date.now();   // last time the socket to the server was up
+const FOLLOW_AFTER_MS = 20 * 1000;  // a normal server restart is over by then; only a longer outage makes the client look around
+let followBusy = false;
+let lastFollowTry = 0;
+
+function cleanServerUrls(list) {
+  const out = [];
+  for (const u of Array.isArray(list) ? list.slice(0, 20) : []) {
+    try {
+      const p = new URL(String(u));
+      if (p.protocol !== 'http:' && p.protocol !== 'https:') continue;
+      if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(p.hostname)) continue;   // the server only advertises IP addresses
+      out.push(`${p.protocol}//${p.host}`);
+    } catch { /* not a URL */ }
+  }
+  return [...new Set(out)];
+}
+function rememberServerAddresses(p) {
+  if (!p || typeof p.serverId !== 'string' || p.serverId.length < 8 || p.serverId.length > 64) return;
+  const urls = cleanServerUrls(p.urls);
+  if (!urls.length) return;
+  knownServer = { serverId: p.serverId, urls };
+  try { writeShared(KNOWN_SERVER_FILE, JSON.stringify(knownServer)); } catch { /* best effort */ }
+}
+async function findServerAt(urls, serverId) {
+  for (const u of urls) {
+    try {
+      const r = await fetch(`${u}/health`, { signal: AbortSignal.timeout(1500) });
+      if (!r.ok) continue;
+      const d = await r.json().catch(() => ({}));
+      if (d && d.serverId === serverId) return u;
+    } catch { /* not reachable */ }
+  }
+  return null;
+}
+async function followServerAddress() {
+  if (followBusy || !knownServer || Date.now() - lastFollowTry < 10000) return;
+  followBusy = true;
+  lastFollowTry = Date.now();
+  try {
+    const cfg = loadConfig();
+    if (!cfg || !cfg.serverUrl || !cfg.token) return;
+    let host = '';
+    try { host = new URL(cfg.serverUrl).hostname; } catch { return; }
+    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return;   // a name the admin typed on purpose is left alone
+    const found = await findServerAt(knownServer.urls.filter(u => u !== cfg.serverUrl), knownServer.serverId);
+    if (!found) return;
+    const old = cfg.serverUrl;
+    cfg.serverUrl = found;
+    saveConfig(cfg);
+    console.log(`[Address] Server moved: ${old} -> ${found}`);
+    showNotification('Panic Alarm — server address updated', `The server is now at ${found} (was ${old}). Updated automatically.`);
+    connectSocket(cfg);
+    rebuildTrayMenu(cfg, false);
+  } finally {
+    followBusy = false;
+  }
+}
+
+
 
 // ── Window refs ────────────────────────────────────────────────────────────────
 let setupWindow    = null;   // first-run wizard (closes after setup)
@@ -443,6 +512,7 @@ function connectSocket(config) {
   socket.on('connect', () => {
     console.log('[Socket] Connected to server transport');
     wasConnected = true;
+    lastConnectedAt = Date.now();
     socket.emit('join', {
       hospitalCode: (config.hospitalCode || '').toUpperCase(),
       userName    : config.user_name || config.role,
@@ -450,6 +520,12 @@ function connectSocket(config) {
       osUser      : osUserName(),
       ackCapable  : true,   // this client confirms every alarm it displays (lets the server report real delivery)
     });
+  });
+
+  // The server tells us every address it can be reached on: used to follow it if its IP changes later
+  socket.on('server_addresses', (p) => {
+    lastConnectedAt = Date.now();
+    rememberServerAddresses(p);
   });
 
   socket.on('server_state', (state) => {
@@ -965,6 +1041,10 @@ function startReconnectWatchdog(config) {
     if (socket && !socket.connected) {
       console.log('[Watchdog] Socket disconnected — connecting to server...');
       socket.connect();
+      // Down for a while: the server may have moved to another address - look for it (same server id only)
+      if (Date.now() - lastConnectedAt > FOLLOW_AFTER_MS) followServerAddress().catch(() => {});
+    } else if (socket && socket.connected) {
+      lastConnectedAt = Date.now();
     }
 
     // 2. Redundant HTTP health check: ensures instant auto-start as soon as server is ready

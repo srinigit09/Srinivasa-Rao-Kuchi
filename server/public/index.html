@@ -656,6 +656,23 @@ tr:hover td { background: #f8fafc; }
       <div class="page-title">Server & Network Settings</div>
       <div class="page-sub">View active server IP, running port, and customize network configuration</div>
 
+      <div id="ipWaitBox" style="display:none;background:#fffbeb;border:1px solid #f59e0b;border-radius:8px;padding:12px 14px;margin-bottom:16px;color:#92400e;font-size:13px;line-height:1.6;">
+        <div style="font-weight:700;margin-bottom:4px;" id="ipWaitTitle"></div>
+        <div id="ipWaitText"></div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="ipWaitBtnWait" onclick="ipWaitDo('wait')" style="padding:6px 14px;">Keep waiting</button>
+        </div>
+        <div style="margin-top:10px;font-size:12px;font-weight:600;" id="ipWaitUseLabel"></div>
+        <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;" id="ipWaitUseList"></div>
+        <div style="font-size:12px;margin-top:6px;">To use a different IP, choose it in "IP Address to listen on" below and save - it applies immediately.</div>
+      </div>
+
+      <div id="netClientNotice" style="display:none;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px 14px;margin-bottom:16px;color:#991b1b;font-size:13px;line-height:1.6;">
+        <div style="font-weight:700;margin-bottom:4px;">⚠️ Server address changed - update ALL clients</div>
+        <div id="netClientNoticeText"></div>
+        <button class="btn btn-primary" onclick="dismissClientNotice()" style="margin-top:8px;padding:6px 14px;">All clients updated</button>
+      </div>
+
       <!-- Live Status Card -->
       <div class="section">
         <div class="section-hdr"><h3>📡 Live Server Status</h3></div>
@@ -704,6 +721,12 @@ tr:hover td { background: #f8fafc; }
                   <span>Auto-Assign Free Port (Recommended for zero-configuration)</span>
                 </label>
               </div>
+            </div>
+
+            <div class="fg" style="margin-bottom:14px;">
+              <label>IP Address to listen on</label>
+              <select id="netInputHost"></select>
+              <p style="font-size:11px;color:#64748b;margin-top:4px;">Only IP addresses that are available on this computer right now are listed. "All network interfaces" keeps working when an adapter changes.</p>
             </div>
 
             <div class="fg" id="customPortGroup" style="margin-bottom:14px;">
@@ -892,21 +915,12 @@ window.addEventListener('DOMContentLoaded', () => {
   if (token) bootApp();
 
   document.getElementById('btnLogout').addEventListener('click', logout);
-  document.getElementById('btnRestartServer').addEventListener('click', async () => {
-    if (confirm('Are you sure you want to restart the Panic Alarm Server?')) {
-      try { await api('/api/admin/restart-server', 'POST'); } catch {}
-      if (window.serverAPI && window.serverAPI.restartServer) {
-        window.serverAPI.restartServer();
-      }
-    }
+  // The desktop app shows its own warning and only then restarts / quits
+  document.getElementById('btnRestartServer').addEventListener('click', () => {
+    if (window.serverAPI && window.serverAPI.restartServer) window.serverAPI.restartServer();
   });
-  document.getElementById('btnCloseServer').addEventListener('click', async () => {
-    if (confirm('Are you sure you want to stop and close the Panic Alarm Server?')) {
-      try { await api('/api/admin/stop-server', 'POST'); } catch {}
-      if (window.serverAPI && window.serverAPI.stopServer) {
-        window.serverAPI.stopServer();
-      }
-    }
+  document.getElementById('btnCloseServer').addEventListener('click', () => {
+    if (window.serverAPI && window.serverAPI.stopServer) window.serverAPI.stopServer();
   });
   initChangePassword();
   initAddClient();
@@ -937,6 +951,8 @@ function bootApp() {
   }
   showPage('dashboard');
   connectAdminSocket();
+  checkClientNotice();
+  api('GET', '/api/admin/network-info').then(i => { if (i && i.ipWait) { renderIpWait(i.ipWait); flash('⚠️ Server is reconnecting to ' + i.ipWait.ip + ':' + i.ipWait.port + ' - see Server & Network.', false); } });
 }
 
 // ── Admin Socket.IO — live refresh when clients self-register ──────────────────
@@ -950,6 +966,28 @@ function connectAdminSocket() {
     });
     // An alarm was sent / delivered / acknowledged: refresh the open alarm view (grouped, so bursts cost one reload)
     let alarmRefreshTimer = null;
+    // The server is waiting for its saved IP (or the wait ended): show the choices / the result right away
+    adminSocket.on('ip_wait', (w) => {
+      if (w.kind === 'started' || w.kind === 'reminder' || w.kind === 'extended') renderIpWait(w.ip ? w : null);
+      else {
+        renderIpWait(null);
+        flash(w.kind === 'returned' ? 'ℹ️ ' + w.ip + ' is available again - nothing changed for the clients.'
+          : '⚠️ Server address changed - now using ' + w.ip + ':' + w.port + '. Running clients were told the new address.', w.kind === 'returned');
+      }
+      const net = document.getElementById('page-networkSettings');
+      if (net && net.classList.contains('active')) loadNetworkSettings();
+    });
+    // An IP appeared / disappeared (adapter enabled or disabled): tell the admin right away and refresh the network page
+    adminSocket.on('network_changed', (c) => {
+      const parts = [];
+      if (c.removed && c.removed.length) parts.push('No longer available: ' + c.removed.join(', '));
+      if (c.added && c.added.length) parts.push('Now available: ' + c.added.join(', '));
+      flash('⚠️ Network change - ' + parts.join(' · '), false);
+      // While the server waits for its IP, keep the "available addresses" buttons in step with the adapters
+      api('GET', '/api/admin/network-info').then(i => { if (i && i.ipWait) renderIpWait(i.ipWait); });
+      const net = document.getElementById('page-networkSettings');
+      if (net && net.classList.contains('active')) loadNetworkSettings();
+    });
     adminSocket.on('alarm_updated', () => {
       clearTimeout(alarmRefreshTimer);
       alarmRefreshTimer = setTimeout(() => {
@@ -984,18 +1022,12 @@ async function _refreshDashboardStats() {
   document.getElementById('stat-users').textContent   = _dashClients.reduce((s, c) => s + (c.user_count || 0), 0);
 }
 
-// The admin session ran out (panel open for many hours, or the PC slept). Sign in again silently when the
-// admin chose "Remember Password" - so the panel stays up and the alarm system never switches off - and only
-// fall back to the login window when that is not possible.
+// The admin session ran out (panel open for many hours, or the PC slept). The Admin UI always asks for the admin
+// credentials again; the server itself keeps running, so alarms are not affected.
 let _expiring = false;
-async function sessionExpired() {
+function sessionExpired() {
   if (_expiring) return;
   _expiring = true;
-  try {
-    const r = await window.serverAPI.relogin();
-    if (r && r.ok && r.token) { token = r.token; try { localStorage.setItem('adminToken', token); } catch {} location.reload(); return; }
-  } catch { /* fall through to the login window */ }
-  _expiring = false;
   logout();
 }
 
@@ -1784,6 +1816,66 @@ function cpFlash(msg, ok) {
 // ── Server & Network Settings ──────────────────────────────────
 let _currentClientUrl = '';
 
+function renderIpWait(w) {
+  const box = document.getElementById('ipWaitBox');
+  if (!box) return;
+  if (!w) { box.style.display = 'none'; return; }
+  document.getElementById('ipWaitTitle').textContent = `⚠️ Reconnecting to ${w.ip}:${w.port} …`;
+  document.getElementById('ipWaitText').textContent =
+    `The saved server address is not available on this computer right now. The server is waiting for it so clients do not have to change` +
+    (w.remainingSec != null ? ` (about ${w.remainingSec} s left)` : '') + `. ` +
+    `You can switch to an available address at any time. If nobody answers, the server will switch to all available addresses.`;
+  // One button per address that can be used right now (rebuilt as adapters come and go)
+  const ips = Array.isArray(w.ips) ? w.ips : (w.nextIp ? [w.nextIp] : []);
+  document.getElementById('ipWaitUseLabel').textContent = ips.length ? 'Available addresses - click one to use it now:' : 'No other address is available at the moment.';
+  const list = document.getElementById('ipWaitUseList');
+  list.textContent = '';
+  ips.forEach(ip => {
+    const b = document.createElement('button');
+    b.className = 'btn btn-primary';
+    b.style.padding = '6px 14px';
+    b.textContent = `Use ${ip}:${w.port}`;
+    b.addEventListener('click', () => {
+      if (confirm(`Use ${ip}:${w.port} now?\n\nRunning clients are told the new address automatically. Any client that is not running, or has an old version, must be updated by hand.`)) ipWaitDo('use', ip);
+    });
+    list.appendChild(b);
+  });
+  box.style.display = 'block';
+}
+
+async function ipWaitDo(action, ip) {
+  const r = await api('POST', '/api/admin/ip-wait', { action, ip });
+  if (r.error) { flash(r.error, false); return; }
+  flash('✅ ' + (r.message || 'Done'), true);
+  if (action === 'wait') loadNetworkSettings();
+}
+
+function renderClientNotice(n) {
+  const box = document.getElementById('netClientNotice');
+  if (!box) return;
+  if (!n) { box.style.display = 'none'; return; }
+  const what = n.applied
+    ? `The server is now reachable at <strong>${esc(n.to)}</strong> (it was ${esc(n.from)}).`
+    : `The server will change from ${esc(n.from)} to <strong>${esc(n.to)}</strong> after it restarts.`;
+  document.getElementById('netClientNoticeText').innerHTML = what +
+    '<br>The same address must be updated in <strong>ALL clients</strong> (client tray icon → Edit User Details), otherwise they cannot connect.';
+  box.style.display = 'block';
+}
+
+// On admin login: remind the admin if clients still have to be updated
+async function checkClientNotice() {
+  const info = await api('GET', '/api/admin/network-info');
+  if (info && info.clientUrlNotice) {
+    renderClientNotice(info.clientUrlNotice);
+    flash('⚠️ Server address changed to ' + info.clientUrlNotice.to + ' - update ALL clients (see Server & Network).', false);
+  }
+}
+
+async function dismissClientNotice() {
+  const r = await api('POST', '/api/admin/client-url-notice/dismiss');
+  if (!r.error) renderClientNotice(null);
+}
+
 async function loadNetworkSettings() {
   const elFlash = document.getElementById('netFlash');
   if (elFlash) elFlash.style.display = 'none';
@@ -1795,6 +1887,8 @@ async function loadNetworkSettings() {
     return;
   }
 
+  renderClientNotice(info.clientUrlNotice || null);
+  renderIpWait(info.ipWait || null);
   const port = info.activePort;
   const ip = info.primaryIp || 'localhost';
   _currentClientUrl = `http://${ip}:${port}`;
@@ -1803,16 +1897,23 @@ async function loadNetworkSettings() {
   document.getElementById('netPrimaryIp').textContent = ip;
   document.getElementById('netClientUrl').textContent = _currentClientUrl;
 
-  const allIps = (info.ips && info.ips.length) ? info.ips.join(', ') : 'localhost';
-  document.getElementById('netAllIps').innerHTML = `<strong>Available Network IP(s):</strong> ${esc(allIps)}`;
+  const ips = info.ips || [];
+  const allIps = ips.length ? ips.join(', ') : 'none available';
+  let ipLine = `<strong>Available Network IP(s):</strong> ${esc(allIps)}`;
+  if (info.fallbackFrom) ipLine += `<br><span style="color:#b45309;">The saved IP ${esc(info.fallbackFrom)} is not available on this computer, so the server is using all available interfaces instead.</span>`;
+  document.getElementById('netAllIps').innerHTML = ipLine;
 
-  if (info.isAutoPort || info.configuredPort === 0) {
-    document.getElementById('portModeAuto').checked = true;
-    document.getElementById('netInputPort').value = '';
-  } else {
-    document.getElementById('portModeCustom').checked = true;
-    document.getElementById('netInputPort').value = info.configuredPort || port;
-  }
+  // IP choices: only addresses that can really be listened on right now
+  const sel = document.getElementById('netInputHost');
+  sel.textContent = '';
+  const addOpt = (value, label) => { const o = document.createElement('option'); o.value = value; o.textContent = label; sel.appendChild(o); };
+  addOpt('0.0.0.0', 'All network interfaces (0.0.0.0) - recommended');
+  ips.forEach(i => addOpt(i, i));
+  const wanted = info.configuredHost || '0.0.0.0';
+  sel.value = (wanted === '0.0.0.0' || ips.includes(wanted)) ? wanted : '0.0.0.0';
+
+  document.getElementById('portModeCustom').checked = true;
+  document.getElementById('netInputPort').value = info.configuredPort || port;
   togglePortInput();
 }
 
@@ -1834,6 +1935,7 @@ function copyClientUrl() {
 async function saveNetworkSettings() {
   const isAuto = document.getElementById('portModeAuto').checked;
   const portVal = document.getElementById('netInputPort').value.trim();
+  const host = document.getElementById('netInputHost').value;
   const elFlash = document.getElementById('netFlash');
 
   const showNetFlash = (msg, ok) => {
@@ -1842,16 +1944,16 @@ async function saveNetworkSettings() {
     elFlash.style.display = 'block';
   };
 
-  let body = {};
+  let body = { host };
   if (isAuto) {
-    body = { autoPort: true };
+    body.autoPort = true;
   } else {
     const portNum = parseInt(portVal, 10);
     if (!portVal || isNaN(portNum) || portNum < 1024 || portNum > 65535) {
       showNetFlash('Please enter a valid port number between 1024 and 65535', false);
       return;
     }
-    body = { port: portNum };
+    body.port = portNum;
   }
 
   const btn = document.getElementById('btnSaveNetworkSettings');
@@ -1863,13 +1965,16 @@ async function saveNetworkSettings() {
     if (res.error) {
       showNetFlash(res.error, false);
     } else {
-      showNetFlash('✅ ' + (res.message || 'Settings saved successfully!'), true);
+      showNetFlash((res.urlChanged ? '⚠️ ' : '✅ ') + (res.message || 'Settings saved successfully!'), true);
+      if (res.urlChanged) checkClientNotice();
+      // The new address only takes effect after a restart (the desktop app asks for confirmation first)
+      if (res.restartRequired && window.serverAPI && window.serverAPI.restartServer) window.serverAPI.restartServer();
     }
   } catch (e) {
     showNetFlash('Failed to save settings: ' + e.message, false);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Save Network Settings';
+    btn.textContent = 'Verify & Save Network Settings';
   }
 }
 

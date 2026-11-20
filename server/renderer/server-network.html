@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<title>Panic Alarm Server — Edit IP Address</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  background: #ffffff; color: #1f2328; padding: 22px 26px; font-size: 13px; line-height: 1.5;
+}
+h1 { font-size: 16px; margin-bottom: 4px; }
+.sub { font-size: 12px; color: #57606a; margin-bottom: 16px; }
+.status { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; font-size: 12px; }
+.status div { display: flex; justify-content: space-between; gap: 10px; }
+.status span:first-child { color: #57606a; }
+.status strong { word-break: break-all; text-align: right; }
+label { display: block; font-size: 12px; font-weight: 600; color: #57606a; margin: 12px 0 5px; }
+select, input {
+  width: 100%; padding: 9px 11px; background: #f7f8fa; border: 1px solid #e5e7eb;
+  border-radius: 7px; color: #1f2328; font-size: 14px;
+}
+select:focus, input:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgba(59,130,212,0.15); }
+.hint { font-size: 11px; color: #57606a; margin-top: 4px; }
+hr { border: none; border-top: 1px solid #e5e7eb; margin: 16px 0 4px; }
+.btns { display: flex; gap: 8px; margin-top: 18px; }
+button { flex: 1; padding: 10px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid #d0d7de; background: #f6f8fa; color: #1f2328; }
+button.primary { background: #3b82d4; color: #fff; border-color: #3b82d4; }
+button.primary:hover { background: #2563b0; }
+button:disabled { opacity: .6; cursor: not-allowed; }
+.msg { display: none; margin-top: 12px; padding: 9px 12px; border-radius: 6px; font-size: 12px; }
+.msg.err { background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; }
+.msg.ok  { background: #f0fdf4; border: 1px solid #bbf7d0; color: #16a34a; }
+.warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 6px; padding: 9px 12px; font-size: 12px; margin-bottom: 12px; display: none; }
+.wait { background: #fffbeb; border: 1px solid #f59e0b; color: #92400e; border-radius: 6px; padding: 10px 12px; font-size: 12px; margin-bottom: 12px; display: none; }
+.wait strong { display: block; margin-bottom: 3px; }
+.alert { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 6px; padding: 10px 12px; font-size: 12px; margin-bottom: 12px; display: none; }
+.alert strong { display: block; margin-bottom: 3px; }
+.alert button { flex: none; width: auto; margin-top: 8px; padding: 5px 10px; font-size: 11px; }
+</style>
+</head>
+<body>
+<h1>Edit IP Address</h1>
+<p class="sub">Choose the IP address and port the server listens on. Only addresses that are available on this computer right now are listed.</p>
+
+<div class="wait" id="waitBox"></div>
+<div class="alert" id="noticeBox"></div>
+<div class="warn" id="warnBox"></div>
+
+<div class="status">
+  <div><span>Currently listening on</span><strong id="curListen">…</strong></div>
+  <div><span>Client URL</span><strong id="curUrl">…</strong></div>
+</div>
+
+<label for="ipSelect">IP Address</label>
+<select id="ipSelect"></select>
+<p class="hint">"All network interfaces" is recommended: it keeps working when an adapter changes.</p>
+<button type="button" id="btnRefresh" style="margin-top:8px;flex:none;width:auto;padding:6px 12px;font-size:12px;">Refresh IP list</button>
+
+<label for="portInput">Port (1024 – 65535)</label>
+<input type="number" id="portInput" min="1024" max="65535">
+
+<hr>
+<label for="adminUser">Admin Username</label>
+<input type="text" id="adminUser" autocomplete="username">
+<label for="adminPass">Admin Password</label>
+<input type="password" id="adminPass" autocomplete="current-password">
+<p class="hint">Admin credentials are required to change where the server listens.</p>
+
+<div class="btns">
+  <button type="button" id="btnClose">Close</button>
+  <button type="button" class="primary" id="btnSave">Save &amp; Restart</button>
+</div>
+<div class="msg" id="msg"></div>
+
+<script>
+  const sapi = window.serverAPI;
+  const $ = (id) => document.getElementById(id);
+  const ALL = '0.0.0.0';
+
+  function showMsg(text, ok) {
+    const m = $('msg');
+    m.textContent = text;
+    m.className = 'msg ' + (ok ? 'ok' : 'err');
+    m.style.display = 'block';
+  }
+
+  async function load() {
+    $('msg').style.display = 'none';
+    const info = await sapi.networkGet();
+    if (!info || info.error) { showMsg((info && info.error) || 'Server is not ready yet', false); return; }
+
+    const listen = info.activeHost === ALL ? 'All interfaces' : info.activeHost;
+    $('curListen').textContent = `${listen} : ${info.activePort}`;
+    $('curUrl').textContent = `http://${info.primaryIp}:${info.activePort}`;
+
+    const wanted = info.configuredHost || ALL;
+    const sel = $('ipSelect');
+    sel.textContent = '';
+    const add = (value, label) => {
+      const o = document.createElement('option');
+      o.value = value; o.textContent = label; sel.appendChild(o);
+    };
+    add(ALL, 'All network interfaces (0.0.0.0)');
+    for (const ip of info.ips) add(ip, ip);
+    // A saved IP that is not available any more is not offered: the admin must pick one that exists
+    sel.value = (wanted === ALL || info.ips.includes(wanted)) ? wanted : ALL;
+    $('portInput').value = info.configuredPort || info.activePort;
+
+    const wb = $('waitBox');
+    if (info.ipWait) {
+      const w = info.ipWait;
+      wb.textContent = '';
+      const t = document.createElement('strong');
+      t.textContent = `Reconnecting to ${w.ip}:${w.port} …`;
+      const d = document.createElement('div');
+      d.textContent = `The server is waiting for this address (about ${w.remainingSec} s left) so clients do not have to change. ` +
+        (w.nextIp ? `Next available: ${w.nextIp}:${w.port}. ` : '') +
+        'Pick an address below and save to switch now (no restart needed), or close this window to keep waiting.';
+      wb.append(t, d);
+      wb.style.display = 'block';
+    } else {
+      wb.style.display = 'none';
+    }
+
+    const nb = $('noticeBox');
+    if (info.clientUrlNotice) {
+      const n = info.clientUrlNotice;
+      nb.textContent = '';
+      const t = document.createElement('strong');
+      t.textContent = n.applied ? 'Server address changed - update ALL clients' : 'Server address will change after restart - update ALL clients';
+      const d = document.createElement('div');
+      d.textContent = `Old: ${n.from}  →  New: ${n.to}. On every client: tray icon → Edit User Details → enter the new address.`;
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = 'All clients updated';
+      b.addEventListener('click', async () => { await sapi.networkDismissNotice(); load(); });
+      nb.append(t, d, b);
+      nb.style.display = 'block';
+    } else {
+      nb.style.display = 'none';
+    }
+
+    const warn = $('warnBox');
+    if (info.fallbackFrom || !info.configuredIpAvailable) {
+      const ip = info.fallbackFrom || wanted;
+      warn.textContent = `The saved IP address ${ip} is not available on this computer, so the server is using all available interfaces instead. Pick an available address below.`;
+      warn.style.display = 'block';
+    } else {
+      warn.style.display = 'none';
+    }
+  }
+
+  $('btnRefresh').addEventListener('click', load);
+  $('btnClose').addEventListener('click', () => window.close());
+
+  $('btnSave').addEventListener('click', async () => {
+    const port = parseInt($('portInput').value, 10);
+    const username = $('adminUser').value.trim();
+    const password = $('adminPass').value;
+    if (!port || port < 1024 || port > 65535) { showMsg('Enter a port between 1024 and 65535.', false); return; }
+    if (!username || !password) { showMsg('Enter the admin username and password.', false); return; }
+
+    const btn = $('btnSave');
+    btn.disabled = true;
+    try {
+      const r = await sapi.networkSave({ host: $('ipSelect').value, port, username, password });
+      $('adminPass').value = '';
+      if (!r.ok) { showMsg(r.error || 'Could not save.', false); return; }
+      if (r.live) {
+        // The server was waiting for its IP: it switched right away, no restart needed
+        showMsg(r.urlChanged
+          ? `Now using ${r.newUrl} (was ${r.oldUrl}). Running clients were told the new address; any that are not running must be updated by hand.`
+          : `Now using ${r.newUrl}.`, true);
+        load();
+        return;
+      }
+      if (r.urlChanged) {
+        showMsg(`Saved. The client address changes from ${r.oldUrl} to ${r.newUrl}. Running clients are told the new address automatically; any that are not running must be updated by hand.`, true);
+        load();
+      } else {
+        showMsg('Saved. The new address is used after the application restarts.', true);
+      }
+      await sapi.networkApplyRestart();   // asks for confirmation before restarting (and repeats the client warning)
+    } catch (e) {
+      showMsg('Could not save the settings.', false);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  load();
+</script>
+</body>
+</html>
