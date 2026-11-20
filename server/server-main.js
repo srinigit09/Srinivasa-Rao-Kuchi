@@ -648,8 +648,11 @@ function createLoginWindow() {
   if (!app.isReady() || standbyMode) return;
   if (loginWindow && !loginWindow.isDestroyed()) { loginWindow.focus(); return; }
 
+  // Size is the CONTENT area (Windows adds a title bar and frame on top) and never taller than the screen
+  const workH = require('electron').screen.getPrimaryDisplay().workAreaSize.height;
   loginWindow = new BrowserWindow({
-    width: 440, height: 680,
+    width: 440, height: Math.min(700, workH - 40),
+    useContentSize: true,
     resizable: false, center: true,
     title: 'Panic Alarm Server — Login',
     icon: path.join(__dirname, 'assets', 'server-icon.png'),
@@ -664,10 +667,12 @@ function createLoginWindow() {
 }
 
 // ── Create main admin window ──────────────────────────────────────────────────
+let adminSessionToken = '';   // kept in memory only, so the open Admin window can follow a changed server address without a new sign-in
 function createMainWindow(adminToken) {
   if (!app.isReady() || standbyMode) return;
   if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.focus(); return; }
   if (!adminToken) return;   // the Admin UI is only ever opened right after a successful admin sign-in
+  adminSessionToken = adminToken;
 
   const { width, height } = require('electron').screen.getPrimaryDisplay().workAreaSize;
 
@@ -690,6 +695,7 @@ function createMainWindow(adminToken) {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    adminSessionToken = '';
     // Forget the admin session: the Admin UI must ask for credentials every time it is opened
     require('electron').session.defaultSession.clearStorageData({ storages: ['localstorage'] }).catch(() => {});
     rebuildTrayMenu(true);
@@ -911,12 +917,25 @@ function showIpNotification(title, body, onClick) {
   } catch { /* notifications are best effort */ }
 }
 
-// An address change moves the Admin window's origin: point an open Admin window at the new one (sign-in is asked again)
+// An address change moves the Admin window's origin (a new port or IP is a new origin, so the page's saved sign-in is
+// gone). Point the open Admin window at the new address WITH the current session, so it does not end up as a blank
+// page. The server needs a moment to start listening again, so try a few times.
 function reloadAdminWindow(port) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  setTimeout(() => {
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.loadURL(`http://${getLocalHost()}:${port || currentPort()}/admin/`).catch(() => {});
-  }, 1500);
+  // Use the page's own (refreshed) token when it has one, so a long session does not fall back to the login window
+  try {
+    mainWindow.webContents.executeJavaScript("localStorage.getItem('adminToken')")
+      .then(t => { if (typeof t === 'string' && t) adminSessionToken = t; }).catch(() => {});
+  } catch { /* page not available */ }
+  const tryLoad = (attemptsLeft) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const hash = adminSessionToken ? `#adminToken=${encodeURIComponent(adminSessionToken)}` : '';
+    mainWindow.loadURL(`http://${getLocalHost()}:${port || currentPort()}/admin/${hash}`).catch(() => {
+      if (attemptsLeft > 0) setTimeout(() => tryLoad(attemptsLeft - 1), 1000);
+      else { try { mainWindow.close(); createLoginWindow(); } catch { /* window already gone */ } }   // never leave a blank window
+    });
+  };
+  setTimeout(() => tryLoad(6), 1500);
 }
 
 // The admin changed the port / address and the server moved to it without a restart: follow it here (tray text, the

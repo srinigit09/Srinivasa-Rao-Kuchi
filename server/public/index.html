@@ -106,22 +106,6 @@ body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; background
 }
 .btn-logout:hover { background: #dc2626; border-color: #dc2626; color: #fff; }
 
-/* Server control (Restart / Close) */
-.srv-ctl { margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
-.srv-ctl-label { font-size: 10px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 8px; }
-.srv-ctl-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.btn-ctl {
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 8px 6px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;
-  background: #fff; border: 1.5px solid #cbd5e1; color: #334155; transition: all .15s;
-}
-.btn-ctl .ico { font-size: 13px; line-height: 1; }
-.btn-ctl:hover { background: #f1f5f9; border-color: #94a3b8; }
-.btn-ctl.restart:hover { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; }
-.btn-ctl.stop { color: #b91c1c; border-color: #fecaca; background: #fff; }
-.btn-ctl.stop:hover { background: #dc2626; border-color: #dc2626; color: #fff; }
-.btn-ctl:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
-
 /* Main content */
 .main-area { margin-left: 230px; padding: 28px 32px; min-height: 100vh; }
 .page-title { font-size: 22px; font-weight: 800; color: #1e293b; margin-bottom: 4px; }
@@ -336,17 +320,6 @@ tr:hover td { background: #f8fafc; }
       <button class="btn-logout" id="btnLogout">
         <span>⏻</span> Sign Out
       </button>
-      <div class="srv-ctl">
-        <div class="srv-ctl-label">Server</div>
-        <div class="srv-ctl-row">
-          <button class="btn-ctl restart" id="btnRestartServer" title="Restart Panic Alarm Server Application">
-            <span class="ico">🔄</span> Restart
-          </button>
-          <button class="btn-ctl stop" id="btnCloseServer" title="Close and Exit Server Application">
-            <span class="ico">⏻</span> Close
-          </button>
-        </div>
-      </div>
     </div>
   </div>
 
@@ -932,15 +905,10 @@ const clientCache = new Map(); // id → client object, avoids JSON-in-attribute
 // ── Boot ───────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   if (token) bootApp();
+  // No session (for example the page was reopened on a new address): never leave a blank screen, go back to sign-in
+  else if (window.serverAPI && window.serverAPI.logout) window.serverAPI.logout();
 
   document.getElementById('btnLogout').addEventListener('click', logout);
-  // The desktop app shows its own warning and only then restarts / quits
-  document.getElementById('btnRestartServer').addEventListener('click', () => {
-    if (window.serverAPI && window.serverAPI.restartServer) window.serverAPI.restartServer();
-  });
-  document.getElementById('btnCloseServer').addEventListener('click', () => {
-    if (window.serverAPI && window.serverAPI.stopServer) window.serverAPI.stopServer();
-  });
   initChangePassword();
   initAddClient();
   initAddUser();

@@ -7,21 +7,26 @@
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
-  width: 440px; height: 680px; overflow: hidden;
+  width: 100%; height: 100%; overflow-x: hidden; overflow-y: auto;
   font-family: -apple-system, "Segoe UI", sans-serif;
   background: #ffffff; color: #1f2328;
-  display: flex; align-items: center; justify-content: center;
 }
+/* margin:auto on the card centres it when there is room and lets the page scroll (nothing is cut off) when there is not */
+body { display: flex; padding: 12px 0; }
 
 .card {
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 12px; padding: 28px 28px; width: 400px;
+  border-radius: 12px; padding: 22px 28px; width: 400px; margin: auto; flex-shrink: 0;
   box-shadow: 0 2px 12px rgba(0,0,0,0.08);
 }
-.logo { text-align: center; margin-bottom: 16px; }
-.logo .icon { font-size: 44px; }
-.logo h1 { font-size: 16px; color: #1f2328; margin-top: 8px; font-weight: 700; letter-spacing: 0.5px; }
+.co-brand { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+.co-brand img { width: 30px; height: 30px; object-fit: contain; display: block; flex-shrink: 0; }
+.co-brand span { font-size: 14px; font-weight: 800; color: #0a0a0a; white-space: nowrap; }
+.co-brand span b { color: #2e6da4; font-weight: 800; }
+.logo { text-align: center; margin-bottom: 14px; }
+.logo .icon { font-size: 44px; line-height: 1.1; }
+.logo h1 { font-size: 16px; color: #1f2328; margin-top: 4px; font-weight: 700; letter-spacing: 0.5px; }
 .logo p  { font-size: 12px; color: #57606a; margin-top: 4px; }
 
 .server-badge {
@@ -79,7 +84,7 @@ hr { border: none; border-top: 1px solid #e5e7eb; margin: 14px 0; }
 .reset-section { display: none; }
 .reset-section label { margin-top: 10px; }
 textarea {
-  width: 100%; padding: 10px 12px; height: 84px; resize: none;
+  width: 100%; padding: 10px 12px; height: 64px; resize: none;
   background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 7px;
   color: #1f2328; font-size: 12px; font-family: ui-monospace, Menlo, Consolas, monospace; margin-bottom: 14px;
 }
@@ -97,8 +102,8 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
 </head>
 <body>
 <div class="card">
+  <div class="co-brand"><img src="../assets/ciana-mark.png" alt="Ciana Technologies"><span>Ciana <b>Technologies</b></span></div>
   <div class="logo">
-    <img src="../assets/ciana-logo.png" alt="Ciana Technologies" style="width:150px;max-width:70%;height:auto;display:block;margin:0 auto 10px">
     <div class="icon">🖥️</div>
     <h1>PANIC ALARM SERVER</h1>
     <p>Secure Admin Access</p>
@@ -138,10 +143,6 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
     <button class="btn-login" id="btnLogin">SIGN IN</button>
     <button class="btn-link" id="btnShowReset">Forgot admin password?</button>
 
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding-top:12px; border-top:1px solid #e2e8f0;">
-      <button class="btn-link" id="btnRestartApp" style="color:#475569; font-size:11px; margin:0; padding:0; text-decoration:none; cursor:pointer;">🔄 Restart Application</button>
-      <button class="btn-link" id="btnCloseApp" style="color:#dc2626; font-size:11px; margin:0; padding:0; text-decoration:none; cursor:pointer;">⏻ Quit Application</button>
-    </div>
   </div>
 
   <!-- Admin password reset (vendor Reset Code) -->
@@ -166,7 +167,6 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
   <div class="ok-msg"  id="okMsg"></div>
   <div class="spinner" id="spinner">Processing…</div>
 
-  <div class="info" id="serverInfo">Fetching server address…</div>
 </div>
 
 <script>
@@ -186,26 +186,10 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
       const primaryIp = ips[0] || null;
       document.getElementById('serverBadge').textContent =
         primaryIp ? `🟢 Running  ·  ${primaryIp}:${port}` : `🟢 Running  ·  Port ${port}`;
-      // Show at most 3 URLs so a long list (VPN / VM adapters) cannot push the form out of the window
-      const MAX_SHOWN = 3;
-      const shown = ips.slice(0, MAX_SHOWN).map(ip => `<strong style="color:#1f2328">http://${ip}:${port}</strong>`);
-      if (ips.length > MAX_SHOWN) shown.push(`<span style="color:#57606a">+ ${ips.length - MAX_SHOWN} more (see Edit IP Address)</span>`);
-      const allIps = ips.length
-        ? shown.join('<br>')
-        : `<strong style="color:#1f2328">http://localhost:${port}</strong>`;
-      document.getElementById('serverInfo').innerHTML =
-        `<span style="color:#57606a">Server URL${ips.length > 1 ? 's' : ''}:</span><br>${allIps}` +
-        `<br><button onclick="copyUrl('http://${primaryIp || 'localhost'}:${port}')" ` +
-        `style="margin-top:6px;font-size:11px;padding:3px 10px;cursor:pointer;border:1px solid #d0d7de;border-radius:4px;background:#f6f8fa;">` +
-        `📋 Copy URL</button>`;
     } catch {
       document.getElementById('serverBadge').textContent = '⏳ Server starting…';
       setTimeout(loadServerInfo, 300);
     }
-  }
-
-  function copyUrl(url) {
-    navigator.clipboard.writeText(url).catch(() => {});
   }
 
   loadServerInfo();
@@ -373,14 +357,7 @@ textarea:focus { outline: none; border-color: #3b82d4; box-shadow: 0 0 0 3px rgb
   }
 
   // ── Admin password reset (vendor Reset Code) ───────────────────
-  // ── Restart & Close Server buttons from login window ─────────────
-  document.getElementById('btnRestartApp').addEventListener('click', () => {
-    sapi.restartServer();
-  });
-  document.getElementById('btnCloseApp').addEventListener('click', () => {
-    sapi.stopServer();
-  });
-
+  // ── Admin password reset (vendor Reset Code) ───────────────────
   document.getElementById('btnShowReset').addEventListener('click', async () => {
     clearMessages();
     try {

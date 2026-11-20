@@ -730,7 +730,8 @@ function connectSocket(config) {
 // ── First-run setup wizard ─────────────────────────────────────────────────────
 function createSetupWindow() {
   setupWindow = new BrowserWindow({
-    width: 500, height: 680,
+    width: 500, height: Math.min(700, require('electron').screen.getPrimaryDisplay().workAreaSize.height - 40),
+    useContentSize: true,   // the size is the page area; the Windows title bar and frame come on top
     resizable: false, center: true,
     title: 'Panic Alarm — New User Registration',
     show: true,
@@ -861,7 +862,8 @@ function createSettingsWindow() {
   if (settingsWindow && !settingsWindow.isDestroyed()) { settingsWindow.focus(); return; }
   const config = loadConfig();
   settingsWindow = new BrowserWindow({
-    width: 500, height: 680,
+    width: 500, height: Math.min(700, require('electron').screen.getPrimaryDisplay().workAreaSize.height - 40),
+    useContentSize: true,   // the size is the page area; the Windows title bar and frame come on top
     resizable: false, center: true,
     title: 'Panic Alarm — User Details',
     icon: path.join(__dirname, 'assets', 'icon.png'),
