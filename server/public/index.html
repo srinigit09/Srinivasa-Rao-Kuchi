@@ -1967,8 +1967,7 @@ async function saveNetworkSettings() {
     } else {
       showNetFlash((res.urlChanged ? '⚠️ ' : '✅ ') + (res.message || 'Settings saved successfully!'), true);
       if (res.urlChanged) checkClientNotice();
-      // The new address only takes effect after a restart (the desktop app asks for confirmation first)
-      if (res.restartRequired && window.serverAPI && window.serverAPI.restartServer) window.serverAPI.restartServer();
+      // The server moves to the new address by itself (no restart); the page reloads from the new address
     }
   } catch (e) {
     showNetFlash('Failed to save settings: ' + e.message, false);

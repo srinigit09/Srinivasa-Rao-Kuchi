@@ -651,12 +651,19 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
 
     setBusy(true);
     try {
-      const resp = await fetch(`${serverUrl}/api/client/me`, {
+      const put = () => fetch(`${serverUrl}/api/client/me`, {
         method : 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.token}` },
         body   : JSON.stringify({ room_number, role: selectedRole, department }),
         signal : AbortSignal.timeout(10000),
       });
+      let resp = await put();
+      if (resp.status === 401) {
+        // The server no longer accepts the saved token: register again automatically, then retry once
+        const r = await api.refreshRegistration();
+        if (r && r.gone) { flash('This clinic no longer exists on the server. Please register again.', false); return; }
+        if (r && r.ok && r.config) { config = { ...config, token: r.config.token }; resp = await put(); }
+      }
       const data = await resp.json();
       if (!resp.ok) { flash(data.error || 'Update failed', false); return; }
 

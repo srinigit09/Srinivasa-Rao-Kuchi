@@ -113,6 +113,8 @@ function getBuildStamp() {
         if (unin) t = Math.max(fs.statSync(path.join(dir, unin)).mtimeMs, fs.statSync(path.join(dir, unin)).birthtimeMs);
       } catch { /* fall through */ }
     }
+    // The Windows installer writes a new install-stamp on every run: the most reliable "this is a new install" signal
+    try { const s = fs.readFileSync(path.join(process.resourcesPath, 'install-stamp'), 'utf8').trim(); if (s) return `${id}:${s}`; } catch { /* older install / not Windows */ }
     if (!t) { const st = fs.statSync(f); t = st.birthtimeMs || st.mtimeMs; }
     return `${id}:${Math.floor(t)}`;
   } catch { return null; }   // dev mode
@@ -916,6 +918,20 @@ function reloadAdminWindow(port) {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.loadURL(`http://${getLocalHost()}:${port || currentPort()}/admin/`).catch(() => {});
   }, 1500);
 }
+
+// The admin changed the port / address and the server moved to it without a restart: follow it here (tray text, the
+// Admin window's address, the Windows firewall rule for the new port)
+global.__onPortChanged = (port) => {
+  if (port) serverPort = port;
+  ensureWindowsFirewallRule();
+  refreshMenus(true);
+};
+
+global.__onNetworkFailed = (host, port) => {
+  showIpNotification('Panic Alarm Server — address change failed',
+    `Could not start listening on ${host === '0.0.0.0' ? 'all interfaces' : host}:${port}. The server is back on its previous address; nothing changed for the clients.`);
+  refreshMenus(true);
+};
 
 global.__onIpWait = (kind, info) => {
   if (kind === 'started' || kind === 'reminder') {

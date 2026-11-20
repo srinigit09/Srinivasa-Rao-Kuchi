@@ -381,6 +381,43 @@ async function findServerAt(urls, serverId) {
   }
   return null;
 }
+// The server may have moved to an address it never advertised (a brand-new IP). Look on this computer's own
+// private /24 networks - the same ones as the known server addresses - on the port(s) the server used.
+// Only a host whose /health reports the SAME server id is accepted. Slow and noisy, so rarely and only after an outage.
+let lastScan = 0;
+async function scanForServer(cfgUrl, serverId) {
+  if (Date.now() - lastScan < 60 * 1000) return null;
+  lastScan = Date.now();
+  const isPrivate = (ip) => /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip);
+  const prefixes = new Set();
+  const ports = new Set();
+  try {
+    for (const list of Object.values(require('os').networkInterfaces())) {
+      for (const a of list || []) {
+        if (a.family === 'IPv4' && !a.internal && isPrivate(a.address)) { prefixes.add(a.address.split('.').slice(0, 3).join('.')); }
+      }
+    }
+  } catch { /* no interface list */ }
+  for (const u of [cfgUrl, ...(knownServer ? knownServer.urls : [])]) {
+    try { const p = new URL(u); ports.add(p.port || '80'); if (isPrivate(p.hostname)) prefixes.add(p.hostname.split('.').slice(0, 3).join('.')); } catch { /* skip */ }
+  }
+  const targets = [];
+  for (const pre of prefixes) for (const port of ports) for (let i = 1; i < 255; i++) {
+    targets.push(`http://${pre}.${i}:${port}`);
+  }
+  for (let i = 0; i < targets.length; i += 48) {
+    const hits = await Promise.all(targets.slice(i, i + 48).map(async (u) => {
+      try {
+        const r = await fetch(`${u}/health`, { signal: AbortSignal.timeout(800) });
+        const d = r.ok ? await r.json().catch(() => ({})) : {};
+        return d && d.serverId === serverId ? u : null;
+      } catch { return null; }
+    }));
+    const hit = hits.find(Boolean);
+    if (hit) return hit;
+  }
+  return null;
+}
 async function followServerAddress() {
   if (followBusy || !knownServer || Date.now() - lastFollowTry < 10000) return;
   followBusy = true;
@@ -391,8 +428,9 @@ async function followServerAddress() {
     let host = '';
     try { host = new URL(cfg.serverUrl).hostname; } catch { return; }
     if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return;   // a name the admin typed on purpose is left alone
-    const found = await findServerAt(knownServer.urls.filter(u => u !== cfg.serverUrl), knownServer.serverId);
-    if (!found) return;
+    let found = await findServerAt(knownServer.urls.filter(u => u !== cfg.serverUrl), knownServer.serverId);
+    if (!found) found = await scanForServer(cfg.serverUrl, knownServer.serverId);
+    if (!found || found === cfg.serverUrl) return;
     const old = cfg.serverUrl;
     cfg.serverUrl = found;
     saveConfig(cfg);
@@ -406,6 +444,66 @@ async function followServerAddress() {
 }
 
 
+
+// ── Keeping the stored registration in step with the server ───────────────────
+// After "keep registration" on an upgrade, or after the server's database was reset, the saved clinic/token may no
+// longer exist on the server. Checked every time the client connects:
+//   - the saved clinic is not on the server any more -> the registration is cleared and the registration form opens
+//   - the clinic exists but the server rejects the saved token (401) -> the client registers again by itself with
+//     the details it already has (same device id), so "Edit Details" and alarms keep working
+let regBusy = false;
+let lastRegCheck = 0;
+function registrationGone() {
+  console.log('[Registration] Saved clinic no longer exists on the server — clearing registration');
+  for (const f of [CONFIG_FILE, CONFIG_FILE + '.bak', LAST_HINT_FILE]) { try { fs.unlinkSync(f); } catch { /* already gone */ } }
+  if (socket) { socket.off(); socket.disconnect(); socket = null; }
+  isServerReadyState = false;
+  clearReminders();
+  if (alarmButton && !alarmButton.isDestroyed()) alarmButton.close();
+  if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.close();
+  rebuildTrayMenu(null, false);
+  if (!setupWindow || setupWindow.isDestroyed()) createSetupWindow();
+  watchForRegistrationByAnotherUser();
+}
+async function ensureRegistration(force) {
+  if (regBusy || (!force && Date.now() - lastRegCheck < 30 * 1000)) return { ok: false };
+  regBusy = true;
+  lastRegCheck = Date.now();
+  try {
+    const cfg = loadConfig();
+    if (!cfg || !cfg.token || !cfg.serverUrl) return { ok: false };
+    const hr = await fetch(`${cfg.serverUrl}/api/public/hospitals`, { signal: AbortSignal.timeout(5000) });
+    if (!hr.ok) return { ok: false };
+    const list = await hr.json().catch(() => null);
+    if (!Array.isArray(list)) return { ok: false };
+    const code = String(cfg.hospitalCode || '').toUpperCase();
+    if (!list.some(h => String(h.hospital_code || '').toUpperCase() === code)) { registrationGone(); return { ok: false, gone: true }; }
+
+    const me = await fetch(`${cfg.serverUrl}/api/client/me`, { headers: { Authorization: `Bearer ${cfg.token}` }, signal: AbortSignal.timeout(5000) });
+    if (me.status !== 401) return { ok: true };
+
+    const reg = await fetch(`${cfg.serverUrl}/api/client/register`, {
+      method : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body   : JSON.stringify({ hospital_code: code, room_number: cfg.room_number, role: cfg.role, device_id: cfg.deviceId, department: cfg.department || null }),
+      signal : AbortSignal.timeout(8000),
+    });
+    if (reg.status === 404) { registrationGone(); return { ok: false, gone: true }; }
+    if (!reg.ok) return { ok: false };
+    const d = await reg.json().catch(() => ({}));
+    if (!d || !d.token) return { ok: false };
+    const fresh = { ...cfg, token: d.token, clientName: d.clientName || cfg.clientName, hospitalCode: d.hospitalCode || cfg.hospitalCode };
+    saveConfig(fresh);
+    console.log('[Registration] Saved token was rejected — registered again automatically');
+    connectSocket(fresh);
+    if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.webContents.send('client-config', fresh);
+    return { ok: true, refreshed: true };
+  } catch {
+    return { ok: false };
+  } finally {
+    regBusy = false;
+  }
+}
 
 // ── Window refs ────────────────────────────────────────────────────────────────
 let setupWindow    = null;   // first-run wizard (closes after setup)
@@ -437,6 +535,8 @@ function getBuildStamp() {
         if (unin) t = Math.max(fs.statSync(path.join(dir, unin)).mtimeMs, fs.statSync(path.join(dir, unin)).birthtimeMs);
       } catch { /* fall through */ }
     }
+    // The Windows installer writes a new install-stamp on every run: the most reliable "this is a new install" signal
+    try { const s = fs.readFileSync(path.join(process.resourcesPath, 'install-stamp'), 'utf8').trim(); if (s) return `${id}:${s}`; } catch { /* older install / not Windows */ }
     if (!t) { const st = fs.statSync(f); t = st.birthtimeMs || st.mtimeMs; }
     return `${id}:${Math.floor(t)}`;
   } catch { return null; }   // dev mode
@@ -513,6 +613,8 @@ function connectSocket(config) {
     console.log('[Socket] Connected to server transport');
     wasConnected = true;
     lastConnectedAt = Date.now();
+    ensureRegistration().catch(() => {});   // clinic removed / token rejected on the server? fixes itself
+
     socket.emit('join', {
       hospitalCode: (config.hospitalCode || '').toUpperCase(),
       userName    : config.user_name || config.role,
@@ -900,6 +1002,8 @@ ipcMain.on('resize-alert', (_e, h) => {
   if (alertPopup && !alertPopup.isDestroyed()) alertPopup.setContentSize(580, height);
 });
 ipcMain.handle('get-device-id',        () => getOrCreateDeviceId());
+// Edit Details found the saved token rejected: register again silently, then the window retries
+ipcMain.handle('refresh-registration', async () => { const r = await ensureRegistration(true); return { ok: !!r.ok, gone: !!r.gone, config: r.ok ? withUserButtonPrefs(loadConfig()) : null }; });
 ipcMain.handle('get-last-server-hint', () => getLastServerHint());
 ipcMain.handle('get-connection-status',() => ({ connected: socket?.connected || false }));
 
@@ -1052,6 +1156,10 @@ function startReconnectWatchdog(config) {
       const resp = await fetch(`${currentConfig.serverUrl}/health`, { signal: AbortSignal.timeout(1500) });
       if (resp.ok) {
         const data = await resp.json().catch(() => ({}));
+        // Learn the server's id even if it never sent its address list (first run after an upgrade)
+        if (data && typeof data.serverId === 'string' && (!knownServer || knownServer.serverId !== data.serverId)) {
+          rememberServerAddresses({ serverId: data.serverId, urls: [currentConfig.serverUrl] });
+        }
         if (data && data.serverReady && !isServerReadyState) {
           console.log('[Watchdog] Server ready detected via health probe — autostarting alarm button');
           isServerReadyState = true;

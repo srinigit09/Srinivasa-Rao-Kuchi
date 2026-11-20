@@ -217,12 +217,28 @@ function startIpWait(ip) {
   eventLog.warn('ip_wait_started', { ip, port: ipWait.port });
 }
 
-// Move the listener to another address without restarting the application (already connected sockets are kept)
-function rebind(host, port, delayMs = 0) {
+// Move the listener to another address without restarting the application (already connected sockets are kept).
+// With onFail: if the new address cannot be bound after all, the listener goes back to the old one at once (the
+// server must never end up not listening) and onFail() undoes whatever the caller saved.
+let rebinding = false;   // while true, the general listen-error handler below stays quiet (rebind() deals with it)
+function rebind(host, port, delayMs = 0, onFail) {
+  const prevHost = HOST, prevPort = currentBoundPort();
   HOST = host;
   if (port) PORT = port;
   setTimeout(() => {
     try { server.close(); } catch { /* not listening */ }
+    if (onFail) {
+      rebinding = true;
+      const fail = (err) => {
+        rebinding = false;
+        eventLog.error('rebind_failed', { code: err && err.code, host, port: PORT });
+        HOST = prevHost; PORT = prevPort;
+        try { onFail(err); } catch { /* best effort */ }
+        server.listen(PORT, HOST);
+      };
+      server.once('error', fail);
+      server.once('listening', () => { rebinding = false; server.off('error', fail); });
+    }
     server.listen(PORT, HOST);
   }, delayMs);
 }
@@ -917,26 +933,55 @@ async function applyNetworkConfig({ host, port }) {
   const newUrl = newUrls[0];
   const urlChanged = !newUrls.includes(oldUrl);
 
+  const prev = {
+    host: readSetting('server_host_admin') || '', adminPort: readSetting('server_port_admin') || '',
+    port: readSetting('server_port') || '', lastUrl: readSetting('last_client_url') || '',
+  };
   setSetting.run('server_host_admin', wantHost === '0.0.0.0' ? '' : wantHost);
   setSetting.run('server_port_admin', String(portNum));
   setSetting.run('server_port', String(portNum));
-  eventLog.info('network_config_saved', { host: wantHost, port: portNum, urlChanged, live: waiting });
+
+  // A different address or port is applied RIGHT NOW (no application restart): the listener moves to it.
+  // Waiting for an IP counts too. If the new address cannot be bound after all, the old one is restored.
+  const moveNow = waiting || (bound ? (bound.port !== portNum || HOST !== wantHost) : true);
+  eventLog.info('network_config_saved', { host: wantHost, port: portNum, urlChanged, live: moveNow });
 
   if (urlChanged) {
-    setClientUrlNotice({ from: oldUrl, to: newUrl, at: new Date().toISOString(), applied: waiting });
-    eventLog.warn(waiting ? 'client_url_changed' : 'client_url_will_change', { from: oldUrl, to: newUrl });
+    setClientUrlNotice({ from: oldUrl, to: newUrl, at: new Date().toISOString(), applied: moveNow });
+    eventLog.warn(moveNow ? 'client_url_changed' : 'client_url_will_change', { from: oldUrl, to: newUrl });
     // Connected clients are told the new address NOW, before it takes effect, so they can follow by themselves
     broadcastServerAddresses(newUrls, portNum);
   } else {
     const n = getClientUrlNotice();
     if (n && !n.applied) clearClientUrlNotice();   // the admin changed it back before restarting
   }
-  // Waiting for an IP: switch right away, no application restart needed (connected clients keep their sockets)
-  if (waiting) {
+  if (moveNow) {
     setSetting.run('last_client_url', newUrl);
-    completeIpWait(wantHost, portNum);
+    const oldHostLabel = waiting ? ipWait.ip : (HOST === '0.0.0.0' ? 'all interfaces' : HOST);
+    const rollback = () => {
+      setSetting.run('server_host_admin', prev.host);
+      setSetting.run('server_port_admin', prev.adminPort);
+      setSetting.run('server_port', prev.port);
+      setSetting.run('last_client_url', prev.lastUrl);
+      clearClientUrlNotice();
+      try { io.to('admin').emit('network_failed', { port: portNum }); } catch { /* best effort */ }
+      try { if (typeof global.__onNetworkFailed === 'function') global.__onNetworkFailed(wantHost, portNum); } catch { /* best effort */ }
+    };
+    if (waiting) {
+      completeIpWait(wantHost, portNum);
+    } else {
+      ipWait = null;
+      hostFallbackFrom = '';
+      rebind(wantHost, portNum, 300, rollback);   // a moment later, so the answer to this request is still delivered
+      announceIpWait('resolved', { ip: wantHost === '0.0.0.0' ? 'all interfaces' : wantHost, port: portNum, oldIp: oldHostLabel });
+    }
+    if (urlChanged && !waiting) {
+      // Sockets opened on the old address would otherwise stay up on it: drop them so every client looks for the new one
+      setTimeout(() => { try { io.disconnectSockets(true); } catch { /* best effort */ } }, 1200);
+    }
+    try { if (typeof global.__onPortChanged === 'function') global.__onPortChanged(portNum); } catch { /* best effort */ }
   }
-  return { ok: true, host: wantHost, port: portNum, urlChanged, oldUrl, newUrl, live: waiting };
+  return { ok: true, host: wantHost, port: portNum, urlChanged, oldUrl, newUrl, live: moveNow };
 }
 
 // Find an available port (checking startPort, otherwise auto-allocating)
@@ -994,11 +1039,11 @@ app.post('/api/admin/network-settings', requireAdmin, async (req, res) => {
   if (!r.ok) return res.status(400).json({ error: r.error });
   const where = `${r.host === '0.0.0.0' ? 'all network interfaces' : r.host}, port ${r.port}`;
   return res.json({
-    message: (r.live ? `Now using ${where}.` : `Saved: ${where}. Restart the server application for the change to take effect.`) +
+    message: (r.live ? `Now using ${where}.` : `Saved: ${where}. Already in use - nothing to change.`) +
       (r.urlChanged ? ` IMPORTANT: the client address changes from ${r.oldUrl} to ${r.newUrl}. Running clients are told the new address automatically; any that are not running or cannot follow must be updated by hand.` : ''),
     host: r.host,
     port: r.port,
-    restartRequired: !r.live,
+    restartRequired: false,
     urlChanged: r.urlChanged,
     oldUrl: r.oldUrl,
     newUrl: r.newUrl,
@@ -1432,6 +1477,7 @@ app.use((err, req, res, next) => {
 // ── Start ──────────────────────────────────────────────────────
 // Handle port binding errors (e.g. EADDRINUSE)
 server.on('error', (err) => {
+  if (rebinding) return;   // a live address change is being applied: rebind() restores the old address if needed
   eventLog.error('server_listen_error', { code: err.code, port: PORT, host: HOST });
   if (err.code === 'EADDRNOTAVAIL' && HOST !== '0.0.0.0' && HOST !== '127.0.0.1') {
     // The IP vanished between the check and listen(): wait for it like at start-up (never jump to another IP)

@@ -168,20 +168,14 @@ button:disabled { opacity: .6; cursor: not-allowed; }
       $('adminPass').value = '';
       if (!r.ok) { showMsg(r.error || 'Could not save.', false); return; }
       if (r.live) {
-        // The server was waiting for its IP: it switched right away, no restart needed
+        // The server moved to the new address right away - no restart needed
         showMsg(r.urlChanged
-          ? `Now using ${r.newUrl} (was ${r.oldUrl}). Running clients were told the new address; any that are not running must be updated by hand.`
+          ? `Now using ${r.newUrl} (was ${r.oldUrl}). Running clients were told the new address and follow it by themselves; any that are not running must be updated by hand.`
           : `Now using ${r.newUrl}.`, true);
-        load();
-        return;
-      }
-      if (r.urlChanged) {
-        showMsg(`Saved. The client address changes from ${r.oldUrl} to ${r.newUrl}. Running clients are told the new address automatically; any that are not running must be updated by hand.`, true);
-        load();
       } else {
-        showMsg('Saved. The new address is used after the application restarts.', true);
+        showMsg('Saved. This address and port are already in use - nothing had to change.', true);
       }
-      await sapi.networkApplyRestart();   // asks for confirmation before restarting (and repeats the client warning)
+      setTimeout(load, 1500);   // the listener moves a moment after the answer
     } catch (e) {
       showMsg('Could not save the settings.', false);
     } finally {

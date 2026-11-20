@@ -13,6 +13,17 @@
 !macroend
 
 !macro customInstall
+  ; A new stamp on EVERY install run (even the same installer twice): the app compares it with the one it has
+  ; already seen and then offers keep-data / start-fresh. Does not rely on file dates.
+  Push $1
+  Push $2
+  System::Call 'kernel32::GetSystemTimeAsFileTime(*l .r1)'
+  FileOpen $2 "$INSTDIR\resources\install-stamp" w
+  FileWrite $2 "$1"
+  FileClose $2
+  Pop $2
+  Pop $1
+
   DetailPrint "Configuring Windows Firewall rules for Panic Alarm Server..."
   nsExec::Exec 'netsh advfirewall firewall add rule name="Panic Alarm Server" dir=in action=allow program="$INSTDIR\PanicAlarmServer.exe" enable=yes profile=any'
   nsExec::Exec 'netsh advfirewall firewall add rule name="Panic Alarm Server Port" dir=in action=allow protocol=TCP localport=5000 enable=yes profile=any'
